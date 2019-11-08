@@ -1,0 +1,109 @@
+// Imports
+@import "imports/flex";
+@import "imports/variables";
+@import "imports/mixins";
+@import "imports/grid";
+@import "imports/fonts";
+@import "imports/d3-tip";
+@import "imports/icons";
+
+* {
+  font-family: PTSansNarrow;
+  margin: 0;
+  padding: 0;
+  color: $gwas-content-black;
+  box-sizing: border-box;
+}
+
+a {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+li {
+  list-style: none;
+}
+
+small {
+  display: block;
+}
+
+h2 {
+  font-size: $big-size;
+  font-weight: bold;
+  letter-spacing: 0.94px;
+}
+
+h3 {
+  letter-spacing: 0.69px;
+
+  &,
+  span {
+    font-size: $regular-size;
+  }
+}
+
+h2,
+h3 {
+
+  &,
+  span {
+    color: $purple;
+  }
+}
+
+small {
+
+  &:not(.logo-gwas-small) {
+    font-weight: normal;
+    margin-top: 3px;
+
+    &,
+    span {
+      font-size: $small-size;
+      line-height: 16px;
+      color: $gwas-content-black;
+    }
+  }
+}
+
+.row {
+  @include breakpoint(tablet) {
+    margin: 0 -10px;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-button {
+  display: none;
+}
+
+::-webkit-scrollbar-thumb {
+  background: $light-primary;
+  &:hover {
+    background: $primary;
+  }
+}
+
+// Partials
+@import "partials/buttons";
+@import "partials/header";
+@import "partials/footer";
+@import "partials/cookies";
+@import "partials/dashboard";
+@import "partials/graphs";
+@import "partials/forms";
+@import "partials/menu";
+@import "partials/world-map";
+@import "partials/basic";
+@import "partials/loader";
+@import "partials/popup";
+

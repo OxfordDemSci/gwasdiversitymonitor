@@ -1,0 +1,258 @@
+import csv
+import json
+import time
+
+class DataLoader:
+
+    def getAncestriesList(self):
+        data = []
+        with open('app/data/summary/uniq_broader.txt') as file:
+            data = file.read().splitlines()
+
+        ancestries = {}
+        for ancestry in data:
+            ancestries[ancestry] = ancestry.lower().replace(" ", "-").replace("/", "-")
+
+        return ancestries
+
+    def getTermsList(self):
+        data = []
+        with open('app/data/summary/uniq_parent.txt') as file:
+            data = file.read().splitlines()
+
+        terms = {}
+        for term in data:
+            terms[term] = term.lower().replace(" ", "-")
+
+        return terms
+
+    def getTraitsList(self):
+        data = []
+        with open('app/data/summary/uniq_dis_trait.txt') as file:
+            data = file.read().splitlines()
+
+        traits = {}
+        for trait in data:
+            traits[trait] = trait.lower().replace(" ", "-").replace("(", "").replace(")", "")
+
+        return traits
+
+    def getSummaryStatistics(self):
+        summary = {}
+        with open('app/data/summary/summary.json') as json_file:
+            data = json.load(json_file)
+            for value in data:
+                summary[value] = data[value]
+                
+        return summary
+        
+    def getBubbleGraph(self):
+        dataInitial = {}
+        dataReplication = {}
+        
+        with open('app/data/toplot/bubble_df.csv') as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+            
+            line_count = 0
+            j = 0
+            for row in csv_reader:
+                if line_count == 0:
+                    keys = row
+                    keys.remove("")
+                else:
+                    if(row[6] == "replication"):
+                        dataReplication[j] = {}
+                        i = 0
+                        for value in row[1:]:
+                            dataReplication[j][keys[i]] = value
+                            i += 1
+                    elif(row[6] == "initial"):
+                        dataInitial[j] = {}
+                        i = 0
+                        for value in row[1:]:
+                            dataInitial[j][keys[i]] = value
+                            i += 1
+                line_count += 1
+                j += 1
+
+        return {
+            'bubblegraph_initial': dataInitial,
+            'bubblegraph_replication': dataReplication,
+        }
+
+    def getDoughnutGraph(self):
+        dataDiscoveryStudies = {}
+        dataDiscoveryParticipants = {}
+        dataReplicationStudies = {}
+        dataReplicationParticipants = {}
+        dataAssociations = {}
+
+        with open('app/data/toplot/doughnut_df.csv') as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+
+            line_count = 0
+            for row in csv_reader:
+                if line_count > 0:
+
+                    year = row[3]
+                    if year not in dataDiscoveryStudies:
+                        dataDiscoveryStudies[year] = dict()
+                        dataDiscoveryParticipants[year] = dict()
+                        dataReplicationStudies[year] = dict()
+                        dataReplicationParticipants[year] = dict()
+                        dataAssociations[year] = dict()
+
+                    term = row[2]
+                    if term not in dataDiscoveryStudies[year]:
+                        dataDiscoveryStudies[year][term] = dict()
+                        dataDiscoveryParticipants[year][term] = dict()
+                        dataReplicationStudies[year][term] = dict()
+                        dataReplicationParticipants[year][term] = dict()
+                        dataAssociations[year][term] = dict()
+
+                    dataDiscoveryStudies[year][term][len(dataDiscoveryStudies[year][term])] = {
+                        "ancestry": row[1],
+                        "value": row[5]
+                    }
+                    dataDiscoveryParticipants[year][term][len(dataDiscoveryStudies[year][term])] = {
+                        "ancestry": row[1],
+                        "value": row[4]
+                    }
+                    dataReplicationStudies[year][term][len(dataReplicationStudies[year][term])] = {
+                        "ancestry": row[1],
+                        "value": row[7]
+                    }
+                    dataReplicationParticipants[year][term][len(dataReplicationParticipants[year][term])] = {
+                        "ancestry": row[1],
+                        "value": row[6]
+                    }
+                    dataAssociations[year][term][len(dataAssociations[year][term])] = {
+                        "ancestry": row[1],
+                        "value": row[8]
+                    }
+
+                line_count += 1
+
+        return {
+            'doughnut_discovery_studies' : dataDiscoveryStudies,
+            'doughnut_discovery_participants' : dataDiscoveryParticipants,
+            'doughnut_replication_studies' : dataReplicationStudies,
+            'doughnut_replication_participants' : dataReplicationParticipants,
+            'doughnut_associations' : dataAssociations
+        }
+
+
+    def getHeatMap(self):
+        return {
+            'heatmap_discovery_studies' : self.getHeatMapData("heatmap_count_initial.csv"),
+            'heatmap_replication_studies' : self.getHeatMapData("heatmap_count_replication.csv"),
+            'heatmap_replication_participants' : self.getHeatMapData("heatmap_sum_replication.csv"),
+            'heatmap_discovery_participants' : self.getHeatMapData("heatmap_sum_initial.csv"),
+        }
+
+    def getHeatMapData(self, filename):
+        data = {}
+    
+        with open('app/data/toplot/'+filename) as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+            
+            line_count = 0
+            i = 0
+            year = 0
+            for row in csv_reader:
+                if line_count == 0:
+                    keys = row
+                    keys.remove("")
+                    keys.remove("Year")
+                else:
+                
+                    if row[len(row) - 1] != year:
+                        year = row[len(row) - 1]
+                        i = 0
+                    
+                    if year not in data:
+                        data[year] = dict()
+                    
+                    j = 0
+                    for value in row[1:len(row) - 1]:
+                        data[year][i] = {
+                            "ancestry" : row[0],
+                            "term" : keys[j],
+                            "value" : value,
+                        }
+                        j += 1
+                        i += 1
+                
+                line_count += 1
+    
+        return data
+        
+    def getChloroMap(self):
+        data = {}
+        
+        with open('app/data/toplot/choro_df.csv') as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+            
+            line_count = 0
+            i = 0
+            year = 0
+            for row in csv_reader:
+                if line_count > 0:
+                
+                    if row[7] != year:
+                        year = row[7]
+                        i = 0
+                    
+                    if year not in data:
+                        data[year] = dict()
+                        
+                    data[year][i] = {
+                        'country' : row[8],
+                        'population' : row[1],
+                        'studies' : row[3],
+                        'studiesPercentage' : row[4],
+                        'participants' : row[5],
+                        'participantsPercentage' : row[6],
+                    }
+                    i += 1
+                line_count += 1
+        
+        return data
+
+    def getTSPlot(self):
+        return {
+            'ts_notrecorded_discovery_studies' : self.getTSPlotData("ts1_initial_count.csv"),
+            'ts_notrecorded_discovery_participants' : self.getTSPlotData("ts1_initial_sum.csv"),
+            'ts_notrecorded_replication_studies' : self.getTSPlotData("ts1_replication_count.csv"),
+            'ts_notrecorded_replication_participants' : self.getTSPlotData("ts1_replication_sum.csv"),
+            'ts_recorded_discovery_studies' : self.getTSPlotData("ts2_initial_count.csv"),
+            'ts_recorded_discovery_participants' : self.getTSPlotData("ts2_initial_sum.csv"),
+            'ts_recorded_replication_studies' : self.getTSPlotData("ts2_replication_count.csv"),
+            'ts_recorded_replication_participants' : self.getTSPlotData("ts2_replication_sum.csv"),
+        }
+    
+    def getTSPlotData(self, filename):
+        tsPlot = dict()
+
+        with open('app/data/toplot/'+filename) as csv_file:
+            csv_reader = csv.reader(csv_file, delimiter=',')
+
+            line_count = 0
+            for row in csv_reader:
+                if line_count == 0:
+                    keys = row
+                    keys.remove("index")
+                    for key in keys:
+                        tsPlot[key] = dict()
+                else:
+                    year = row[0]
+                    i = 1;
+                    for key in keys:
+                        tsPlot[key][line_count-1] = {
+                            'year' : year,
+                            'value' : row[i]
+                        }
+                        i += 1
+                line_count += 1
+
+        return tsPlot

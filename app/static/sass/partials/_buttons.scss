@@ -1,0 +1,112 @@
+button {
+  padding: 10px 20px;
+  border: 0;
+  border-radius: unset;
+  -webkit-appearance: none;
+  cursor: pointer;
+  background: none;
+
+  &:disabled {
+    cursor: default;
+
+    [class^="icon-"], [class*=" icon-"] {
+      color: rgba($light-primary, .4);
+    }
+  }
+
+  &.icon {
+    width: 36px;
+    height: 36px;
+    @include flexbox;
+    @include align-items(center);
+    @include justify-content(center);
+    padding: 0;
+
+    &.three-icons {
+      margin-right: 5px;
+
+      &:last-of-type {
+        margin-right: 0;
+      }
+    }
+  }
+
+  &:not(:disabled):hover {
+    i {
+      &:before {
+        color: $primary;
+      }
+    }
+  }
+}
+
+.btn {
+  @extend button;
+  font-size: $regular-size;
+  background: $primary;
+  color: $white;
+  @include transition-all;
+
+  &:hover {
+    background: $hover-btn;
+  }
+}
+
+.gwas-switch {
+  display: none;
+
+  &,
+  &:after,
+  &:before,
+  & *,
+  & *:after,
+  & *:before,
+  & + .tgl-btn {
+    &::selection {
+      background: none;
+    }
+  }
+
+  + .gwas-switch-button {
+    display: block;
+    width: 34px;
+    height: 14px;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+    background: $primary;
+    border-radius: 2em;
+    outline: 0;
+    @include transition-all(.4s);
+
+    &:after,
+    &:before {
+      position: relative;
+      display: block;
+      content: '';
+      width: 50%;
+      height: 100%;
+    }
+
+    &:after {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: $white;
+      @include box-shadow($box-shadow-switch);
+      @include transform(translateY(-50%));
+      @include transition-all(.2s);
+    }
+
+    &:before {
+      display: none;
+    }
+  }
+
+  &:checked + .gwas-switch-button:after {
+    left: 50%;
+  }
+}

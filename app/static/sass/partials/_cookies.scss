@@ -1,0 +1,51 @@
+.cookie-consent {
+  padding: 22px;
+  width: 100%;
+  background: $light-primary;
+  position: fixed;
+  bottom: 0;
+  right: -500px;
+  z-index: 100;
+  @include box-shadow($box-shadow-large);
+  @include transition(all 1s ease);
+  &.active {
+    right: 0;
+  }
+  * {
+    color: $white;
+  }
+  .message,
+  .buttons {
+    width: 100%;
+  }
+  .message {
+    text-align: center;
+    margin-bottom: 20px;
+    font-weight: lighter;
+    &,
+    a {
+      font-size: $small-size;
+      line-height: 18px;
+    }
+    a {
+      font-weight: bold;
+      @include link-hover(rgba($white, .8));
+    }
+  }
+  .buttons {
+    margin-top: 10px;
+    @include flexbox;
+    @include justify-content(space-between);
+    button {
+      min-width: 110px;
+      cursor: pointer;
+      margin-top: 0;
+    }
+  }
+  @include breakpoint(mobile) {
+    width: 300px;
+    &:active {
+      right: -400px;
+    }
+  }
+}

@@ -1,0 +1,17 @@
+Other measurement
+Cardiovascular measurement
+Neurological disorder
+Digestive system disorder
+Cancer
+Cardiovascular disease
+Metabolic disorder
+Other disease
+Hematological measurement
+Lipid or lipoprotein measurement
+Liver enzyme measurement
+Inflammatory measurement
+Biological process
+Immune system disorder
+Response to drug
+Other trait
+Body measurement

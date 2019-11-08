@@ -1,0 +1,92 @@
+@import 'flex';
+
+@mixin breakpoint($value) {
+  $breakpoints: (
+          'mobile': $mobile-breakpoint,
+          'tablet': $tablet-breakpoint,
+          'medium': $medium-breakpoint,
+          'large': $large-breakpoint,
+          'max': $max-breakpoint
+  );
+  @if map-has-key($breakpoints, $value) {
+    // Prints a media query based on the value
+    @media screen and (min-width: map-get($breakpoints, $value)) {
+      @content;
+    }
+  } @else {
+    @media screen and (min-width: $value) {
+      @content;
+    }
+  }
+}
+
+@mixin transitionSetting($time: 0.5s) {
+  -webkit-transition: all $time ease-out;
+  -moz-transition: all $time ease-out;
+  -o-transition: all $time ease-out;
+  transition: all $time ease-out;
+}
+
+@mixin transform($style) {
+  -moz-transform: $style;
+  -o-transform: $style;
+  -ms-transform: $style;
+  -webkit-transform: $style;
+  transform: $style;
+}
+
+@mixin transform-origin($style) {
+  moz-transform-origin: $style;
+  -o-transform-origin: $style;
+  -ms-transform-origin: $style;
+  -webkit-transform-origin: $style;
+  transform-origin: $style;
+}
+
+@mixin animation($style) {
+  -webkit-animation: $style;
+  -moz-animation: $style;
+  animation: $style;
+}
+
+@mixin box-shadow($style: 0 0 50px rgba(0, 0, 0, 0.2)) {
+  -moz-box-shadow: $style;
+  -webkit-box-shadow: $style;
+  box-shadow: $style;
+}
+
+@mixin transition($style...) {
+  -o-transition: $style;
+  -ms-transition: $style;
+  -moz-transition: $style;
+  -webkit-transition: $style;
+  transition: $style;
+}
+
+@mixin transition-delay($style...) {
+  -o-transition-delay: $style;
+  -moz-transition-delay: $style;
+  -webkit-transition-delay: $style;
+  transition-delay: $style;
+}
+
+@mixin transition-all($time: .25s) {
+  @include transition(all $time ease);
+}
+
+@mixin grey-stroke($color: $light-grey) {
+  fill: none;
+  stroke: $color;
+  stroke-width: 2px;
+}
+
+@mixin link-hover($color: $purple) {
+  cursor: pointer;
+  &,
+  * {
+    @include transition-all;
+    &:hover {
+      color: $color;
+    }
+  }
+}

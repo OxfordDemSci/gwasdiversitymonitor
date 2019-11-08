@@ -1,0 +1,18 @@
+<div class="heat-map-header">
+    <h3>Parent term by broader ancestry</h3>
+    <div class="heat-map-header-sub">
+        <small>By <span class="metric-title">Participants</span> - <span class="stage-title">Discovery</span> Stage</small>
+        <div class="heat-map-change-year">
+            <button class="previous icon" onclick="hmfirstYear()"><i class="icon-double-chevron-left"></i></button>
+            <button class="previous icon" onclick="hmpreviousYear()"><i class="icon-chevron-left"></i></button>
+            <span></span>
+            <button class="next icon" onclick="hmnextYear()"><i class="icon-chevron-right"></i></button>
+            <button class="next icon" onclick="hmlastestYear()"><i class="icon-double-chevron-right"></i></button>
+        </div>
+    </div>
+</div>
+<div class="heat-map-footer">
+    {% with filename='heatmap' %}
+        {% include 'components/three-icons.html' %}
+    {% endwith %}
+</div>

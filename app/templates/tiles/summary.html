@@ -1,0 +1,11 @@
+<div id="summary">
+    <h2>
+        Total GWAS participants diversity by ancestry
+    </h2>
+    <small>Last updated {{ summary.timeupdated }}</small>
+    <div class="row">
+        {% for key, value in ancestries.items() %}
+            {% include 'components/numbers.html' %}
+        {% endfor %}
+    </div>
+</div>

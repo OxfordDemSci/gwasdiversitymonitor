@@ -1,0 +1,18 @@
+<div class="world-map-header">
+    <h3><span class="metric-title">Participants</span> by country - All parent terms</h3>
+    <small>Both Stages</small>
+</div>
+<div class="world-map-footer">
+    <div class="world-map-change-year">
+        <button class="previous icon" onclick="wmfirstYear()"><i class="icon-double-chevron-left"></i></button>
+        <button class="previous icon" onclick="wmpreviousYear()"><i class="icon-chevron-left"></i></button>
+        <span></span>
+        <button class="next icon" onclick="wmnextYear()"><i class="icon-chevron-right"></i></button>
+        <button class="next icon" onclick="wmlastestYear()"><i class="icon-double-chevron-right"></i></button>
+    </div>
+    <div class="world-map-header-actions">
+        {% with filename='choro_df' %}
+            {% include 'components/three-icons.html' %}
+        {% endwith %}
+    </div>
+</div>

@@ -1,0 +1,48 @@
+<div id="header" class="{% if not switches %} no-switches {% else %} with-switches {% endif %}" >
+    <div class="container">
+        <div class="logo-gwas col-md-3">
+            <a href="/">
+                <img src="{{ url_for('static', filename='images/logo.svg') }}" class="logo-gwas-float" alt="Logo GWAS">
+                <h1 class="logo-gwas-type">
+                    GWAS
+                    <small class="logo-gwas-small">Diversity Monitor</small>
+                </h1>
+            </a>
+        </div>
+
+        <div class="right col-sm-10 col-md-9 ">
+            <a href="{{ url_for('additional') }}" class="btn add-info">Additional Information</a>
+
+            {% if switches %}
+                {% with name='Metric', id='cb1', value='Participants' %}
+                {% include 'components/switch.html' %}
+            {% endwith %}
+
+            {% with name='Stage', id='cb2', value='Discovery' %}
+                {% include 'components/switch.html' %}
+                {% endwith %}
+            {% endif %}
+
+            <a href="{{ url_for('getCSV', filename='gwasdiversitymonitor_download') }}" class="download icon-download-data"></a>
+
+            <div class="menu-burger" id="burger-menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+
+    </div>
+    <div class="menu-nav" id="nav-menu">
+        {% include 'components/logo-footer.html' %}
+        <ul>
+            <li>
+                <a href="{{ url_for('additional') }}">Additional Information</a>
+            </li>
+        </ul>
+
+        {% with class='col-sm-6' %}
+            {% include 'partials/menu.html' %}
+        {% endwith %}
+    </div>
+</div>

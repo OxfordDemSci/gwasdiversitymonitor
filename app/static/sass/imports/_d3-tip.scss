@@ -1,0 +1,23 @@
+.d3-tip {
+  box-shadow: $box-shadow-large;
+  background-color: #fafafa;
+  padding: 12px;
+
+  span {
+    color: $gwas-content-black;
+    font-size: $small-size;
+    line-height: 1.23;
+  }
+
+  &.norway {
+    margin: 100px 0 0 0;
+  }
+
+  &.russia {
+    margin: 100px 0 0 100px;
+  }
+
+  &.canada {
+    margin: 120px 0 0 0;
+  }
+}

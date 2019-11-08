@@ -1,0 +1,31 @@
+<div id="footer">
+    <div class="container">
+
+        <div class="contact col-sm-6 col-md-2">
+            {% include 'components/logo-footer.html' %}
+            <a href="mailto:contact@gwas-monitor.com">contact@gwas-monitor.com</a>
+        </div>
+
+        {% with class='col-sm-6' %}
+            {% include 'partials/menu.html' %}
+        {% endwith %}
+
+        <div class="img-zone col-sm-12 col-md-6">
+            <a href="#" class="col-xs-8 col-sm-3" target="_blank">
+                <img src="{{ url_for('static', filename='images/LT-logo.png') }}" alt="The Leverhulme Trust">
+            </a>
+            <a href="#" class="col-xs-8 col-sm-3" target="_blank">
+                <img src="{{ url_for('static', filename='images/ERC-logo.png') }}" alt="European Research Council">
+            </a>
+            <a href="#" class="col-xs-8 col-sm-3" target="_blank">
+                <img src="{{ url_for('static', filename='images/BA-logo.png') }}" alt="British Academy">
+            </a>
+            <a href="#" class="col-xs-8 col-sm-3" target="_blank">
+                <img src="{{ url_for('static', filename='images/OU-logo.png') }}" alt="University of Oxford">
+            </a>
+        </div>
+
+    </div>
+</div>
+
+{% include 'components/popup.html' %}

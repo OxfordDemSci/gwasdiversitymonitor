@@ -1,1 +1,1 @@
-# gwasdiversitymonitor.com
+# gwas

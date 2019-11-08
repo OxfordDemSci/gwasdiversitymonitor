@@ -1,0 +1,40 @@
+<div class="cookie-consent" id="cookie-consent">
+    <div class="message">
+        We use cookies, and similar tools, to improve the way this site functions, to track browsing patterns and enable marketing.
+        <a href="{{ url_for('privacy') }}#cookie-policy" target="_blank">More Info</a>.
+    </div>
+
+    <div class="buttons">
+        <button class="btn" onclick="return yesCookies();" id="cookies-agree">OK, I agree</button>
+        <button class="btn" onclick="return noCookies();" id="cookies-disagree">Decline</button>
+    </div>
+</div>
+
+<script>
+    var dialog = document.getElementById('cookie-consent');
+
+    $(document).ready(function() {
+        if((document.cookie != 'cookie_consent=false' && document.cookie != 'cookie_consent=true') || window.location.pathname === '/privacy-policy') {
+            showCookieDialog();
+        }
+    });
+
+    function noCookies() {
+        document.cookie = "cookie_consent=false";
+        hideCookieDialog();
+    }
+    function yesCookies() {
+        document.cookie = "cookie_consent=true";
+        hideCookieDialog();
+    }
+    function showCookieDialog() {
+        if(dialog) {
+            dialog.classList.add('active');
+        }
+    }
+    function hideCookieDialog() {
+        if(dialog) {
+            dialog.classList.remove('active');
+        }
+    }
+</script>

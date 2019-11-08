@@ -1,0 +1,658 @@
+function drawDoughnutGraph(selector, data, withMetric, withStage) {
+    window.withMetric = withMetric;
+    window.withStage = withStage;
+
+    let margin = 0,
+        width = 270 - margin,
+        height = 324 - margin;
+
+    d3.select('#doughnutGraph svg').remove();
+
+    let svg = d3.select("#doughnutGraph")
+        .append("svg")
+        .attr("id", "doughnutSVG")
+        .attr("class", "term-all")
+        .attr("width", width)
+        .attr("height", height)
+        .append("g")
+        .attr('class', 'svg-container')
+        .attr("transform", "translate(" + width / 2  + "," + height / 3 + ")");
+
+    let specificData;
+    let dataKeys;
+    let currentYear;
+    let selected;
+    let legend;
+    let associationSwitch = document.getElementById('cbAssociation');
+    let tspanAssociation;
+    let rectAssociation;
+    let textAssociation;
+    let noDataSpan;
+
+    let associationDoughnut = d3.select("#doughnutGraph svg")
+        .append('g')
+        .attr('class', 'svg-container-2')
+        .attr("transform", "translate(" + width*2  + "," + height / 3 + ")");
+
+    if (window.innerWidth > 600 && window.innerWidth <= 1440) {
+        associationDoughnut.attr("transform", "translate(" + width*1.6  + "," + height / 3 + ")");
+    }
+
+    // Define the div for the tooltip
+    d3.select('.d3-tooltip.doughnut').remove();
+    let d3Tooltip = d3.select("body").append("div")
+        .attr("class", "d3-tooltip doughnut")
+        .style("opacity", 0);
+
+    let nextButtons = document.querySelectorAll('.doughnut-graph-change-year button.next');
+    let previousButtons = document.querySelectorAll('.doughnut-graph-change-year button.previous');
+
+    let dateSpan = document.querySelector('.doughnut-graph-change-year span');
+    currentYear ? dateSpan.innerHTML = currentYear : null;
+
+    if (!window.withMetric && window.withStage) {
+        specificDataGraph('doughnut_replication_participants');
+        if (associationSwitch.checked) {
+            if (selected && selected[0].label) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+            } else {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    } else if (!window.withMetric && !window.withStage) {
+        specificDataGraph('doughnut_discovery_participants');
+        if (associationSwitch.checked) {
+            if (selected && selected[0].label) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+            } else {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    } else if (window.withMetric && window.withStage) {
+        specificDataGraph('doughnut_replication_studies');
+        if (associationSwitch.checked) {
+            if (selected && selected[0].label) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+            } else {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    } else if (window.withMetric && !window.withStage) {
+        specificDataGraph('doughnut_discovery_studies');
+        if (associationSwitch.checked) {
+            if (selected && selected[0].label) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+            } else {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    }
+
+    // Functions changing dates
+    window.dgpreviousYear = function() {
+        currentYear--;
+        if (selected && selected[0].label) {
+            if (selected[0].label === 'All parent terms') {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                }
+            } else {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+                }
+            }
+        } else {
+            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+            if (associationSwitch.checked) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    };
+
+    window.dgnextYear = function() {
+        currentYear++;
+        if (selected && selected[0].label) {
+            if (selected[0].label === 'All parent terms') {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                }
+            } else {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+                }
+            }
+        } else {
+            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+            if (associationSwitch.checked) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    };
+
+    window.dgfirstYear = function() {
+        currentYear = dataKeys[0];
+        if (selected && selected[0].label) {
+            if (selected[0].label === 'All parent terms') {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                }
+            } else {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+                }
+            }
+        } else {
+            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+            if (associationSwitch.checked) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    };
+
+    window.dglastestYear = function() {
+        currentYear = dataKeys[dataKeys.length-1];
+        if (selected && selected[0].label) {
+            if (selected[0].label === 'All parent terms') {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                }
+            } else {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+                }
+            }
+        } else {
+            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+            if (associationSwitch.checked) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    };
+
+    $('#doughnutGraph').find(".filter select[name='parentTerms']").change(function(e) {
+        selected = $(this).find('option:selected');
+        var parentSVG = $("#doughnutSVG");
+
+        $.each(parentSVG.attr("class").split(" "), function(index, value) {
+            if(value.indexOf("term-") !== -1) {
+                parentSVG.removeClass(value);
+            }
+        });
+
+        parentSVG.addClass("term-" + selected.attr('value'));
+
+        let parentTerm = selected[0].label;
+
+        if (parentTerm === 'All parent terms') {
+            parentTerm = 'All';
+        }
+
+        drawDoughnutPerYearPerAncestry(specificData, currentYear, parentTerm);
+
+        if (associationSwitch.checked) {
+            drawDoughnutAssociation(data['doughnut_associations'], currentYear, parentTerm);
+        }
+    });
+
+    associationSwitch.addEventListener('change', function() {
+        let associationLabel = document.getElementById('associationLabel');
+        let arrowAsso = document.getElementById('associationArrow');
+        let associationTitle = document.querySelector('.doughnut-graph-filter-association-title');
+        let showHideLabel = document.querySelector('.doughnut-graph-filter-detail-associations span');
+        let worldMap = document.getElementById('worldMap');
+        let heatMap = document.querySelector('#heatMap');
+        let doughnutGraph = document.getElementById('doughnutGraph');
+
+        associationSwitch.checked ? noDataSpan.classList.add('associations') : noDataSpan.classList.remove('associations');
+
+        if(this.checked) {
+            // Checkbox is checked.. ON
+            associationTitle.classList.add('active');
+            associationLabel.innerText = 'Hide';
+            showHideLabel.innerText = 'hide';
+            if (window.innerWidth <= 600) {
+                arrowAsso.style.transform = 'translate(-50%, -50%) rotate(-90deg) scale(-1)';
+            } else if(window.innerWidth > 600 && window.innerWidth < 1200) {
+                arrowAsso.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(1)';
+            } else {
+                arrowAsso.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(-1)';
+            }
+
+            if (worldMap.parentElement.classList.contains('col-lg-6')) {
+                worldMap.parentElement.classList.remove('col-lg-6');
+                worldMap.parentElement.classList.add('col-lg-3');
+            }
+
+            if (doughnutGraph.parentElement.classList.contains('col-lg-3')) {
+                doughnutGraph.parentElement.classList.remove('col-lg-3');
+                doughnutGraph.parentElement.classList.add('col-lg-6');
+            }
+
+            if (doughnutGraph.parentElement.classList.contains('col-sm-6')) {
+                doughnutGraph.parentElement.classList.remove('col-sm-6');
+                doughnutGraph.parentElement.classList.add('col-sm-12');
+            }
+
+            if (window.innerWidth > 600 && window.innerWidth <= 1440) {
+                legend.transition(200).style('transform', 'translateX('+(width-100)+'px)');
+            } else if (window.innerWidth <= 600) {
+                document.querySelector('#doughnutSVG').setAttribute('height', '600');
+                legend.transition(200).style('transform', 'translate(44px, 20px)');
+                associationDoughnut.transition(200).style('transform', 'translate(135px, 475px)')
+            } else {
+                if (!isIE()) {
+                    legend.transition(200).style('transform', 'translate('+(width-40)+'px, 0)');
+                } else {
+                    legend.attr('transform', 'translate(230, 0)');
+                }
+            }
+
+            if (selected && selected[0].label) {
+                if (selected[0].label === 'All parent terms') {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                } else {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+                }
+            } else {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        } else {
+            // Checkbox is not checked.. OFF
+            associationTitle.classList.remove('active');
+            associationLabel.innerText = 'Show';
+            showHideLabel.innerText = 'show';
+            if (window.innerWidth <= 600) {
+                arrowAsso.style.transform = 'translate(-50%, -50%) rotate(-90deg) scale(1)';
+            } else if(window.innerWidth > 600 && window.innerWidth < 1200) {
+                arrowAsso.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(-1)';
+            } else {
+                arrowAsso.style.transform = 'translate(-50%, -50%) rotate(0deg) scale(1)';
+            }
+
+            if (worldMap.parentElement.classList.contains('col-lg-3')) {
+                worldMap.parentElement.classList.remove('col-lg-3');
+                worldMap.parentElement.classList.add('col-lg-6');
+            }
+
+            if (doughnutGraph.parentElement.classList.contains('col-lg-6')) {
+                doughnutGraph.parentElement.classList.remove('col-lg-6');
+                doughnutGraph.parentElement.classList.add('col-lg-3');
+            }
+
+            if (doughnutGraph.parentElement.classList.contains('col-sm-12')) {
+                doughnutGraph.parentElement.classList.remove('col-sm-12');
+                doughnutGraph.parentElement.classList.add('col-sm-6');
+            }
+
+            if (window.innerWidth > 600 && window.innerWidth <= 1440) {
+                legend.transition(200).style('transform', 'translateX(0%)');
+            } else if (window.innerWidth <= 600) {
+                document.querySelector('#doughnutSVG').setAttribute('height', '324');
+                legend.transition(200).style('transform', 'translate(0, 0)');
+                associationDoughnut.transition(200).style('transform', 'translate(540px, 108px)')
+            } else {
+                if (!isIE()) {
+                    legend.transition(200).style('transform', 'translateX(0%)');
+                } else {
+                    legend.attr('transform', 'translate(0, 0)');
+                }
+            }
+
+            if (tspanAssociation && tspanAssociation.length > 0) {
+                Array.prototype.forEach.call(tspanAssociation, function(el, i) {
+                    if (i === 0) {
+                        el.parentNode.setAttribute('x', '44');
+                    } else if (i === 1) {
+                        el.parentNode.setAttribute('x', '87');
+                    } else if (i === 2) {
+                        el.parentNode.setAttribute('x', '112');
+                    }
+                });
+            }
+
+            d3.selectAll('.tspan-association').remove();
+            d3.select('.doughnut-association-title').remove();
+
+            if (rectAssociation && rectAssociation.length > 0) {
+                Array.prototype.forEach.call(rectAssociation, function(el, i) {
+                    if (i <= 2) {
+                        el.setAttribute('x', '10')
+                    }
+                });
+            }
+
+            if (textAssociation && textAssociation.length > 0) {
+                Array.prototype.forEach.call(textAssociation, function(el, i) {
+                    if (i <= 2) {
+                        el.setAttribute('x', '44');
+                        el.querySelector('tspan').setAttribute('x', '44');
+                    }
+                });
+            }
+
+            let doughnutPartsAssociations = document.querySelectorAll('.doughnutPartAssociation');
+            if (doughnutPartsAssociations && doughnutPartsAssociations.length > 0) {
+                Array.prototype.forEach.call(doughnutPartsAssociations, function(el, i) {
+                    el.parentNode.removeChild(el);
+                });
+            }
+        }
+    });
+
+    function drawDoughnutAssociation(dataByType, currentYear, parentTerm) {
+        let val = dataByType[currentYear][parentTerm]
+        // The radius of the pieplot is half the width or half the height (smallest one). I subtract a bit of margin.
+        let radius = Math.min(width, height) / 3 - margin;
+        // set the color scale
+        let color = d3.scaleOrdinal()
+            .domain(val)
+            .range(["#ed7892", "#c190c1", "#fece59", "#5fabdd", "#f59c44", "#54bdbe"]);
+
+// Compute the position of each group on the pie:
+        let pie = d3.pie()
+            .value(function(d) { return d.value.value; });
+        let data_ready = pie(d3.entries(val));
+
+        let doughnutPartsAssociations = document.querySelectorAll('.doughnutPartAssociation');
+        if (doughnutPartsAssociations && doughnutPartsAssociations.length > 0) {
+            for (let i=0; i < doughnutPartsAssociations.length; i++) {
+                doughnutPartsAssociations[i].parentNode.removeChild(doughnutPartsAssociations[i]);
+            }
+        }
+
+        // Build the pie chart: Basically, each part of the pie is a path that we build using the arc function.
+        associationDoughnut.selectAll('.doughnutPartAssociation')
+            .data(data_ready)
+            .enter()
+            .append('path')
+            .attr('class', 'doughnutPartAssociation')
+            .attr('d', d3.arc()
+                .innerRadius(40)
+                .outerRadius(radius)
+            )
+            .attr('fill', function(d){
+                return(color(d.data.key))
+            })
+            .on('mouseover', function (d) {
+                d3Tooltip.transition()
+                    .duration(200)
+                    .style("opacity", 1);
+                d3Tooltip.html("<div><p>"+d.data.value.ancestry+"</p><span>"+parseFloat(parseFloat(d.data.value.value).toFixed(2))+"%</span></div>")
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY - 58) + "px");
+            })
+            .on('mouseout', function () {
+                d3Tooltip.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+
+        d3.selectAll('.tspan-association').remove();
+
+        d3.selectAll('.tspan-percentage')
+            .append('tspan')
+            .attr('class', 'tspan-association');
+
+        tspanAssociation = document.querySelectorAll('.tspan-association');
+        if (tspanAssociation && tspanAssociation.length > 0) {
+            Array.prototype.forEach.call(tspanAssociation, function(el, i) {
+                if (i === 0) {
+                    el.parentNode.setAttribute('x', '-6');
+                } else if (i === 1) {
+                    el.parentNode.setAttribute('x', '40');
+                } else if (i === 2) {
+                    el.parentNode.setAttribute('x', '62');
+                }
+                if (data_ready && data_ready[i]) {
+                    el.textContent = ' (Asso. '+parseFloat(parseFloat(data_ready[i].data.value.value).toFixed(2))+'%)';
+                }
+            });
+        }
+
+        rectAssociation = document.querySelectorAll('.doughnut-legend-rect');
+        if (rectAssociation && rectAssociation.length > 0) {
+            Array.prototype.forEach.call(rectAssociation, function(el, i) {
+                if (i <= 2) {
+                    el.setAttribute('x', '-40');
+                }
+            });
+        }
+
+        textAssociation = document.querySelectorAll('.doughnut-legend-text');
+        if (textAssociation && textAssociation.length > 0) {
+            Array.prototype.forEach.call(textAssociation, function(el, i) {
+                if (i <= 2) {
+                    el.setAttribute('x', '-6');
+                    el.querySelector('tspan').setAttribute('x', '-6');
+                }
+            });
+        }
+
+    }
+
+
+    function specificDataGraph(type) {
+        specificData = data[type];
+        dataKeys = Object.keys(specificData);
+        currentYear = dataKeys[dataKeys.length-1];
+
+        if (!selected) {
+            let options = document.querySelectorAll(".filter select[name='parentTerms'] option");
+            if (options && options.length > 0) {
+                for (let i = 0, l = options.length; i < l; i++) {
+                    options[i].selected = options[i].defaultSelected;
+                }
+            }
+        }
+
+        drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+    }
+
+    function IsAllPropertiesNull(obj) {
+        let values = Object.keys(obj).map(function(e) {
+            return obj[e]
+        })
+        return values.every(function(v) { return v.value == ""; });
+    }
+
+    function drawDoughnutPerYearPerAncestry(dataByType, currentYear, parentTerm) {
+        let val = dataByType[currentYear][parentTerm];
+
+        noDataSpan = document.querySelector('.doughnut-graph-no-data');
+        noDataSpan.innerText = '';
+
+        associationSwitch.checked ? noDataSpan.classList.add('associations') : noDataSpan.classList.remove('associations');
+
+        let isAllNull = IsAllPropertiesNull(val);
+        if (isAllNull) {
+            noDataSpan.innerText = 'No data found for '+parentTerm+' in '+currentYear;
+        }
+
+        // The radius of the pieplot is half the width or half the height (smallest one). I subtract a bit of margin.
+        let radius = Math.min(width, height) / 3 - margin;
+
+        // set the color scale
+        let color = d3.scaleOrdinal()
+            .domain(val)
+            .range(["#ed7892", "#c190c1", "#fece59", "#5fabdd", "#f59c44", "#54bdbe"]);
+
+        if (currentYear >= dataKeys[dataKeys.length-1]) {
+            for (let i = 0; i < nextButtons.length; i++) {
+                nextButtons[i].disabled = true;
+            }
+            for (let i = 0; i < previousButtons.length; i++) {
+                previousButtons[i].disabled = false;
+            }
+        } else if (currentYear <= dataKeys[0]) {
+            for (let i = 0; i < previousButtons.length; i++) {
+                previousButtons[i].disabled = true;
+            }
+            for (let i = 0; i < nextButtons.length; i++) {
+                nextButtons[i].disabled = false;
+            }
+        } else {
+            for (let i = 0; i < previousButtons.length; i++) {
+                previousButtons[i].disabled = false;
+            }
+            for (let i = 0; i < nextButtons.length; i++) {
+                nextButtons[i].disabled = false;
+            }
+        }
+
+        dateSpan.innerHTML = currentYear;
+
+        // Compute the position of each group on the pie:
+        let pie = d3.pie()
+            .value(function(d) { return d.value.value; });
+        let data_ready = pie(d3.entries(val));
+
+        let doughnutParts = document.querySelectorAll('.doughnutPart');
+        if (doughnutParts && doughnutParts.length > 0) {
+            for (let i=0; i < doughnutParts.length; i++) {
+                doughnutParts[i].parentNode.removeChild(doughnutParts[i]);
+            }
+        }
+
+        // Build the pie chart: Basically, each part of the pie is a path that we build using the arc function.
+        svg.selectAll('.doughnutPart')
+            .data(data_ready)
+            .enter()
+            .append('path')
+            .attr('class', 'doughnutPart')
+            .attr('d', d3.arc()
+                .innerRadius(40)
+                .outerRadius(radius)
+            )
+            .attr('fill', function(d){
+                return(color(d.data.key))
+            })
+            .on('mouseover', function (d) {
+                d3Tooltip.transition()
+                    .duration(200)
+                    .style("opacity", 1);
+                d3Tooltip.html("<div><p>"+d.data.value.ancestry+"</p><span>"+parseFloat(parseFloat(d.data.value.value).toFixed(2))+"%</span></div>")
+                    .style("left", (d3.event.pageX) + "px")
+                    .style("top", (d3.event.pageY - 58) + "px");
+            })
+            .on('mouseout', function () {
+                d3Tooltip.transition()
+                    .duration(500)
+                    .style("opacity", 0);
+            });
+
+        d3.selectAll('#doughnutSVG .legend').remove();
+
+        legend = d3.select('#doughnutSVG').append('g')
+            .attr('class', 'legend');
+
+        let legendDoughnutRect = legend.selectAll('.doughnut-legend-rect')
+            .data(d3.entries(val))
+            .enter()
+            .append('rect')
+            .attr('class', 'doughnut-legend-rect')
+            .attr('width', 24)
+            .attr('height', 24)
+            .attr('x', function(d, i) {
+                if (i < 3) {
+                    return 10;
+                } else {
+                    return 157;
+                }
+            })
+            .attr('y', function(d, i) {
+                if (i < 3) {
+                    return (height/2+50)+(i*24 + i*12);
+                } else {
+                    return (height/2+50)+((i-3)*24 + (i-3)*12);
+                }
+            })
+            .attr('fill', function(d, i) {
+                return(color(d.key))
+            });
+
+        let textLegendDg = legend.selectAll('.doughnut-legend-text')
+            .data(d3.entries(val))
+            .enter()
+            .append('text')
+            .attr('class', 'doughnut-legend-text')
+            .attr('x', function(d, i) {
+                if (i < 3) {
+                    return 44;
+                } else {
+                    return 191;
+                }
+            })
+            .attr('y', function(d, i) {
+                if (i < 3) {
+                    return (height/2+42)+(i*24 + i*12 + 18);
+                } else {
+                    return (height/2+42)+((i-3)*24 + (i-3)*12 + 18);
+                }
+            })
+            .text(function(d) { return d.value.ancestry.split(' ').slice(0,3).join(' ') })
+            .append('tspan').attr('x', function(d, i) {
+                if (i < 3) {
+                    return 44;
+                } else {
+                    return 191;
+                }
+            })
+            .attr('dy', 12)
+            .text(function(d) {
+                if (d.value.ancestry === 'Hispanic or Latin American' || d.value.ancestry === 'African American or Afro-Caribbean') {
+                    return d.value.ancestry.split(' ').slice(3,4).join(' ');
+                }
+            })
+            .append('tspan').attr('class', 'tspan-percentage').attr('x', function(d, i) {
+                if (i < 3) {
+                    if(d.value.ancestry === 'Hispanic or Latin American') {
+                        return 87;
+                    } else if(d.value.ancestry === 'African American or Afro-Caribbean') {
+                        return 112;
+                    } else {
+                        return 44;
+                    }
+                } else {
+                    return 191;
+                }
+            })
+            .attr('dy', function(d) {
+                if(d.value.ancestry === 'Hispanic or Latin American' || d.value.ancestry === 'African American or Afro-Caribbean') {
+                    return 0;
+                } else {
+                    return 14;
+                }
+            })
+            .attr('font-weight', 'normal')
+            .text(function(d) {
+                if (d && d.value && d.value.value) {
+                    return parseFloat(parseFloat(d.value.value).toFixed(2))+'%';
+                } else {
+                    return '';
+                }
+            });
+
+        if (associationSwitch.checked) {
+            if (window.innerWidth > 600 && window.innerWidth <= 1440) {
+                legend.style('transform', 'translateX(' + (width - 100) + 'px)');
+            } else if (window.innerWidth <= 600){
+                document.querySelector('#doughnutSVG').setAttribute('height', '600');
+                legend.style('transform', 'translate('+(width-40)+'px, 40%)');
+            } else {
+                if (!isIE()) {
+                    legend.style('transform', 'translateX('+(width-40)+'px)');
+                } else {
+                    legend.attr('transform', 'translate(230, 0)');
+                }
+            }
+        }
+    }
+}

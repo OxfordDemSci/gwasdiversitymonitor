@@ -1,0 +1,37 @@
+<div class="doughnut-graph-header">
+    <h3><span class="metric-title">Participants</span> by ancestry</h3>
+    <small><span class="stage-title">Discovery</span> Stage</small>
+    <div class="doughnut-graph-filter filter">
+        <div class="doughnut-graph-filter-association-title">
+            <h3>Count of all associations discovered</h3>
+            <small>Both Stages</small>
+        </div>
+        <p class="doughnut-graph-filter-detail-associations">Click to <span>show</span> associations discovered</p>
+        <div class="gwas-switch-container associations">
+            <div class="gwas-switch-input-container">
+                <input type="checkbox" id="cbAssociation" class="gwas-switch"/>
+                <label class="gwas-switch-button" for="cbAssociation"></label>
+                <i id="associationArrow" class="icon-chevron-assoc"></i>
+                <div class="switch-infos">
+                    <span id="associationLabel">Show</span>
+                </div>
+            </div>
+        </div>
+        {% with name='parentTerms', items=parentTerms.items(), type='single' %}
+            {% include 'components/select.html' %}
+        {% endwith %}
+    </div>
+</div>
+<span class="doughnut-graph-no-data"></span>
+<div class="doughnut-graph-footer">
+    <div class="doughnut-graph-change-year">
+        <button class="previous icon" onclick="dgfirstYear()"><i class="icon-double-chevron-left"></i></button>
+        <button class="previous icon" onclick="dgpreviousYear()"><i class="icon-chevron-left"></i></button>
+        <span></span>
+        <button class="next icon" onclick="dgnextYear()"><i class="icon-chevron-right"></i></button>
+        <button class="next icon" onclick="dglastestYear()"><i class="icon-double-chevron-right"></i></button>
+    </div>
+    {% with filename='doughnut_df' %}
+        {% include 'components/three-icons.html' %}
+    {% endwith %}
+</div>

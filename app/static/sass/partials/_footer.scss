@@ -1,0 +1,187 @@
+.logo-footer {
+  width: fit-content;
+  color: $purple;
+  margin: 0 auto;
+  text-align: center;
+  @include flexbox;
+  @include flex-direction(column);
+
+  small {
+    color: $light-primary;
+  }
+}
+
+#footer {
+  border-top: $border-grey;
+  padding: 40px 0;
+  height: fit-content;
+
+  .container {
+
+    a,
+    li span {
+      @include link-hover;
+    }
+
+    & > div {
+      margin-bottom: 20px;
+    }
+
+    .contact {
+      @include flexbox;
+      @include flex-direction(column);
+      @include align-items(flex-start);
+    }
+
+    .img-zone {
+
+      a {
+        margin: 0 auto 30px;
+        @include flexbox;
+        @include flex-direction(column);
+
+        img {
+          width: 100%;
+        }
+
+        &:last-child {
+          margin-bottom: 0;
+        }
+      }
+    }
+
+    .menu-links {
+      margin-bottom: 0;
+
+      li {
+
+        margin-bottom: 10px;
+      }
+    }
+
+    .img-zone {
+      margin-bottom: 0;
+    }
+
+  }
+
+  @media screen and (max-width: $mobile-breakpoint) {
+    .container {
+
+      .contact {
+        @include align-items(center);
+      }
+
+      .menu-links {
+
+        li {
+
+          text-align: center;
+        }
+      }
+
+      .img-zone {
+        margin-top: 30px;
+      }
+    }
+  }
+
+  @include breakpoint(tablet) {
+    padding: 15px 0 40px;
+
+    .container {
+      @include flex-wrap(wrap);
+      
+      .logo-footer {
+        text-align: left;
+        margin-left: 0;
+        font-size: 30px;
+        line-height: 24px;
+
+        small {
+          font-size: 19px;
+          margin-top: 5px;
+        }
+      }
+
+      .img-zone {
+        margin: 0 -15px;
+        @include flexbox;
+        @include justify-content(space-between);
+        @include align-items(center);
+
+        a {
+          margin: 0;
+          padding: 0 15px;
+        }
+      }
+
+      &,
+      .menu-links {
+        @include flexbox;
+      }
+
+      .menu-links {
+
+        li {
+          margin-bottom: 6px;
+
+          &:last-child {
+
+            margin-bottom: 0;
+          }
+        }
+      }
+    }
+  }
+
+  @include breakpoint(medium) {
+    .container {
+
+      & > div {
+        margin-bottom: 0;
+      }
+
+      .contact {
+        a:last-child {
+          font-size: 14px;
+        }
+      }
+    }
+  }
+
+  @include breakpoint(large) {
+    .container {
+
+      .contact {
+        a:last-child {
+          font-size: $regular-size;
+        }
+      }
+    }
+  }
+}
+
+.body-msie {
+
+  #footer {
+
+    .container {
+
+      .img-zone {
+        margin: 0;
+        @include justify-content(space-between);
+
+        a {
+          display: block;
+          padding: 0;
+
+          &.col-sm-3 {
+            width: 20%;
+            @include flex-basis(20%);
+          }
+        }
+      }
+    }
+  }
+}

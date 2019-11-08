@@ -1,0 +1,47 @@
+<div class="left col-xs-12 col-sm-8 col-md-9">
+    <div class="header">
+        <h3>Ancestry over time by parent term</h3>
+        <small><span class="stage-title">Discovery</span> Stage</small>
+    </div>
+
+    <div class="bubble-graph-filter filter">
+
+        {% with name='parentTerms', items=parentTerms.items(), type='single' %}
+            {% include 'components/select.html' %}
+        {% endwith %}
+
+        <span>OR</span>
+
+        {% with name='trait', items=traits.items(), type='multiple' %}
+            {% include 'components/select.html' %}
+        {% endwith %}
+
+    </div>
+</div>
+
+<div class="right col-xs-12 col-sm-4 col-md-3">
+    <div class="filter ancestry-filter">
+        <span class="option all" dataFilter="all">View all</span>
+        {% for key, value in ancestries.items() %}
+        <span class="option btn {{ value }}" dataFilter="{{ value }}">
+            <i class="circle {{ value }}"></i>
+            {{ key }}
+        </span>
+        {% endfor %}
+    </div>
+    <div class="details-zone">
+        <div class="details-header">
+            <button onclick="clearSelected()" class="three-icons icon"><i class="icon-chevron-left"></i></button>
+            Active area
+        </div>
+        <div class="details-content">
+            <div class="details"></div>
+        </div>
+    </div>
+</div>
+
+<div class="bubble-graph-footer">
+    {% with filename='bubble_df' %}
+        {% include 'components/three-icons.html' %}
+    {% endwith %}
+</div>

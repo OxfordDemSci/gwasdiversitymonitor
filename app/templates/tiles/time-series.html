@@ -1,0 +1,15 @@
+<div class="time-series-header">
+    <h3><span class="metric-title">Participants</span> across all parent terms</h3>
+    <small><span class="stage-title">Discovery</span> Stage</small>
+    <div class="time-series-filter">
+        {% with name='ancestries', items=ancestries.items(), type='single' %}
+            {% include 'components/select.html' %}
+        {% endwith %}
+        {% include 'components/checkbox.html' %}
+    </div>
+</div>
+<div class="time-series-footer">
+    {% with filename='timeseries' %}
+        {% include 'components/three-icons.html' %}
+    {% endwith %}
+</div>

@@ -1,0 +1,264 @@
+
+svg#bubbleSVG circle {
+  opacity: .7;
+  display: none;
+
+  &.opaque {
+    opacity: 1;
+  }
+}
+
+svg#bubbleSVG circle.disabled {
+  fill: rgba(grey, .4);
+  pointer-events: none;
+}
+
+svg#bubbleSVG circle.selected {
+  stroke: $blue-grey;
+  stroke-width: 2;
+  stroke-dasharray: 3;
+  pointer-events: none;
+}
+
+svg#bubbleSVG.term-all circle,
+svg#bubbleSVG.term-other-measurement circle.other-measurement,
+svg#bubbleSVG.term-cardiovascular-measurement circle.cardiovascular-measurement,
+svg#bubbleSVG.term-neurological-disorder circle.neurological-disorder,
+svg#bubbleSVG.term-digestive-system-disorder circle.digestive-system-disorder,
+svg#bubbleSVG.term-cancer circle.cancer,
+svg#bubbleSVG.term-cardiovascular-disease circle.cardiovascular-disease,
+svg#bubbleSVG.term-metabolic-disorder circle.metabolic-disorder,
+svg#bubbleSVG.term-other-disease circle.other-disease,
+svg#bubbleSVG.term-biological-process circle.biological-process,
+svg#bubbleSVG.term-immune-system-disorder circle.immune-system-disorder,
+svg#bubbleSVG.term-response-to-drug circle.response-to-drug,
+svg#bubbleSVG.term-other-trait circle.other-trait,
+svg#bubbleSVG.term-body-measurement circle.body-measurement,
+svg#bubbleSVG.term-hematological-measurement circle.hematological-measurement,
+svg#bubbleSVG.term-lipid-or-lipoprotein-measurement circle.lipid-or-lipoprotein-measurement,
+svg#bubbleSVG.term-nflammatory-measurement circle.inflammatory-measurement,
+svg#bubbleSVG.term-liver-enzyme-measurement circle.liver-enzyme-measurement {
+  display: block;
+}
+
+svg#bubbleSVG.ancestry-african circle.african,
+svg#bubbleSVG.ancestry-african-american-or-afro-caribbean circle.african-american-or-afro-caribbean,
+svg#bubbleSVG.ancestry-asian circle.asian,
+svg#bubbleSVG.ancestry-european circle.european,
+svg#bubbleSVG.ancestry-hispanic-or-latin-american circle.hispanic-or-latin-american,
+svg#bubbleSVG.ancestry-other-mixed circle.other-mixed {
+  display: none;
+}
+
+circle.african,
+.circle.african {
+  fill: $african;
+  background: $african;
+}
+
+circle.african-american-or-afro-caribbean,
+.circle.african-american-or-afro-caribbean {
+  fill: $african-am-caribbean;
+  background: $african-am-caribbean;
+}
+
+circle.asian,
+.circle.asian {
+  fill: $asian;
+  background: $asian;
+}
+
+circle.european,
+.circle.european {
+  fill: $european;
+  background: $european;
+}
+
+circle.hispanic-or-latin-american,
+.circle.hispanic-or-latin-american {
+  fill: $hispanic-latin-american;
+  background: $hispanic-latin-american;
+}
+
+circle.other-mixed,
+.circle.other-mixed {
+  fill: $other-mixed;
+  background: $other-mixed;
+}
+
+circle.in-part-not-recorded,
+.circle.in-part-not-recorded {
+  fill: $blue-grey;
+  background: $blue-grey;
+}
+
+svg {
+  width: 100%;
+  height: 100%;
+  @include flexbox;
+  @include flex(1);
+
+  .grid {
+
+    line {
+      stroke-dasharray: 10;
+      @include grey-stroke;
+    }
+  }
+  .line {
+
+    path {
+      stroke-dasharray: 3;
+      @include grey-stroke($blue-grey);
+    }
+  }
+  .grid,
+  .axis {
+
+    &,
+    &-y {
+      path {
+        stroke: none;
+      }
+    }
+  }
+  .axis {
+    &-x,
+    &-y {
+      .tick {
+
+        text {
+          font-size: $small-size;
+          fill: $blue-grey;
+        }
+      }
+    }
+    &-x {
+
+      path,
+      .tick line {
+        @include grey-stroke;
+      }
+
+      .tick {
+
+        text {
+          @include transform(translateY(8px));
+        }
+
+        &:last-child {
+          line {
+            stroke: none;
+          }
+        }
+      }
+    }
+    &-y {
+      .tick {
+
+        text {
+          @include transform(translateX(-4px));
+        }
+
+        line {
+          stroke: none;
+        }
+
+        &:first-of-type {
+          text {
+            display: none;
+          }
+        }
+      }
+    }
+  }
+}
+
+.heat-map-x-axis-legend-item, .heat-map-y-axis-legend-item {
+  font-size: 0.8em;
+
+  tspan {
+    font-size: 1em;
+  }
+}
+
+.heat-map-legend-end-text, .heat-map-legend-start-text {
+  font-size: 0.7em;
+}
+
+.heat-map-y-axis-legend-item {
+
+  &.ellipsis {
+    display: block;
+    //max-width: 66px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow-x: hidden;
+  }
+}
+
+div.d3-tooltip {
+  position: absolute;
+  padding: 10px 10px 0 10px;
+  max-width: 92px;
+  background: $white;
+  box-shadow: $box-shadow-large;
+  border: 0;
+  pointer-events: none;
+
+  p {
+    font-size: 11px;
+  }
+
+  span {
+    display: block;
+    font-size: $medium-size;
+  }
+
+  &.doughnut, &.time-series {
+    padding: 10px;
+
+    p {
+      font-size: 12px;
+      font-weight: bold;
+    }
+
+    span {
+      font-size: 14px;
+      font-weight: normal;
+    }
+  }
+}
+
+.doughnut-legend-text {
+  font-size: 12px;
+  font-weight: bold;
+  color: $gwas-content-black;
+}
+
+.doughnut-graph-no-data {
+  position: absolute;
+  top: calc(50% - 40px);
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 200px;
+  font-weight: bold;
+  text-align: center;
+
+  &.associations {
+
+    &:first-of-type {
+      left: 25%;
+    }
+  }
+}
+
+.doughnut-titles {
+  font-size: 14px;
+  font-family: 'PTSansNarrow', sans-serif;
+  font-weight: bold;
+}
+
+.doughnut-graph-filter-detail-associations span {
+  margin: 0 3px;
+}

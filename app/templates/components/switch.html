@@ -1,0 +1,13 @@
+<div class="gwas-switch-container">
+    <span class="switch-infos">{{ name }}</span>
+    <input type="checkbox" id="{{ id }}" class="gwas-switch" onchange="redrawGraph(this)"/>
+    <label class="gwas-switch-button" for="{{ id }}"></label>
+    <div class="switch-infos">
+        {% if name == 'Metric' %}
+            By <span class="metric-title"> {{ value }}</span>
+        {% else %}
+            <span class="stage-title">{{ value }}</span>
+        {% endif %}
+
+    </div>
+</div>

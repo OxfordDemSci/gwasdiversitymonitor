@@ -1,0 +1,17 @@
+<div class="gwas-select-container {% if type=='single' %} gwas-select-container-single {% else %} gwas-select-container-multiple {% endif %}">
+    {% if type=='multiple' %}
+        <i class="icon-search"></i>
+    {% endif %}
+    <select name="{{ name }}" id="{{ name }}-filter" class="gwas-filter">
+        {% if name=='ancestries' %}
+            <option value="all-{{ name }}" name="all">All {{ name }}</option>
+        {% elif name=='parentTerms' %}
+            <option value="all" name="all">All parent terms</option>
+        {% elif name=='trait' %}
+            <option value="empty" name="empty"></option>
+        {% endif %}
+        {% for key, value in items %}
+            <option value="{{ value }}" name="{{ key }}">{{ key }}</option>
+        {% endfor %}
+    </select>
+</div>

@@ -1,0 +1,826 @@
+.dashboard {
+  margin-top: 20px;
+
+  .european {
+    @include order(1);
+  }
+
+  .african {
+    @include order(2);
+  }
+
+  .african-american-or-afro-caribbean {
+    @include order(3);
+  }
+
+  .other-mixed {
+    @include order(4);
+  }
+
+  .asian {
+    @include order(5);
+  }
+
+  .hispanic-or-latin-american {
+    @include order(6);
+  }
+
+  .tile {
+    margin-bottom: 20px;
+    transition: all .3s ease-in-out;
+
+    .box {
+      height: 100%;
+      align-self: flex-start;
+      @include flexbox;
+      @include flex-direction(column);
+
+      @include transition-all(.5s);
+
+      &:not(.summary) {
+        padding: 10px;
+        @include box-shadow($box-shadow);
+
+        &.highlight {
+          @include transition-all;
+          @include box-shadow($box-shadow-highlight);
+        }
+      }
+
+      [class*="-header"] {
+        @include order(1);
+      }
+
+      [class*="-footer"] {
+        @include order(3);
+      }
+
+      [class*="-filter"] {
+        @include flexbox;
+        @include justify-content(space-between);
+      }
+
+      #summary {
+
+        .row {
+          margin: 0 -10px;
+          padding-top: 20px;
+        }
+
+        .tile {
+          padding: 0 10px;
+          margin-top: 20px;
+
+          &.european {
+            .filling {
+              background: $european;
+
+              i {
+                color: $european;
+              }
+            }
+          }
+
+          &.african {
+            .filling {
+              background: $african;
+
+              i {
+                color: $african;
+              }
+            }
+          }
+
+          &.african-american-or-afro-caribbean {
+            .filling {
+              background: $african-am-caribbean;
+
+              i {
+                color: $african-am-caribbean;
+              }
+            }
+          }
+
+          &.asian {
+            .filling {
+              background: $asian;
+
+              i {
+                color: $asian;
+              }
+            }
+          }
+
+          &.other-mixed {
+            .filling {
+              background: $other-mixed;
+
+              i {
+                color: $other-mixed;
+              }
+            }
+          }
+
+          &.hispanic-or-latin-american {
+            .filling {
+              background: $hispanic-latin-american;
+
+              i {
+                color: $hispanic-latin-american;
+              }
+            }
+          }
+
+          .numbers {
+
+            &,
+            .block,
+            .filling {
+              @include flexbox;
+              @include flex-direction(column);
+              @include align-items(center);
+            }
+
+            .block {
+              height: 100px;
+              background: rgba($blue-grey, .3);
+              @include justify-content(flex-end);
+
+              &,
+              .filling {
+                width: 100%;
+              }
+
+              .filling {
+                position: relative;
+
+                i {
+                  font-size: 40px;
+                  position: absolute;
+                  top: -35px;
+                }
+              }
+            }
+
+            .percentage,
+            .label {
+              font-weight: bold;
+              width: 100%;
+              text-align: center;
+            }
+
+            .percentage {
+              color: $purple;
+              font-size: 20px;
+              margin: 5px 0 8px;
+            }
+
+            .label {
+              font-size: $small-size;
+            }
+          }
+        }
+      }
+
+      &#timeSeries {
+
+        svg {
+          @include order(2);
+        }
+
+        .time-series-footer {
+          @include flexbox;
+          @include justify-content(flex-end);
+
+          button {
+            cursor: pointer;
+            padding: 0;
+          }
+        }
+      }
+
+      &#bubbleGraph {
+        position: relative;
+
+        .bubble-graph {
+
+          &-filter {
+            @include align-items(center);
+
+            .gwas-select-container {
+              width: 40%;
+            }
+          }
+
+          &-footer {
+
+            .icon-zone {
+              @include justify-content(flex-end)
+            }
+          }
+        }
+
+        .right {
+          overflow: hidden;
+
+          & > div {
+            width: 100%;
+          }
+
+          .details {
+            &-zone {
+              height: 100%;
+              position: absolute;
+              bottom: 0;
+              right: -100%;
+              @include flexbox;
+              @include flex-direction(column);
+              @include transition-all(.8s);
+
+              &.active {
+                right: 0;
+              }
+            }
+
+            &-header {
+              background: $light-primary;
+              padding: 20px;
+              text-transform: uppercase;
+              position: relative;
+              @include order(1);
+              @include flexbox;
+              @include align-items(center);
+              @include justify-content(center);
+
+              &,
+              i {
+                color: $white;
+                font-size: $small-size;
+              }
+
+              button {
+                left: 10px;
+                position: absolute;
+              }
+            }
+
+            &-content {
+              background: $white;
+              overflow: scroll;
+              height: calc(100% - 55px);
+              border-left: $border-grey;
+              @include order(2);
+            }
+
+            .row {
+              margin: 0;
+              padding: 5px 10px 0;
+              position: relative;
+              @include transition-all;
+
+              &:last-child {
+                padding-bottom: 10px;
+              }
+
+              &:hover {
+                background: rgba($blue-grey, .1);
+              }
+
+              & > div {
+                width: 100%;
+
+                &,
+                .last-inside {
+                  @include flexbox;
+                  @include flex-direction(column);
+                }
+
+                &.first,
+                .last-inside {
+                  padding-bottom: 5px;
+                }
+
+                &.first {
+                  width: 100%;
+                  margin-bottom: 3px;
+                  border-bottom: 1px solid $blue-grey;
+
+                  a {
+                    font-weight: bold;
+                    @include link-hover;
+                  }
+                }
+
+                .last-inside {
+                  width: 80%;
+                  margin-left: auto;
+                  border-bottom: 1px solid rgba($blue-grey, .4);
+                }
+              }
+            }
+          }
+
+          .ancestry-filter {
+            padding: 20px 10px;
+            background: $light-primary;
+            @include justify-content(flex-start);
+            @include align-items(center);
+            @include flex-wrap(wrap);
+
+            span {
+              cursor: pointer;
+
+              &.all {
+                color: $white;
+                text-transform: uppercase;
+                text-align: center;
+              }
+
+              &.btn {
+                background: $white;
+                color: $gwas-content-black;
+                font-size: $small-size;
+                font-weight: bold;
+                padding: 6px 6px 6px 20px;
+                position: relative;
+                margin-bottom: 16px;
+                min-height: 46px;
+                @include flexbox;
+                @include box-shadow($box-shadow);
+                @include align-items(center);
+
+                .circle {
+                  width: 10px;
+                  height: 10px;
+                  border-radius: 50%;
+                  margin-right: 10px;
+                  position: absolute;
+                  top: calc(50% - 5px);
+                  left: 5px;
+                }
+
+                &.active {
+                  opacity: .8;
+                  @include box-shadow(none);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      &.world-map {
+        padding: 10px 0 0 0;
+
+        .world-map-header {
+          margin: 0 10px 10px 10px;
+          @include align-items(start);
+          @include justify-content(space-between);
+
+          small {
+            display: block;
+          }
+
+          &-actions {
+            position: absolute;
+            right: 10px;
+          }
+        }
+
+        svg {
+          @include order(2);
+        }
+
+        .world-map-footer {
+          position: relative;
+          @include flexbox;
+          @include align-items(center);
+          @include justify-content(center);
+          height: 56px;
+
+          &-actions {
+            margin: 0 0 0 40px;
+          }
+
+          .world-map-change-year {
+            @include flexbox;
+            @include align-items(center);
+
+            span {
+              font-weight: 700;
+            }
+          }
+        }
+      }
+
+      &.heat-map {
+        position: relative;
+
+        .heat-map-header {
+
+          &-sub {
+            @include flexbox;
+            @include align-items(start);
+            @include justify-content(space-between);
+
+            .heat-map-change-year {
+              @include flexbox;
+              @include align-items(center);
+              font-weight: 700;
+            }
+          }
+        }
+
+        svg {
+          @include order(2);
+        }
+
+        .heat-map-footer {
+          position: absolute;
+          bottom: 10px;
+          right: 10px;
+          @include flexbox;
+          @include align-items(center);
+        }
+      }
+
+      &.doughnut-graph {
+        position: relative;
+
+        .doughnut-graph-filter {
+          @include flexbox;
+          @include flex-direction(column);
+          @include align-items(start);
+          margin-top: 5px;
+
+          &-detail-associations {
+            font-size: 13px;
+            font-weight: normal;
+            color: $gwas-content-black;
+          }
+
+          &-association-title {
+            @include flexbox;
+            @include flex-direction(column);
+            opacity: 0;
+            transition: opacity .1s .3s;
+            display: none;
+            position: absolute;
+            top: 450px;
+            left: 10px;
+
+            &.active {
+              display: block;
+              opacity: 1;
+              transition: opacity .1s .3s;
+            }
+
+            @media screen and (min-width: 601px) {
+              top: 10px;
+              left: inherit;
+              right: 70px;
+            }
+
+            @include breakpoint($tablet-breakpoint) {
+              top: 10px;
+              left: 300px;
+              right: inherit;
+            }
+
+            @include breakpoint($large-breakpoint) {
+              top: 10px;
+              left: inherit;
+              right: 70px;
+            }
+          }
+        }
+
+        svg {
+          @include order(2);
+        }
+
+        .doughnut-graph-footer {
+          @include flexbox;
+          @include align-items(center);
+          @include justify-content(space-between);
+
+          .doughnut-graph-change-year {
+            @include flexbox;
+            @include align-items(center);
+
+            span {
+              font-weight: 700;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@media screen and (max-width: 767px) {
+  .dashboard {
+
+    .tile {
+
+      .box {
+
+        &#timeSeries {
+          min-height: 500px;
+        }
+
+        &#bubbleGraph {
+          min-height: 700px;
+
+          .bubble-graph {
+
+            &-footer {
+
+              margin-bottom: 5px;
+            }
+          }
+
+          .left {
+            @include order(1);
+          }
+
+          svg {
+            @include order(2);
+
+            @include breakpoint(mobile) {
+              margin-bottom: 20px;
+            }
+          }
+
+          .right {
+            width: calc(100% + 20px);
+            margin: 0 -10px -10px;
+            @include order(4);
+
+            .details-header,
+            .ancestry-filter {
+              padding: 10px;
+            }
+
+            .details-content {
+              height: calc(100% - 37px);
+            }
+
+            .ancestry-filter {
+              @include justify-content(space-between);
+
+              span {
+
+                &.all {
+                  width: 100%;
+                  margin: 5px 0 15px;
+                }
+
+                &.btn {
+                  width: 48%;
+
+                  &:last-child {
+                    margin-bottom: 16px;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@include breakpoint(tablet) {
+  .dashboard {
+    @include flexbox;
+    @include flex-wrap(wrap);
+
+    .tile {
+      padding: 0 10px;
+
+      .box {
+
+        &#bubbleGraph {
+
+          .bubble-graph-footer,
+          svg {
+            width: 75%;
+          }
+
+          .bubble-graph {
+
+            &-filter {
+              padding-right: 10px;
+
+              .gwas-select-container {
+                width: 45%;
+              }
+            }
+          }
+
+
+          .left {
+            max-height: 78px;
+          }
+
+          .right {
+            overflow: hidden;
+
+            &,
+            & > div {
+              height: 100%;
+              position: absolute;
+              top: 0;
+              right: 0;
+            }
+
+            .ancestry-filter {
+              @include flex-direction(column);
+
+              span {
+
+                &.all {
+                  margin-bottom: 33px;
+                }
+
+                &.btn {
+                  width: 100%;
+
+                  &.hispanic-latin-american {
+                    margin-bottom: 0;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    @media screen and (max-width: 1199px) {
+
+      .tile {
+
+        &:not(.tile-numbers) {
+
+          &:nth-child(2) {
+            @include order(1);
+          }
+
+          &:nth-child(3) {
+            @include order(3);
+          }
+
+          &:nth-child(4) {
+            @include order(2);
+          }
+
+          &:nth-child(5) {
+            @include order(5);
+          }
+
+          &:nth-child(6) {
+            @include order(6);
+          }
+
+          &:nth-child(7) {
+            @include order(4);
+          }
+        }
+
+      }
+    }
+  }
+
+  .body-safari,
+  .body-edge,
+  .body-msie {
+
+    .dashboard {
+
+      .tile,
+      .box {
+        max-height: 500px;
+      }
+    }
+  }
+}
+@include breakpoint(tablet) {
+  .dashboard {
+
+    .tile {
+
+      .box {
+
+        &#bubbleGraph {
+
+          .right {
+
+            .ancestry-filter {
+
+              span {
+
+                &.btn {
+                  min-height: 40px;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@include breakpoint(large) {
+  .dashboard {
+
+    .tile {
+
+      .box {
+
+        &#bubbleGraph {
+
+          .right {
+
+            .ancestry-filter {
+
+              @media screen and (max-width: 1799px) {
+                padding: 20px 10px;
+
+              }
+
+              @media screen and (max-width: 2222px) {
+
+                span {
+
+                  &.btn {
+                    min-height: 46px;
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+.body-msie {
+
+  .main {
+    padding-top: 100px;
+  }
+
+  .dashboard,
+  #summary .row {
+    margin: 0;
+    @include justify-content(space-between);
+    .tile {
+      padding: 0;
+    }
+  }
+
+  #summary {
+
+    .row {
+
+      .tile {
+        width: 26%;
+        @include flex-basis(26%);
+
+        .filling {
+
+          i {
+            left: 30%;
+          }
+        }
+      }
+    }
+  }
+
+  #bubbleGraph {
+
+    .bubble-graph-filter {
+
+      span,
+      .gwas-select-container-multiple {
+        display: none;
+      }
+    }
+  }
+
+  .dashboard {
+
+    .tile {
+
+      &.col-lg-3 {
+        width: 24%;
+        @include flex-basis(24%);
+      }
+    }
+  }
+}
+

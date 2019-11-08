@@ -1,0 +1,208 @@
+.logo-gwas {
+  position: relative;
+  @include flexbox;
+  @include align-items(center);
+
+  &-float,
+  &-type {
+    @include transition-all;
+  }
+
+  &-float {
+    position: absolute;
+    width: 48px;
+    left: -8px;
+    top: -10px;
+    white-space: nowrap;
+  }
+
+  &-type {
+    color: $white;
+    margin-left: 55px;
+    font-size: 30px;
+    line-height: 24px;
+    font-weight: bold;
+
+    small {
+      font-size: 19px;
+      color: $dark-purple;
+    }
+  }
+}
+
+#header {
+  width: 100%;
+  height: 80px;
+  padding: 10px 0;
+  background: $light-primary;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 100;
+
+  &,
+  &.hide-logo {
+    overflow: hidden;
+  }
+
+  .container {
+    height: 100%;
+    padding-top: 0;
+
+    .left,
+    .right {
+      @include align-items(center);
+    }
+
+    &,
+    .left,
+    .right {
+      @include flexbox;
+      @include justify-content(space-between);
+    }
+
+    .download,
+    .add-info {
+      display: none;
+    }
+  }
+
+}
+@media screen and (max-width: $mobile-breakpoint) {
+  #header {
+
+    &.with-switches {
+      .container {
+
+        .right {
+          width: 70%;
+        }
+
+        .logo-gwas-type {
+          display: none;
+        }
+      }
+    }
+  }
+}
+
+@include breakpoint(tablet) {
+  .logo-gwas {
+    width: 20%;
+
+    &-float {
+      width: 46px;
+      left: -45px;
+    }
+
+    @media screen and (max-width: $medium-breakpoint) {
+      &-type {
+        margin-left: 5px;
+        font-size: $big-size;
+        line-height: 20px;
+        small {
+          font-size: $regular-size;
+        }
+      }
+    }
+  }
+
+  #header {
+    height: 62px;
+    overflow: visible;
+
+    &.no-switches {
+      .container {
+
+        .right {
+          @include justify-content(flex-end);
+
+          .add-info {
+            margin-right: 20px;
+          }
+        }
+      }
+    }
+
+    &.hide-logo {
+
+      .container {
+
+        .logo-gwas {
+
+          &-float {
+            width: 38px;
+          }
+        }
+      }
+    }
+
+    .container {
+
+      .right {
+        @include flexbox;
+      }
+
+      .download,
+      .add-info {
+        display: block;
+      }
+
+      .download {
+
+        &:before {
+          color: $white;
+          @include transition-all;
+        }
+
+        &:hover {
+
+          &:before {
+            color: $primary;
+          }
+        }
+      }
+    }
+  }
+}
+
+@include breakpoint(medium) {
+  .logo-gwas {
+
+    &-float {
+      left: 0;
+    }
+
+    &-type {
+      margin-left: 64px;
+      font-size: 30px;
+      line-height: 24px;
+
+      small {
+        font-size: 19px;
+      }
+    }
+  }
+
+  #header {
+
+    .container {
+
+      .right {
+        width: 45%;
+      }
+    }
+  }
+}
+
+@include breakpoint(large) {
+  #header {
+
+    .container {
+
+      .add-info {
+        margin-left: 5px;
+      }
+    }
+  }
+}

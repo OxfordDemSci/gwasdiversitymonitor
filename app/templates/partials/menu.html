@@ -1,0 +1,24 @@
+<div class="menu-links col-sm-6 col-md-4">
+    <ul class="{{ class }}">
+        <li>
+            <a href="{{ url_for('privacy') }}">Privacy policy</a>
+        </li>
+        <li>
+            <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a>
+        </li>
+        <li>
+            <a href="https://github.com/crahal/gwasdiversitymonitor" target="_blank">Github</a>
+        </li>
+    </ul>
+    <ul class="{{ class }}">
+        <li>
+            <span onclick="launchPopup();">How to cite this</span>
+        </li>
+        <li>
+            <a href="{{ url_for('getCSV', filename='gwasdiversitymonitor_download') }}">Download Data</a>
+        </li>
+        <li>
+            <a href="{{ url_for('faqs') }}">FAQs</a>
+        </li>
+    </ul>
+</div>

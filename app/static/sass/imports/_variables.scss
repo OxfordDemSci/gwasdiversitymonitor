@@ -1,0 +1,39 @@
+// Sizes
+$small-breakpoint:          360px;
+$mobile-breakpoint:         480px;
+$tablet-breakpoint:         768px;
+$medium-breakpoint:         992px;
+$large-breakpoint:          1200px;
+$max-breakpoint:            1800px;
+
+// Colours
+$white:                     white;
+$black:                     black;
+$primary:                   #374282;
+$light-primary:             #5c6bc0;
+$hover-btn:                 #97abed;
+$purple:                    #212c8f;
+$dark-purple:               #0C145F;
+$gwas-content-black:        #4a4a4a;
+$blue-grey:                 #78909c;
+$light-grey:                #e9edee;
+$european:                  #ed7892;
+$african:                   #f59c44;
+$african-am-caribbean:      #fece59;
+$other-mixed:               #54bdbe;
+$asian:                     #489ed8;
+$hispanic-latin-american:   #9767ab;
+$grey-map:                  rgb(217, 219, 223);
+
+// Styles
+$box-shadow: 0 1px 8px 0 rgba(0, 0, 0, 0.2), 0 3px 3px -2px rgba(0, 0, 0, 0.12), 0 3px 4px 0 rgba(0, 0, 0, 0.14);
+$box-shadow-large: 0 11px 15px -7px rgba(0, 0, 0, 0.2), 0 9px 46px 8px rgba(0, 0, 0, 0.12), 0 24px 38px 3px rgba(0, 0, 0, 0.14);
+$box-shadow-switch: 0 1px 3px 0 rgba(0, 0, 0, 0.2), 0 2px 1px -1px rgba(0, 0, 0, 0.12), 0 1px 1px 0 rgba(0, 0, 0, 0.14);
+$border-grey: 2px solid $light-grey;
+$box-shadow-highlight: 0 1px 20px 0 rgba($light-primary, 0.7), 0 3px 3px -2px rgba($light-primary, 0.4), 0 3px 4px 0 rgba($light-primary, 0.3);
+
+// Font sizes
+$small-size:    13px;
+$regular-size:  16px;
+$medium-size:   18px;
+$big-size:      22px;

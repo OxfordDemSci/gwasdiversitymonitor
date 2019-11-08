@@ -1,0 +1,56 @@
+<html>
+    <head>
+        {% if title %}
+            <title>{{ title }} - GWAS Diversity Monitor</title>
+        {% else %}
+            <title>GWAS Diversity Monitog</title>
+        {% endif %}
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="description" content="Your gorgeous description">
+        <meta name="og:title" property="og:title" content="Your Awesome Open Graph Title">
+        <meta name="robots" content="index, follow">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon" />
+
+        <!--Javascript-->
+        <script src="{{ url_for('static', filename='js/imports/jquery-3.4.1.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/imports/d3.v4.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/imports/queue.v1.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/imports/topojson.v1.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/imports/d3-tip.min.js') }}"></script>
+        <script src="{{ url_for('static', filename='js/imports/select2.min.js') }}"></script>
+
+        <!--Style-->
+        <link href="{{ url_for('static', filename='css/app.scss.css') }}" rel="stylesheet" type="text/css">
+        <link href="{{ url_for('static', filename='css/select2.min.css') }}" rel="stylesheet" type="text/css">
+        <link href="https://fonts.googleapis.com/css?family=PT+Sans+Narrow:400,700&display=swap" rel="stylesheet">
+
+        <!--Google Analytics-->
+        {% if cookies_check() %}
+            <script async src="https://www.googletagmanager.com/gtag/js?id={{ key }}"></script>
+            <script>
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '{{ key }}');
+            </script>
+        {% endif %}
+    </head>
+    <body class="body-{{ browser }}">
+
+        {% include 'partials/header.html' %}
+
+        <div class="container main">
+            {% block content %}{% endblock %}
+        </div>
+
+        {% include 'partials/footer.html' %}
+
+        {% if not cookies_check() or alwaysShowCookies %}
+            {% include 'components/cookies.html' %}
+        {% endif %}
+
+        <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    </body>
+</html>

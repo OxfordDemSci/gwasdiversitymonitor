@@ -1,0 +1,13 @@
+#worldMap svg {
+  overflow: hidden;
+  background-color: $grey-map;
+
+  .back-rect {
+    fill: $grey-map;
+  }
+
+  .wm-legend-text {
+    font-size: $small-size;
+    color: $gwas-content-black;
+  }
+}
