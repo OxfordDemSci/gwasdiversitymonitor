@@ -1,0 +1,33 @@
+Chronic mountain sickness
+Opioid overdose severity score
+Phenylephrine infusion rate during anesthesia
+Fish intake frequency
+Cerebrospinal fluid sTREM-2 levels
+Lymphangioleiomyomatosis (sporadic)
+Pepsinogen I/II ratio
+Pepsinogen-I levels
+Perceived sweetness of sucrose
+Sucrose liking
+Intake of sweets
+Perceived intensity of fructose
+Perceived intensity of neohesperidin dihydrochalcone
+Perceived intensity of aspartame
+Perceived intensity of sweet substances
+Perceived intensity of sucrose
+Intake of total sugars
+Perceived intensity of glucose
+Accommodative esotropia
+Non-accommodative esotropia
+Occipital lobe volume
+Parietal lobe volume
+Temporal lobe volume
+Frontal lobe volume
+same-sex sexual behaviour
+proportion of same-sex sexual behaviour among non-heterosexuals
+Urine specific gravity measurement
+Ketonuria
+Ketonuria (moderate to severe)
+Ketonuria (mild)
+Urine pH measurement
+Low urine pH
+Signs of urinary tract infection (nitrites and leukocyte esterase)
