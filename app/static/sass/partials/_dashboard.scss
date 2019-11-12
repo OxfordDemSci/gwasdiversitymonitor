@@ -466,13 +466,17 @@
             transition: opacity .1s .3s;
             display: none;
             position: absolute;
-            top: 450px;
+            top: 470px;
             left: 10px;
 
             &.active {
               display: block;
               opacity: 1;
               transition: opacity .1s .3s;
+            }
+
+            @media screen and (max-width: 374px) {
+              top: 490px;
             }
 
             @media screen and (min-width: 601px) {

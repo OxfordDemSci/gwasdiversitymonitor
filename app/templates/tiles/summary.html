@@ -1,8 +1,8 @@
 <div id="summary">
     <h2>
-        Total GWAS participants diversity by ancestry
+        Total GWAS participants diversity
     </h2>
-    <small>Last updated {{ summary.timeupdated }}</small>
+    <small>Updated daily, last update: {{ summary.timeupdated }}</small>
     <div class="row">
         {% for key, value in ancestries.items() %}
             {% include 'components/numbers.html' %}

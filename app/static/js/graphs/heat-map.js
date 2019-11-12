@@ -261,12 +261,15 @@ function drawHeatMap(data, withMetric, withStage) {
 
         drawLogScaleColour(range, logColour_scale, maxValue);
 
-        drawGraph(val, 'European', 'european-container', 'european-rect', 0, logColour_scale, logScale);
-        drawGraph(val, 'Hispanic or Latin American', 'his-lat-ame-container', 'his-lat-ame-rect', 27, logColour_scale, logScale);
-        drawGraph(val, 'African American or Afro-Caribbean', 'afr-ame-carr-container', 'afr-ame-carr-rect', 54, logColour_scale, logScale);
-        drawGraph(val, 'Asian', 'asian-container', 'asian-rect', 81, logColour_scale, logScale);
-        drawGraph(val, 'African', 'african-container', 'african-rect', 108, logColour_scale, logScale);
-        drawGraph(val, 'Other/Mixed', 'other-mixed-container', 'other-mixed-rect', 135, logColour_scale, logScale);
+        let xLegendArray = val.map(function(el) { return el.ancestry });
+        xLegendArray = uniq(xLegendArray);
+
+        drawGraph(val, xLegendArray[0], 'european-container', 'european-rect', 0, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[1], 'his-lat-ame-container', 'his-lat-ame-rect', 27, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[2], 'afr-ame-carr-container', 'afr-ame-carr-rect', 54, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[3], 'asian-container', 'asian-rect', 81, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[4], 'african-container', 'african-rect', 108, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[5], 'other-mixed-container', 'other-mixed-rect', 135, logColour_scale, logScale);
 
         // X and Y axis legends
         let axisLegendsContainer = svg.append('g')
@@ -281,9 +284,6 @@ function drawHeatMap(data, withMetric, withStage) {
             axisLegendsAvoidDupArray.length > 1 ? axisLegendsAvoidDupArray[0].remove() : '';
         }
 
-        let xLegendArray = val.map(function(el) { return el.ancestry });
-        xLegendArray = uniq(xLegendArray);
-
         axisLegendsContainer.selectAll('.heat-map-x-axis-legend-item')
             .data(xLegendArray)
             .enter()
@@ -297,14 +297,14 @@ function drawHeatMap(data, withMetric, withStage) {
             });
 
         axisLegendsContainer.select('.heat-map-x-axis-legend-item-1')
-            .text('Hispanic/Latin ')
-            .attr('x', 67).attr('dy', -4)
-            .append('tspan').text('American').attr('x', 89).attr('dy', 10);
+            .text(xLegendArray[1].match(/.{1,17}(\s|$)/g)[0])
+            .attr('x', 56).attr('dy', -4)
+            .append('tspan').text(xLegendArray[1].match(/.{1,17}(\s|$)/g)[1]).attr('x', 89).attr('dy', 10);
 
         axisLegendsContainer.select('.heat-map-x-axis-legend-item-2')
-            .text('African American/')
-            .attr('x', 90).attr('dy', -4)
-            .append('tspan').text('Afro Caribbean').attr('x', 103).attr('dy', 10);
+            .text(xLegendArray[2].match(/.{1,17}(\s|$)/g)[0])
+            .attr('x', 94).attr('dy', -4)
+            .append('tspan').text(xLegendArray[2].match(/.{1,17}(\s|$)/g)[1]).attr('x', 91).attr('dy', 10);
 
         let yLegendArray = val.map(function(el) { return el.term });
         yLegendArray = uniq(yLegendArray);

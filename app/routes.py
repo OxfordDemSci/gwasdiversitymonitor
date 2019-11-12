@@ -53,7 +53,7 @@ def faqs():
 def additional():
     dataLoader = DataLoader.DataLoader()
     summary = dataLoader.getSummaryStatistics()
-    return render_template('pages/additional-information.html', summary=summary)
+    return render_template('pages/additional-information.html', summary=summary, title='Additional Information')
 
 @app.route("/getCSV/<filename>")
 def getCSV(filename):

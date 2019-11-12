@@ -23,7 +23,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
     let currentYear;
     let selected;
     let legend;
-    let associationSwitch = document.getElementById('cbAssociation');
+    window.associationSwitch = document.getElementById('cbAssociation');
     let tspanAssociation;
     let rectAssociation;
     let textAssociation;
@@ -52,7 +52,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
     if (!window.withMetric && window.withStage) {
         specificDataGraph('doughnut_replication_participants');
-        if (associationSwitch.checked) {
+        if (associationSwitch.checked && currentYear) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
@@ -61,7 +61,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         }
     } else if (!window.withMetric && !window.withStage) {
         specificDataGraph('doughnut_discovery_participants');
-        if (associationSwitch.checked) {
+        if (associationSwitch.checked && currentYear) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
@@ -70,7 +70,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         }
     } else if (window.withMetric && window.withStage) {
         specificDataGraph('doughnut_replication_studies');
-        if (associationSwitch.checked) {
+        if (associationSwitch.checked && currentYear) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
@@ -79,7 +79,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         }
     } else if (window.withMetric && !window.withStage) {
         specificDataGraph('doughnut_discovery_studies');
-        if (associationSwitch.checked) {
+        if (associationSwitch.checked && currentYear) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
@@ -91,90 +91,22 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
     // Functions changing dates
     window.dgpreviousYear = function() {
         currentYear--;
-        if (selected && selected[0].label) {
-            if (selected[0].label === 'All parent terms') {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-                }
-            } else {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-                }
-            }
-        } else {
-            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-            if (associationSwitch.checked) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
+        drawDgOnYearChange();
     };
 
     window.dgnextYear = function() {
         currentYear++;
-        if (selected && selected[0].label) {
-            if (selected[0].label === 'All parent terms') {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-                }
-            } else {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-                }
-            }
-        } else {
-            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-            if (associationSwitch.checked) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
+        drawDgOnYearChange();
     };
 
     window.dgfirstYear = function() {
         currentYear = dataKeys[0];
-        if (selected && selected[0].label) {
-            if (selected[0].label === 'All parent terms') {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-                }
-            } else {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-                }
-            }
-        } else {
-            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-            if (associationSwitch.checked) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
+        drawDgOnYearChange();
     };
 
     window.dglastestYear = function() {
         currentYear = dataKeys[dataKeys.length-1];
-        if (selected && selected[0].label) {
-            if (selected[0].label === 'All parent terms') {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-                }
-            } else {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
-                if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-                }
-            }
-        } else {
-            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
-            if (associationSwitch.checked) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
+        drawDgOnYearChange();
     };
 
     $('#doughnutGraph').find(".filter select[name='parentTerms']").change(function(e) {
@@ -208,7 +140,6 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         let associationTitle = document.querySelector('.doughnut-graph-filter-association-title');
         let showHideLabel = document.querySelector('.doughnut-graph-filter-detail-associations span');
         let worldMap = document.getElementById('worldMap');
-        let heatMap = document.querySelector('#heatMap');
         let doughnutGraph = document.getElementById('doughnutGraph');
 
         associationSwitch.checked ? noDataSpan.classList.add('associations') : noDataSpan.classList.remove('associations');
@@ -243,10 +174,14 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
             if (window.innerWidth > 600 && window.innerWidth <= 1440) {
                 legend.transition(200).style('transform', 'translateX('+(width-100)+'px)');
-            } else if (window.innerWidth <= 600) {
-                document.querySelector('#doughnutSVG').setAttribute('height', '600');
+            } else if (window.innerWidth <= 600 && window.innerWidth >= 375) {
+                document.querySelector('#doughnutSVG').setAttribute('height', '620');
                 legend.transition(200).style('transform', 'translate(44px, 20px)');
-                associationDoughnut.transition(200).style('transform', 'translate(135px, 475px)')
+                associationDoughnut.transition(200).style('transform', 'translate(135px, 495px)');
+            } else if(window.innerWidth < 375) {
+                document.querySelector('#doughnutSVG').setAttribute('height', '640');
+                legend.transition(200).style('transform', 'translate(44px, 20px)');
+                associationDoughnut.transition(200).style('transform', 'translate(135px, 515px)');
             } else {
                 if (!isIE()) {
                     legend.transition(200).style('transform', 'translate('+(width-40)+'px, 0)');
@@ -296,7 +231,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 legend.transition(200).style('transform', 'translateX(0%)');
             } else if (window.innerWidth <= 600) {
                 document.querySelector('#doughnutSVG').setAttribute('height', '324');
-                legend.transition(200).style('transform', 'translate(0, 0)');
+                legend.transition(200).style('transform', 'translate3d(0, 0, 0)');
                 associationDoughnut.transition(200).style('transform', 'translate(540px, 108px)')
             } else {
                 if (!isIE()) {
@@ -306,6 +241,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 }
             }
 
+            tspanAssociation = document.querySelectorAll('.tspan-association');
             if (tspanAssociation && tspanAssociation.length > 0) {
                 Array.prototype.forEach.call(tspanAssociation, function(el, i) {
                     if (i === 0) {
@@ -314,6 +250,8 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                         el.parentNode.setAttribute('x', '87');
                     } else if (i === 2) {
                         el.parentNode.setAttribute('x', '112');
+                    } else {
+                        el.parentNode.setAttribute('x', '191');
                     }
                 });
             }
@@ -324,7 +262,10 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             if (rectAssociation && rectAssociation.length > 0) {
                 Array.prototype.forEach.call(rectAssociation, function(el, i) {
                     if (i <= 2) {
-                        el.setAttribute('x', '10')
+                        el.setAttribute('x', '10');
+                        el.setAttribute('y', (height/2+50)+(i*24 + i*12));
+                    } else if(i > 2) {
+                        el.setAttribute('x', 157);
                     }
                 });
             }
@@ -334,21 +275,45 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                     if (i <= 2) {
                         el.setAttribute('x', '44');
                         el.querySelector('tspan').setAttribute('x', '44');
+                        el.setAttribute('y', (height/2+42)+(i*24 + i*12 + 18));
+                    } else if(i > 2) {
+                        el.setAttribute('x', 191);
                     }
                 });
             }
 
             let doughnutPartsAssociations = document.querySelectorAll('.doughnutPartAssociation');
             if (doughnutPartsAssociations && doughnutPartsAssociations.length > 0) {
-                Array.prototype.forEach.call(doughnutPartsAssociations, function(el, i) {
+                Array.prototype.forEach.call(doughnutPartsAssociations, function(el) {
                     el.parentNode.removeChild(el);
                 });
             }
         }
     });
 
+    function drawDgOnYearChange() {
+        if (selected && selected[0].label) {
+            if (selected[0].label === 'All parent terms') {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                }
+            } else {
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
+                if (associationSwitch.checked) {
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
+                }
+            }
+        } else {
+            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+            if (associationSwitch.checked) {
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+            }
+        }
+    }
+
     function drawDoughnutAssociation(dataByType, currentYear, parentTerm) {
-        let val = dataByType[currentYear][parentTerm]
+        let val = dataByType[currentYear][parentTerm];
         // The radius of the pieplot is half the width or half the height (smallest one). I subtract a bit of margin.
         let radius = Math.min(width, height) / 3 - margin;
         // set the color scale
@@ -395,6 +360,10 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                     .style("opacity", 0);
             });
 
+        if (window.innerWidth <= 600) {
+            associationDoughnut.style('transform', 'translate(135px, 495px)')
+        }
+
         d3.selectAll('.tspan-association').remove();
 
         d3.selectAll('.tspan-percentage')
@@ -406,10 +375,28 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             Array.prototype.forEach.call(tspanAssociation, function(el, i) {
                 if (i === 0) {
                     el.parentNode.setAttribute('x', '-6');
+                    if (window.innerWidth < 375 && associationSwitch.checked) {
+                        el.setAttribute('x', '-9');
+                        el.setAttribute('dy', 12);
+                    }
                 } else if (i === 1) {
                     el.parentNode.setAttribute('x', '40');
+                    if (window.innerWidth < 375 && associationSwitch.checked) {
+                        el.setAttribute('x', '-9');
+                        el.setAttribute('dy', 12);
+                    }
                 } else if (i === 2) {
                     el.parentNode.setAttribute('x', '62');
+                    if (window.innerWidth < 375 && associationSwitch.checked) {
+                        el.setAttribute('x', '-9');
+                        el.setAttribute('dy', 12);
+                    }
+                } else if (i > 2) {
+                     if (associationSwitch.checked && window.innerWidth < 375) {
+                         el.parentNode.setAttribute('x', '141');
+                     } else {
+                         el.parentNode.setAttribute('x', '191');
+                     }
                 }
                 if (data_ready && data_ready[i]) {
                     el.textContent = ' (Asso. '+parseFloat(parseFloat(data_ready[i].data.value.value).toFixed(2))+'%)';
@@ -422,6 +409,17 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             Array.prototype.forEach.call(rectAssociation, function(el, i) {
                 if (i <= 2) {
                     el.setAttribute('x', '-40');
+                    if (associationSwitch.checked && window.innerWidth < 375) {
+                        el.setAttribute('y', (height/2+50)+(i*32 + i*12));
+                    } else {
+                        el.setAttribute('y', (height/2+50)+(i*24 + i*12));
+                    }
+                } else if(i > 2) {
+                    if (associationSwitch.checked && window.innerWidth < 375) {
+                        el.setAttribute('x', 107);
+                    } else {
+                        el.setAttribute('x', 157);
+                    }
                 }
             });
         }
@@ -432,10 +430,20 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 if (i <= 2) {
                     el.setAttribute('x', '-6');
                     el.querySelector('tspan').setAttribute('x', '-6');
+                    if (associationSwitch.checked && window.innerWidth < 375) {
+                        el.setAttribute('y', (height/2+42)+(i*32 + i*12 + 18));
+                    } else {
+                        el.setAttribute('y', (height/2+42)+(i*24 + i*12 + 18));
+                    }
+                } else if(i > 2) {
+                    if (associationSwitch.checked && window.innerWidth < 375) {
+                        el.setAttribute('x', 141);
+                    } else {
+                        el.setAttribute('x', 191);
+                    }
                 }
             });
         }
-
     }
 
 
@@ -456,11 +464,14 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
     }
 
+    /**
+     * @return {boolean}
+     */
     function IsAllPropertiesNull(obj) {
         let values = Object.keys(obj).map(function(e) {
             return obj[e]
-        })
-        return values.every(function(v) { return v.value == ""; });
+        });
+        return values.every(function(v) { return v.value === ""; });
     }
 
     function drawDoughnutPerYearPerAncestry(dataByType, currentYear, parentTerm) {
@@ -548,12 +559,11 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                     .style("opacity", 0);
             });
 
-        d3.selectAll('#doughnutSVG .legend').remove();
-
+        d3.select('#doughnutSVG .doughnut-legend').remove();
         legend = d3.select('#doughnutSVG').append('g')
-            .attr('class', 'legend');
+            .attr('class', 'doughnut-legend');
 
-        let legendDoughnutRect = legend.selectAll('.doughnut-legend-rect')
+        legend.selectAll('.doughnut-legend-rect')
             .data(d3.entries(val))
             .enter()
             .append('rect')
@@ -574,11 +584,11 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                     return (height/2+50)+((i-3)*24 + (i-3)*12);
                 }
             })
-            .attr('fill', function(d, i) {
+            .attr('fill', function(d) {
                 return(color(d.key))
             });
 
-        let textLegendDg = legend.selectAll('.doughnut-legend-text')
+        legend.selectAll('.doughnut-legend-text')
             .data(d3.entries(val))
             .enter()
             .append('text')
@@ -645,7 +655,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 legend.style('transform', 'translateX(' + (width - 100) + 'px)');
             } else if (window.innerWidth <= 600){
                 document.querySelector('#doughnutSVG').setAttribute('height', '600');
-                legend.style('transform', 'translate('+(width-40)+'px, 40%)');
+                legend.style('transform', 'translate(44px, 20px)');
             } else {
                 if (!isIE()) {
                     legend.style('transform', 'translateX('+(width-40)+'px)');

@@ -19,10 +19,21 @@ function drawWorldMapChart(data, withMetric) {
             }
         });
 
-    let margin = {top: 0, right: 0, bottom: 0, left: 0},
-        width = parseInt(d3.select('#worldMap').style('width')) - margin.left - margin.right,
-        mapRatio = .5,
+    let margin = {top: 0, right: 0, bottom: 0, left: 0};
+    let width;
+
+    if (window.worldMapInitWidth && window.associationSwitch.checked) {
+        width = window.worldMapInitWidth;
+    } else {
+        width = parseInt(d3.select('#worldMap').style('width')) - margin.left - margin.right;
+    }
+
+    let mapRatio = .5,
         height = width * mapRatio;
+
+    if (window.innerWidth >= 1200) {
+        window.worldMapInitWidth = width;
+    }
 
     let colorsForParticipants = [
         {

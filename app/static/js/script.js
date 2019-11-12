@@ -41,13 +41,18 @@ function setDescription() {
     var box = $('.box:not(.summary)');
     for(i = 0; i < box.length; i++) {
         var id = $(box[i]).attr('id');
-        var title = $(box[i]).find('h3').text();
+        var title = $(box[i]).find('h3');
+        var secondTitle = '';
+        if($(title[1]).text()) {
+            secondTitle = ' - ' + $(title[1]).text();
+        }
+        var titleText = $(title[0]).text() + secondTitle;
         var svg = d3.select('#' + id + ' svg');
-
+        
         if(svg.select('desc').empty()) {
-            svg.append('desc').text(title);
+            svg.append('desc').text(titleText);
         } else {
-            svg.select('desc').text(title);
+            svg.select('desc').text(titleText);
         }
     }
 }
@@ -62,6 +67,8 @@ function downloadImage() {
         var graph = $(this).parents('.box');
         var svg = graph.find('svg');
         var width = svg.width();
+        var height = svg.height();
+        var heightPos = height+100;
 
         d3.select("#downloadShell svg").remove();
         var downloadSvg = d3.select("#downloadShell").append(function() {
@@ -74,7 +81,7 @@ function downloadImage() {
 
         downloadSvg.append("g")
             .attr("class", "title")
-            .attr("transform", "translate(60,25)")
+            .attr("transform", "translate(60,40)")
             .append("text")
             .attr("class", "main-title")
             .attr("x", 0)
@@ -96,11 +103,13 @@ function downloadImage() {
         var offset = 0;
         var parentTerm = graph.find('.gwas-select-container-single option:selected').attr('name');
         var year = graph.find('[class*="-change-year"] span').text();
+
         if(parentTerm == 'all') {
             parentTerm = 'All parent terms'
         }
 
-        if (graph.find("circle.european").is(':visible')) {
+        // if (graph.find("circle.european").is(':visible')) {
+        if (graph.find("circle.european").length > 0) {
             var european = legend.append("g")
                 .attr("class", "european")
                 .attr("transform", "translate(0, " + offset + ")");
@@ -115,7 +124,7 @@ function downloadImage() {
             offset += 20;
         }
 
-        if (graph.find("circle.african").is(':visible')) {
+        if (graph.find("circle.african").length > 0) {
             var african = legend.append("g")
                 .attr("class", "african")
                 .attr("transform", "translate(0, " + offset + ")");
@@ -130,7 +139,7 @@ function downloadImage() {
             offset += 20;
         }
 
-        if (graph.find("circle.african-american-or-afro-caribbean").is(':visible')) {
+        if (graph.find("circle.african-american-or-afro-caribbean").length > 0) {
             var africanAmCaribbean = legend.append("g")
                 .attr("class", "african-american-or-afro-caribbean")
                 .attr("transform", "translate(0, " + offset + ")");
@@ -145,7 +154,7 @@ function downloadImage() {
             offset += 20;
         }
 
-        if (graph.find("circle.other-mixed").is(':visible')) {
+        if (graph.find("circle.other-mixed").length > 0) {
             var otherMixed = legend.append("g")
                 .attr("class", "other-mixed")
                 .attr("transform", "translate(0, " + offset + ")");
@@ -160,7 +169,7 @@ function downloadImage() {
             offset += 20;
         }
 
-        if (graph.find("circle.asian").is(':visible')) {
+        if (graph.find("circle.asian").length > 0) {
             var asian = legend.append("g")
                 .attr("class", "asian")
                 .attr("transform", "translate(0, " + offset + ")");
@@ -175,7 +184,7 @@ function downloadImage() {
             offset += 20;
         }
 
-        if (graph.find("circle.hispanic-or-latin-american").is(':visible')) {
+        if (graph.find("circle.hispanic-or-latin-american").length > 0) {
             var hispanicLatinAmerican = legend.append("g")
                 .attr("class", "hispanic-or-latin-american")
                 .attr("transform", "translate(0, " + offset + ")");
@@ -190,7 +199,7 @@ function downloadImage() {
             offset += 20;
         }
 
-        if (graph.find("circle.in-part-not-recorded").is(':visible')) {
+        if (graph.find("circle.in-part-not-recorded").length > 0) {
             var inPart = legend.append("g")
                 .attr("class", "in-part-not-recorded")
                 .attr("transform", "translate(0, " + offset + ")");
@@ -217,6 +226,10 @@ function downloadImage() {
                 .text(graph.find("[class*='-header'] small, .header small").text() + ' - ' + parentTerm);
         }
 
+        if(graph.attr('id') === 'timeSeries') {
+            heightPos = height+70;
+        }
+
         if(graph.attr('id') === 'heatMap') {
             downloadSvg.selectAll('.heat-map-x-axis-legend-item').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.8em; fill: #4a4a4a;");
             downloadSvg.selectAll('.log-colour-scale text').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.7em; fill: #4a4a4a;");
@@ -228,6 +241,7 @@ function downloadImage() {
             downloadSvg.select('.countries').attr('transform', 'translate(0,124)');
             downloadSvg.select('.legend').attr('transform', 'translate(0, 155)');
             downloadSvg.selectAll('.wm-legend-text').attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
+            heightPos = height+300;
         }
 
         if(graph.attr('id') === 'doughnutGraph') {
@@ -238,11 +252,13 @@ function downloadImage() {
             downloadSvg.select('.svg-container-2').attr('transform', 'translate(520,200)');
             downloadSvg.select('.main-title').text(graph.find('.doughnut-graph-header > h3').text());
             downloadSvg.select('.sub-title').text(graph.find('.doughnut-graph-header > small').text() + ' - ' + parentTerm + ' - ' + year);
+            downloadSvg.select('.doughnut-legend').attr('style', 'transform: translate(0,100px);');
+            heightPos = height+120;
             if (graph.find('.doughnut-graph-filter-association-title').hasClass('active')) {
-                downloadSvg.select('.legend').attr('style', 'transform: translate(200px,100px);');
+                downloadSvg.select('.doughnut-legend').attr('style', 'transform: translate(200px,100px);');
                 downloadSvg.append("g")
                     .attr("class", "second-title")
-                    .attr("transform", "translate(400,25)")
+                    .attr("transform", "translate(400,40)")
                     .append("text")
                     .attr("x", 0)
                     .attr("y", 0)
@@ -263,12 +279,23 @@ function downloadImage() {
             downloadSvg.select(".svg-container").attr("transform", "translate(50,100)");
         }
 
+        var popup = $('#popup-footer p');
+        downloadSvg.append('text')
+            .text($(popup[0]).text())
+            .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+            .attr('transform', 'translate( 10,' + heightPos + ')');
+        downloadSvg.append('text')
+            .text($(popup[1]).text())
+            .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+            .attr('transform', 'translate( 10,' + (heightPos+16) + ')');
+
+
+
         var html = downloadSvg.node().outerHTML;
         var svgBlob = new Blob([html], {type: "image/svg+xml;charset=utf-8"});
         var svgUrl = URL.createObjectURL(svgBlob);
-
-
         var downloadLink = document.createElement("a");
+
         downloadLink.href = svgUrl;
         downloadLink.download = graph.attr('id') + ".svg";
         document.body.appendChild(downloadLink);

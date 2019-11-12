@@ -3642,12 +3642,16 @@ button, .btn {
             transition: opacity .1s .3s;
             display: none;
             position: absolute;
-            top: 450px;
+            top: 470px;
             left: 10px; }
             .dashboard .tile .box.doughnut-graph .doughnut-graph-filter-association-title.active {
               display: block;
               opacity: 1;
               transition: opacity .1s .3s; }
+
+@media screen and (max-width: 374px) {
+  .dashboard .tile .box.doughnut-graph .doughnut-graph-filter-association-title {
+    top: 490px; } }
 
 @media screen and (min-width: 601px) {
   .dashboard .tile .box.doughnut-graph .doughnut-graph-filter-association-title {
@@ -4613,9 +4617,15 @@ select {
   width: 100%;
   height: 250px;
   background: white;
-  padding: 10px 40px;
+  padding: 10px 30px;
   position: relative;
   margin: 0 15px;
+  -webkit-box-direction: normal;
+  -webkit-box-orient: vertical;
+  -webkit-flex-direction: column;
+  -moz-flex-direction: column;
+  -ms-flex-direction: column;
+  flex-direction: column;
   -moz-box-shadow: 0 1px 8px 0 rgba(0, 0, 0, 0.2), 0 3px 3px -2px rgba(0, 0, 0, 0.12), 0 3px 4px 0 rgba(0, 0, 0, 0.14);
   -webkit-box-shadow: 0 1px 8px 0 rgba(0, 0, 0, 0.2), 0 3px 3px -2px rgba(0, 0, 0, 0.12), 0 3px 4px 0 rgba(0, 0, 0, 0.14);
   box-shadow: 0 1px 8px 0 rgba(0, 0, 0, 0.2), 0 3px 3px -2px rgba(0, 0, 0, 0.12), 0 3px 4px 0 rgba(0, 0, 0, 0.14); }
