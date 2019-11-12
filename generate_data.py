@@ -1,17 +1,13 @@
 import pandas as pd
-from decimal import Decimal
 import json
 import logging
 import datetime
 import numpy as np
 import requests
-import traceback
 import requests_ftp
 import os
-import re
 import csv
 import shutil
-from yattag import Doc, indent
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -44,10 +40,10 @@ def create_summarystats(data_path):
     Cat_Full = pd.read_csv(os.path.join(data_path, 'catalog',
                                         'raw', 'Cat_Full.tsv'),
                            sep='\t', low_memory=False)
-    Cat_Anc_withBroader = pd.read_csv(os.path.join(data_path, 'catalog',
-                                                   'synthetic',
-                                                   'Cat_Anc_withBroader.tsv'),
-                                      '\t', index_col=False, low_memory=False)
+    Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
+                                                'synthetic',
+                                                'Cat_Anc_wBroader.tsv'),
+                                   '\t', index_col=False, low_memory=False)
     temp_bubble_df = pd.read_csv(os.path.join(data_path,
                                               'toplot', 'bubble_df.csv'),
                                  sep=',', index_col=False, low_memory=False)
@@ -80,7 +76,7 @@ def create_summarystats(data_path):
     noneuro_trait = pd.DataFrame(temp_bubble_df[
                                  temp_bubble_df['Broader'] != 'European'].
                                  groupby(['DiseaseOrTrait']).size()).\
-                                 sort_values(by=0, ascending=False).reset_index()['DiseaseOrTrait'][0]
+        sort_values(by=0, ascending=False).reset_index()['DiseaseOrTrait'][0]
     sumstats['noneuro_trait'] = str(noneuro_trait)
     sumstats['average_pval'] = float(round(Cat_Full['P-VALUE'].
                                            astype(float).mean(), 10))
@@ -88,13 +84,13 @@ def create_summarystats(data_path):
                                           astype(float) < 5.000000e-8]))
     sumstats['mostcommon_journal'] = str(Cat_Stud['JOURNAL'].mode()[0])
     sumstats['unique_journals'] = int(len(Cat_Stud['JOURNAL'].unique()))
-    Cat_Anc_byN = Cat_Anc_withBroader[['STUDY ACCESSION', 'N']].\
+    Cat_Anc_byN = Cat_Anc_wBroader[['STUDY ACCESSION', 'N']].\
         groupby(by='STUDY ACCESSION').sum()
     Cat_Anc_byN = Cat_Anc_byN.reset_index()
-    Cat_Anc_withBroader = Cat_Anc_withBroader.\
+    Cat_Anc_wBroader = Cat_Anc_wBroader.\
         drop_duplicates('STUDY ACCESSION')[['PUBMEDID', 'FIRST AUTHOR',
                                             'STUDY ACCESSION']]
-    Cat_Anc_byN = pd.merge(Cat_Anc_byN, Cat_Anc_withBroader, how='left',
+    Cat_Anc_byN = pd.merge(Cat_Anc_byN, Cat_Anc_wBroader, how='left',
                            left_on='STUDY ACCESSION',
                            right_on='STUDY ACCESSION')
     sumstats['large_accesion_N'] = int(Cat_Anc_byN.
@@ -109,11 +105,11 @@ def create_summarystats(data_path):
                                     sumstats['large_accesion_N'],
                                     'PUBMEDID']
     sumstats['large_accesion_pubmed'] = int(biggestpubmed.iloc[0])
-    Cat_Anc_withBroader = pd.read_csv(os.path.join(data_path, 'catalog',
+    Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
                                                    'synthetic',
-                                                   'Cat_Anc_withBroader.tsv'),
+                                                   'Cat_Anc_wBroader.tsv'),
                                       '\t', index_col=False, low_memory=False)
-    Cat_Anc_NoNR = Cat_Anc_withBroader[Cat_Anc_withBroader['Broader'] != 'In Part Not Recorded']
+    Cat_Anc_NoNR = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] != 'In Part Not Recorded']
     total_european = round(((Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'European']['N'].
                              sum() / Cat_Anc_NoNR['N'].sum())*100), 2)
     sumstats['total_european'] = total_european
@@ -134,7 +130,7 @@ def create_summarystats(data_path):
     sumstats['total_hisorlatinam'] = total_hisorlatinam
 
     # now rotate through the 4 filters
-    Cat_Anc_NoNR = Cat_Anc_withBroader[Cat_Anc_withBroader['Broader'] != 'In Part Not Recorded']
+    Cat_Anc_NoNR = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] != 'In Part Not Recorded']
     Cat_Anc_NoNR_initial = Cat_Anc_NoNR[Cat_Anc_NoNR['STAGE'] == 'initial']
     discovery_participants_european = round(((Cat_Anc_NoNR_initial[Cat_Anc_NoNR_initial['Broader'] == 'European']['N'].
                                       sum() / Cat_Anc_NoNR_initial['N'].sum())*100), 2)
@@ -173,7 +169,7 @@ def create_summarystats(data_path):
     discovery_studies_hisorlatinam = round(((len(Cat_Anc_NoNR_initial[Cat_Anc_NoNR_initial['Broader'].str.contains('Hispanic')]) /
                                            len(Cat_Anc_NoNR_initial))*100), 2)
 
-    Cat_Anc_NoNR = Cat_Anc_withBroader[Cat_Anc_withBroader['Broader'] != 'In Part Not Recorded']
+    Cat_Anc_NoNR = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] != 'In Part Not Recorded']
     Cat_Anc_NoNR_initial = Cat_Anc_NoNR[Cat_Anc_NoNR['STAGE'] == 'replication']
     replication_participants_european = round(((Cat_Anc_NoNR_initial[Cat_Anc_NoNR_initial['Broader'] == 'European']['N'].
                                       sum() / Cat_Anc_NoNR_initial['N'].sum())*100), 2)
@@ -227,181 +223,12 @@ def create_summarystats(data_path):
     return sumstats
 
 
-def update_summarystats(sumstats, summaryfile):
-    '''
-    Write the summary stats json into the index.html
-    This is currently extremely hacky and as a minimum needs to be using
-    something like yattag, if not a custom js function to embed'''
-
-    starttag = '<li> <p>'
-    endtag = '</p></li>\n'
-    sum_line_1 = 'There are a total of ' + str(sumstats['number_studies']) +\
-                 ' studies in the Catalog.'
-    sum_line_2 = 'Earliest study in catalogue was PubMedID ' +\
-                 str(sumstats['first_study_pubmedid']) + ' on ' +\
-                 str(sumstats['first_study_date']) + ' by ' +\
-                 str(sumstats['first_study_firstauthor']) + ' et al.'
-    sum_line_3 = 'Most recent study in the catalogue was PubMedID ' +\
-                 str(sumstats['last_study_pubmedid']) + ' on ' +\
-                 str(sumstats['last_study_date']) + ' by ' +\
-                 str(sumstats['last_study_firstauthor']) + ' et al.'
-    sum_line_4 = 'Accession with biggest sample is PubMedID ' +\
-                 str(sumstats['large_accesion_pubmed']) + ' (N=' +\
-                 str(sumstats['large_accesion_N']) + ') by ' +\
-                 str(sumstats['large_accesion_firstauthor']) + ' et al.'
-    sum_line_5 = 'There are a total of ' +\
-                 str(sumstats['number_accessions']) +\
-                 ' unique study accessions.'
-    sum_line_6 = 'There are a total of ' +\
-                 str(sumstats['number_diseasestraits']) +\
-                 ' unique diseases and traits studied.'
-    sum_line_7 = 'There are a total of ' +\
-                 str(sumstats['number_mappedtrait']) +\
-                 ' unique EBI "Mapped Traits".'
-    sum_line_8 = 'The total number of associations found is ' +\
-                 str(sumstats['found_associations']) + '.'
-    sum_line_9 = 'The average number of associations found is ' +\
-                 str(round(sumstats['average_associations'], 2)) + '.'
-    sum_line_10 = 'Mean P-Value for the strongest SNP risk allele is: ' +\
-                  "{:.3E}".format(Decimal(sumstats['average_pval'])) + '.'
-    sum_line_11 = 'The number of associations reaching the 5e-8 significance threshold: ' +\
-                  str(sumstats['threshold_pvals']) + '.'
-    sum_line_12 = 'The journal to feature the most GWAS studies is: ' +\
-                  str(sumstats['mostcommon_journal']) + '.'
-    sum_line_13 = 'Total number of different journals publishing GWAS is: ' +\
-                  str(sumstats['unique_journals']) + '.'
-    sum_line_14 = 'Most frequently studied (Non-European) disease or trait: ' +\
-                  str(sumstats['noneuro_trait']) + '.'
-
-    outpath = os.path.abspath(os.path.join('gwasdiversitymonitor_app', 'templates', 'sumstats.html'))
-    doc, tag, text, line = Doc().ttl()
-    doc.asis('<!DOCTYPE html>')
-    with tag('head'):
-        doc.asis('<meta charset="utf-8">')
-        doc.asis('<meta name="viewport" content="width=device-width, initial-scale=1">')
-        doc.asis('<link rel="stylesheet" href="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/css/bootstrap.min.css">')
-        with tag('script', src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.0/jquery.min.js"):
-            pass
-        with tag('script', src="http://maxcdn.bootstrapcdn.com/bootstrap/3.3.6/js/bootstrap.min.js"):
-            pass
-        with tag('html'):
-            with tag('h1'):
-                text('Summary Statistics')
-            with tag('p'):
-                text('Here we present a range of summary statistics related to the data which powers the dashboard (and some which doesnt), updated when the Catalog is updated. Note that these summary statistics and the figures themselves only use raw (wrangled) data from the GWAS Catalog. Currently:')
-            with tag('body'):
-                with tag('ul', id='summary-list'):
-                    line('li', sum_line_1)
-                    line('li', sum_line_2)
-                    line('li', sum_line_3)
-                    line('li', sum_line_4)
-                    line('li', sum_line_5)
-                    line('li', sum_line_6)
-                    line('li', sum_line_7)
-                    line('li', sum_line_8)
-                    line('li', sum_line_9)
-                    line('li', sum_line_10)
-                    line('li', sum_line_11)
-                    line('li', sum_line_12)
-                    line('li', sum_line_13)
-                    line('li', sum_line_14)
-    summaryhtml = indent(doc.getvalue(), indent_text=True)
-    with open(outpath, "w") as file:
-        file.write(summaryhtml)
-
-    with open(summaryfile, 'r') as file:
-        summary = file.readlines()
-    summary[172] = starttag + sum_line_1 + endtag
-    summary[173] = starttag + sum_line_2 + endtag
-    summary[174] = starttag + sum_line_3 + endtag
-    summary[175] = starttag + sum_line_4 + endtag
-    summary[176] = starttag + sum_line_5 + endtag
-    summary[177] = starttag + sum_line_6 + endtag
-    summary[178] = starttag + sum_line_7 + endtag
-    summary[179] = starttag + sum_line_8 + endtag
-    summary[180] = starttag + sum_line_9 + endtag
-    summary[181] = starttag + sum_line_10 + endtag
-    summary[182] = starttag + sum_line_11 + endtag
-    summary[183] = starttag + sum_line_12 + endtag
-    summary[184] = starttag + sum_line_13 + endtag
-    summary[185] = starttag + sum_line_14 + endtag
-    with open(summaryfile, 'w') as file:
-        file.writelines(summary)
-
-
-def update_downloaddata(sumstats, downloaddata):
-    '''
-        update the headline summary stats:
-        this should again be using something like yattag and then be loaded
-        in dynamically to the index.html, not just replacing lines
-    '''
-    with open(downloaddata, 'r') as file:
-        download = file.readlines()
-    download[120] = '<span class="badge badge-primary badge-pill">' + str(sumstats['total_european']) + '%</span>\n'
-    download[123] = '<span class="badge badge-primary badge-pill">' + str(sumstats['total_african']) + '%</span>\n'
-    download[126] = '<span class="badge badge-primary badge-pill">' + str(sumstats['total_afamafcam']) + '%</span>\n'
-    download[129] = '<span class="badge badge-primary badge-pill">' + str(sumstats['total_othermixed']) + '%</span>\n'
-    download[132] = '<span class="badge badge-primary badge-pill">' + str(sumstats['total_asian']) + '%</span>\n'
-    download[135] = '<span class="badge badge-primary badge-pill">' + str(sumstats['total_hisorlatinam']) +'%</span>\n'
-    with open(downloaddata, 'w') as file:
-        file.writelines(download)
-
-
-def update_header(headerfile):
-    ''' update the 'last updated' part of the header on both tabs '''
-    with open(headerfile, 'r') as file:
-        header = file.readlines()
-    header[109] = '<p style="font-size:14px;">Last updated: ' +\
-                 datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S") +\
-                 '. Privacy Policy <a href="https://github.com/crahal/gwasdiversitymonitor/blob/master/privacy_policy.md">here</a>.<br>\n'
-
-    with open(headerfile, 'w') as file:
-        file.writelines(header)
-
-
-def ancestry_cleaner(row, field):
-    """ clean up the ancestry fields in GWASCatalogue_Ancestry.
-
-    Keyword arguments:
-    row: the row of the ancestry DataFrame
-    field: the field of the ancestry dataframe ('initial' or 'replication')
-    """
-    free_text = re.sub(r'(\d+),?([\d+]?)', r'\1\2', str(row[field]))
-    free_text = re.sub(r'(\d+)', r'; \1', str(free_text))
-    free_text = punctuation_cleaner(free_text)
-    free_text = remove_lower(free_text)
-    free_text = remove_lower(free_text)
-    free_text = free_text.replace('  ', ' ')
-    free_text = free_text.replace('  ', ' ')
-    free_text = list_remover(free_text)
-    free_text = dict_replace(free_text)
-    try:
-        if free_text[-1] == ';':
-            free_text = free_text[:-1]
-    except ValueError:
-        pass
-    cleaned = []
-    for ancestry in free_text[1:].split(';'):
-        if " and" in ancestry.strip()[-4:]:
-            cleaned.append(ancestry.replace(' and', '').strip())
-        elif " or" in ancestry.strip()[-4:]:
-            cleaned.append(ancestry.replace(' or', '').strip())
-        else:
-            cleaned.append(ancestry.strip())
-    cleaned = ';'.join(cleaned)
-    cleaned = cleaned.replace(';', ' ; ')
-    for word in cleaned.split(' '):
-        if (word.isalpha()) and (len(word) < 3) and word != "or":
-            cleaned = cleaned.replace(word, '')
-    cleaned = re.sub(r';\s+;', ';', cleaned)
-    return cleaned
-
-
 def make_heatmatrix(merged, stage, out_path):
     ''' not currently used by the dashboard '''
     col_list = merged['parentterm'].unique().tolist()
     col_list.append('Year')
-    index_list = merged[merged['Broader'].notnull()]['Broader'].unique().tolist()
+    index_list = merged[merged['Broader'].notnull()]['Broader'].\
+        unique().tolist()
     count_df = pd.DataFrame(columns=col_list)
     sum_df = pd.DataFrame(columns=col_list)
     for year in range(2008, 2020):
@@ -437,37 +264,38 @@ def make_heatmap_dfs(data_path):
                            sep='\t')
     Cat_Stud = Cat_Stud[['STUDY ACCESSION', 'DISEASE/TRAIT']]
     Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
-                                        'raw', 'Cat_Map.tsv'),
-                           sep='\t')
+                                       'raw', 'Cat_Map.tsv'),
+                          sep='\t')
     Cat_Map = Cat_Map[['Disease trait', 'Parent term']]
     Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
-                           left_on = 'DISEASE/TRAIT',
-                           right_on = 'Disease trait')
+                           left_on='DISEASE/TRAIT',
+                           right_on='Disease trait')
     Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                    'Disease_to_Parent_Mappings.tsv'), sep='\t')
+                                    'Disease_to_Parent_Mappings.tsv'),
+                       sep='\t')
     Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION',
                                'DISEASE/TRAIT']].drop_duplicates()
     Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
-    Cat_Anc_withBroader = pd.read_csv(os.path.join(data_path,
-                                                   'catalog',
-                                                   'synthetic',
-                                                   'Cat_Anc_withBroader.tsv'),
-                                      '\t', index_col=False,
-                                      parse_dates=['DATE'])
-    Cat_Anc_withBroader = Cat_Anc_withBroader[Cat_Anc_withBroader['Broader'] != 'In Part Not Recorded']
-    merged = pd.merge(Cat_StudMap, Cat_Anc_withBroader,
+    Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path,
+                                                'catalog',
+                                                'synthetic',
+                                                'Cat_Anc_wBroader.tsv'),
+                                   '\t', index_col=False, parse_dates=['DATE'])
+    Cat_Anc_wBroader = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] !=
+                                                         'In Part Not Recorded']
+    merged = pd.merge(Cat_StudMap, Cat_Anc_wBroader,
                       how='left', on='STUDY ACCESSION')
-    #### TODO -- QUANTIFY THIS FOR THE SUMSTATS.HTML INTO THE JSON
     merged.to_csv(os.path.join(data_path,
                                'catalog',
                                'synthetic',
-                               'Cat_Anc_withBroader_withParents.tsv'), '\t')
+                               'Cat_Anc_wBroader_withParents.tsv'), '\t')
     if len(merged[merged['parentterm'].isnull()]) > 0:
         diversity_logger.debug('Wuhoh! There are some empty disease terms!')
-        pd.Series(merged[merged['parentterm'].\
+        pd.Series(merged[merged['parentterm'].
                          isnull()]['DISEASE/TRAIT'].unique()).\
-        to_csv(os.path.join(data_path, 'unmapped', 'unmapped_diseases.txt'),
-               index=False)
+            to_csv(os.path.join(data_path, 'unmapped',
+                                'unmapped_diseases.txt'),
+                   index=False)
     else:
         diversity_logger.info('No missing disease terms! Nice!')
     merged = merged[merged["parentterm"].notnull()]
@@ -479,156 +307,12 @@ def make_heatmap_dfs(data_path):
                                                         'toplot'))
 
 
-def dict_replace(text):
-    """ sanitize the free text strings from the initial/replication fields.
-
-    Keyword arguements:
-    text: the free text string prior to splitting
-
-    Taken from the comms bio paper, possibly needs updating periodically.
-    This should probably be loaded in from a text file
-
-    """
-    replacedict = {'Arabian': 'Arab', 'HIspanic': 'Hispanic',
-                   'Korculan': 'Korcula', 'Hispaic': 'Hispanic',
-                   'Hispanics': 'Hispanic', 'Chineses': 'Chinese',
-                   'Europea ': 'European ', 'Finish': 'Finnish',
-                   'Val Bbera': 'Val Borbera', 'Chinese Han': 'Han Chinese',
-                   'Erasmus Rchen': 'Erasmus Rucphen', 'Cilen ': 'Cilento',
-                   'Erasmus Rupchen': 'Erasmus Rucphen', 'Clien': 'Cilento',
-                   'Erasmus Ruchpen': 'Erasmus Rucphen', 'Geman': 'German',
-                   'Old Amish': 'Old Order Amish', 'Americans': 'American',
-                   'Japnese': 'Japanese', 'Finland': 'Finnish',
-                   'Eat Aian': 'East Asian', 'Hipanic': 'Hispanic',
-                   'Sub African': 'Sub-saharan African', 'Israeli': 'Isreali',
-                   'Erasmus Rucphen Family': 'Erasmus Rucphen',
-                   'Nfolk Island': 'Norfolk Island', 'Sh Asian': 'Asian',
-                   'Hispanic Latino': 'Hispanic/Latino', 'Uighur': 'Uyghur',
-                   'Hispanic Latin ': 'Hispanic/Latino',
-                   'European ad': 'European', 'Val Bbera': 'Val Borbera',
-                   'European End': 'European', 'Oceanian': 'Oceania',
-                   'LatinoAmerican': 'Latino American', 'Giuli': 'Giulia',
-                   'Cilentoto': 'Cilento', 'Friuli': 'Fruili',
-                   'Giuliaa': 'Giulia', 'Rupchen': 'Rucphen', '≥': '',
-                   'Korcula': 'Korkulan', 'Ruchpen': 'Rucphen',
-                   'Brazillian': 'Brazilian', 'Sub-saharan': 'Sub Saharan',
-                   'Tyrolian': 'Tyrolean', 'Seychelles': 'Seychellois',
-                   'South Tyrolean': 'South Tyrol', 'Europen': 'European'}
-    for key in replacedict:
-        if key in text:
-            text = text.replace(key, replacedict[key])
-    return text
-
-
-def list_remover(text):
-    """ titlecase/capitalised words to remove from the strings which
-    are not associated with countries, races or ancestries.
-
-    Keyword arguements:
-    text: the free text string prior to splitting
-
-    Taken from the comms bio paper, possibly needs updating periodically.
-    This should probably be loaded in from a text file
-
-    """
-    removelist = ['AIS', 'APOE', 'HIV', 'Â', 'HER2-', '1000 Genomes',
-                  'MYCN-amplification', 'Alzheimer', 'ASD', 'OCB', 'BD',
-                  'Genetically', 'Homogenous', 'BRCA', 'ALL', 'Coronary',
-                  'Amyotrophic', 'Large', 'anti-dsDNA', 'Up ', 'Biracial',
-                  'Follicular', 'Hodgkin', 'Lymphoma', 'GI', 'Abstinent',
-                  'Schizophrenia', 'Îµ', 'JAK', 'ADHD', 'Diabetes',
-                  'Allogenic', 'BGPI', 'Ischemic', 'Chronic', 'Major',
-                  'Diabetic', 'Microalbuminuria', 'Asthma', 'Individuals',
-                  'At ', "Barrett's", 'Crohn', 'Bipolar', 'MMR', 'HBV', 'RA',
-                  'Elated', 'Escitalpram', 'Irritable', 'Lymphoblastoid',
-                  'ACPA', 'HCC', 'pPhe508del', 'Anti', 'B2GPI', 'Kashin Beck',
-                  '(LDL-cholesterol)', 'TPO', 'OCD', 'CCT', 'FTD', 'CAPOX B',
-                  'LAC', 'LOAD', ' So ', 'MYCN-amplification', 'Yang', 'Tae',
-                  'Eum', 'Non-abstinent', 'EBWL', 'Semantic', 'General',
-                  'Cluster', 'Frontremporal', 'Frontotremporal',
-                  'Frontotemporal', 'Graves', 'Attention', 'Autism', 'Liu',
-                  'High', 'Low', 'HCV', 'Citalopram', 'Haemophilia', ' III ',
-                  ' II ', ' I ', 'NFT', 'Progressive', 'Ancestry', 'Parkinson',
-                  'Lin', 'BMD', 'GBA', 'Traylor', 'Consortium', ' Torgerson',
-                  'EVE', 'Germain', 'Boraska', 'Cases', 'HapMap', 'vWF', 'HDL',
-                  'LDL', ' Mild', 'Cognitive', 'Impairment', 'Sarcoidosis',
-                  'Yu Zhi', 'Lymphoma', 'Impairment', 'Type', 'Kuru',
-                  'Frontemporal', 'Erasmus', 'Barrett', 'Lofgren', 'Hashimoto',
-                  'Family', 'Multiple', 'Richardson', 'Metropolitan']
-    for word in removelist:
-        text = text.replace(word, '')
-    return text
-
-
-def remove_lower(free_text):
-    """ remove lowercase letters (assumed to not be associated with
-    countries, races or ancestries.)
-    Keyword arguements:
-    text: the free text string prior to splitting
-
-    Taken from the comms bio paper, possibly needs updating periodically.
-
-    """
-    free_text = free_text.replace('up to', '')
-    for word in free_text.split(' '):
-        if (word.title() != word.strip()):
-            try:
-                float(word)
-            except ValueError:
-                if ';' in word:
-                    free_text = free_text.replace(word, ';').strip()
-                elif (';' not in word) and (word != "and") and (word != "or"):
-                    if free_text.find(word) == 0:
-                        free_text = free_text.replace(word + ' ', ' ')
-                    else:
-                        free_text = free_text.replace(' ' + word, ' ')
-    return free_text.strip()
-
-
-def punctuation_cleaner(temp):
-    """ remove various punctuation (assumed to not be associated with
-    countries, races or ancestries.)
-
-    Keyword arguements:
-    text: the free text string prior to splitting
-    """
-    temp = temp.replace(',', ';')
-    for pmark in ['-', '\'', '’', '?', '+']:
-        temp = temp.replace(pmark, ' ')
-    for pmark in ['(', ')', '.', '*', '~', '<', '>']:
-        temp = temp.replace(pmark, '')
-    return temp
-
-
-def ancestry_parser(output_path, input_series, Cat_Studies):
-    ''' Parse single individual ancestries from the free text
-        based on capitalisations '''
-    with open(output_path, 'w', encoding='utf-8') as csv_file:
-        fileout = csv.writer(csv_file, delimiter=',', lineterminator='\n')
-        fileout.writerow(['STUDY ACCESSION', 'Cleaned_Ancestry',
-                          'Cleaned_Ancestry_Size'])
-        for index, row in Cat_Studies.iterrows():
-            checksum = 0
-            for ancestry in row[input_series].split(';'):
-                number = re.findall(r'\d+', ancestry.strip())
-                if (len(number) == 1):
-                    checksum += 1
-            if checksum == len(row[input_series].split(';')):
-                for ancestry in row[input_series].split(';'):
-                    number = re.findall(r'\d+', ancestry.strip())
-                    words = ''.join(i for i in ancestry.strip() if not i.isdigit())
-                    if (len(number) == 1) and (len(words.strip()) > 3) and \
-                       (sum(1 for c in words if c.isupper()) > 0):
-                        fileout.writerow([row['STUDY ACCESSION'],
-                                          words.strip(), str(number[0])])
-
-
 def make_choro_df(data_path):
     ''' Create the dataframe for the choropleth map '''
     Cat_Ancestry = pd.read_csv(os.path.join(data_path,
                                             'catalog',
                                             'synthetic',
-                                            'Cat_Anc_withBroader.tsv'),
+                                            'Cat_Anc_wBroader.tsv'),
                                sep='\t')
     annual_df = pd.DataFrame(columns=['Year', 'N', 'Count'])
     Clean_CoR = make_clean_CoR(Cat_Ancestry, data_path)
@@ -722,131 +406,33 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
                                    index=False)
 
 
-def make_freetext_dfs(data_path):
-    ''' Make the dataframe for the free text analysis. Requires optimisation '''
-    big_dataframe = pd.DataFrame()
-    for year in range(2008, 2020):
-        Cat_Studies = pd.read_csv(os.path.join(data_path,
-                                               'catalog',
-                                               'raw',
-                                               'Cat_Stud.tsv'),
-                                  sep='\t')
-        Cat_Studies = Cat_Studies[Cat_Studies['DATE'].str.contains(str(year))]
-        Cat_Studies['InitialClean'] = Cat_Studies.apply(
-            lambda row: ancestry_cleaner(row, 'INITIAL SAMPLE SIZE'), axis=1)
-        output_path = os.path.abspath(
-                      os.path.join(data_path,
-                                   'catalog',
-                                   'synthetic',
-                                   'new_initial_sample.csv'))
-        ancestry_parser(output_path, 'InitialClean', Cat_Studies)
-        Cat_Studies['ReplicationClean'] = Cat_Studies.apply(
-            lambda row: ancestry_cleaner(row, 'REPLICATION SAMPLE SIZE'),
-            axis=1)
-        output_path = os.path.abspath(
-                      os.path.join(data_path,
-                                   'catalog',
-                                   'synthetic',
-                                   'new_replication_sample.csv'))
-        ancestry_parser(output_path, 'ReplicationClean', Cat_Studies)
-        clean_intial = pd.read_csv(os.path.abspath(
-                                   os.path.join(data_path,
-                                                'catalog', 'synthetic',
-                                                'new_initial_sample.csv')),
-                                   encoding='utf-8')
-        clean_initial_sum = pd.DataFrame(
-            clean_intial.groupby(['Cleaned_Ancestry']).sum())
-        clean_initial_sum.rename(
-            columns={'Cleaned_Ancestry_Size': 'Initial_Ancestry_Sum'},
-            inplace=True)
-        clean_initial_count = clean_intial.groupby(['Cleaned_Ancestry']).\
-                              count()
-        clean_initial_count.rename(
-            columns={'Cleaned_Ancestry_Size': 'Initial_Ancestry_Count'},
-            inplace=True)
-        clean_initial_merged = clean_initial_sum.merge(pd.DataFrame(
-            clean_initial_count['Initial_Ancestry_Count']),
-            how='outer', left_index=True, right_index=True)
-        clean_initial_merged = clean_initial_merged.sort_values(
-            by='Initial_Ancestry_Sum', ascending=False)
-        clean_initial_merged['Initial_Ancestry_Sum_%'] =\
-            (clean_initial_merged['Initial_Ancestry_Sum'] /
-             clean_initial_merged['Initial_Ancestry_Sum'].sum())*100
-        clean_initial_merged['Initial_Ancestry_Count_%'] =\
-            (clean_initial_merged['Initial_Ancestry_Count'] /
-             clean_initial_merged['Initial_Ancestry_Count'].sum())*100
-        clean_replication = pd.read_csv(os.path.abspath(
-                                        os.path.join(
-                                            data_path, 'catalog', 'synthetic',
-                                            'new_replication_sample.csv')),
-                                        encoding='utf-8')
-        clean_replication_sum = pd.DataFrame(
-            clean_replication.groupby(['Cleaned_Ancestry']).sum())
-        clean_replication_sum.rename(
-            columns={'Cleaned_Ancestry_Size': 'Replication_Ancestry_Sum'},
-            inplace=True)
-        clean_replication_count = clean_replication.groupby(
-            ['Cleaned_Ancestry']).count()
-        clean_replication_count.rename(
-            columns={'Cleaned_Ancestry_Size': 'Replication_Ancestry_Count'},
-            inplace=True)
-        clean_replication_merged = clean_replication_sum.merge(
-            pd.DataFrame(clean_replication_count['Replication_Ancestry_Count']),
-            how='outer', left_index=True, right_index=True)
-        clean_replication_merged = clean_replication_merged.sort_values(
-            by='Replication_Ancestry_Sum', ascending=False)
-        clean_initial_merged = clean_initial_merged.sort_values(
-            by='Initial_Ancestry_Sum', ascending=False)
-        clean_replication_merged['Replication_Ancestry_Sum_%'] =\
-            (clean_replication_merged['Replication_Ancestry_Sum'] /
-             clean_replication_merged['Replication_Ancestry_Sum'].sum())*100
-        clean_replication_merged['Replication_Ancestry_Count_%'] =\
-            (clean_replication_merged['Replication_Ancestry_Count'] /
-             clean_replication_merged['Replication_Ancestry_Count'].sum())*100
-        merged = pd.merge(clean_initial_merged,
-                          clean_replication_merged,
-                          left_on='Cleaned_Ancestry',
-                          right_on='Cleaned_Ancestry',
-                          how='outer')
-        merged["Year"] = year
-        big_dataframe = pd.concat([big_dataframe, merged], ignore_index=False)
-    big_dataframe = big_dataframe.round(2).reset_index()
-#    big_dataframe['Cleaned_Ancestry'] = big_dataframe['Cleaned_Ancestry'].str.\
-#                                        replace('African American',
-#                                                'African Am.')
-    big_dataframe.to_csv(os.path.join(data_path,
-                                      'toplot',
-                                      'freetext_merged.csv'))
-
-
 def make_doughnut_df(data_path):
     ''' Make the doughnut chart dataframe for use in main.py'''
     Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
-                                        'raw', 'Cat_Stud.tsv'),
-                           sep='\t')
+                                        'raw', 'Cat_Stud.tsv'), sep='\t')
     Cat_Stud = Cat_Stud[['STUDY ACCESSION', 'DISEASE/TRAIT',
                          'ASSOCIATION COUNT']]
-    Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
-                                        'raw', 'Cat_Map.tsv'),
-                           sep='\t')
+    Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog', 'raw',
+                                       'Cat_Map.tsv'), sep='\t')
     Cat_Map = Cat_Map[['Disease trait', 'Parent term']]
     Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
-                           left_on = 'DISEASE/TRAIT',
-                           right_on = 'Disease trait')
+                           left_on='DISEASE/TRAIT',
+                           right_on='Disease trait')
     Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                    'Disease_to_Parent_Mappings.tsv'), sep='\t')
+                                    'Disease_to_Parent_Mappings.tsv'),
+                       sep='\t')
     Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION',
                                'DISEASE/TRAIT', 'ASSOCIATION COUNT']].\
-                               drop_duplicates()
+        drop_duplicates()
     Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
-    Cat_Anc_withBroader = pd.read_csv(os.path.join(data_path,
-                                                   'catalog',
-                                                   'synthetic',
-                                                   'Cat_Anc_withBroader.tsv'),
-                                      '\t', index_col=False,
-                                      parse_dates=['DATE'])
-    Cat_Anc_withBroader = Cat_Anc_withBroader[Cat_Anc_withBroader['Broader'] != 'In Part Not Recorded']
-    merged = pd.merge(Cat_StudMap, Cat_Anc_withBroader,
+    Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
+                                                'synthetic',
+                                                'Cat_Anc_wBroader.tsv'),
+                                   '\t', index_col=False,
+                                   parse_dates=['DATE'])
+    Cat_Anc_wBroader = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] !=
+                                        'In Part Not Recorded']
+    merged = pd.merge(Cat_StudMap, Cat_Anc_wBroader,
                       how='left', on='STUDY ACCESSION')
     merged["DATE"] = merged["DATE"].astype(str)
     doughnut_df = pd.DataFrame(index=[], columns=['Broader',
@@ -922,7 +508,7 @@ def make_doughnut_df(data_path):
                                                     (merged['DATE'].str.contains(str(year))) &
                                                     (merged['parentterm'] == parent)]['N'].sum())*100
                     doughnut_df.at[counter,
-                                 'InitialN'] = (merged[(merged['STAGE'] == 'initial') &
+                                   'InitialN'] = (merged[(merged['STAGE'] == 'initial') &
                                                        (merged['Broader'] == ancestry) &
                                                        (merged['DATE'].str.contains(str(year))) &
                                                        (merged['parentterm'] == parent)]['N'].sum() /
@@ -938,17 +524,17 @@ def make_doughnut_df(data_path):
                                                        (merged['DATE'].str.contains(str(year))) &
                                                        (merged['parentterm'] == parent)]['ASSOCIATION COUNT'].sum())*100
                     doughnut_df.at[counter,
-                                 'ReplicationCount'] = (len(merged[
-                                                           (merged['STAGE'] == 'replication') &
-                                                           (merged['parentterm'] == parent) &
-                                                           (merged['DATE'].str.contains(str(year))) &
-                                                           (merged['Broader'] == ancestry)]) /
-                                                        len(merged[
-                                                           (merged['STAGE'] == 'replication') &
-                                                           (merged['DATE'].str.contains(str(year))) &
-                                                           (merged['parentterm'] == parent)])) * 100
+                                   'ReplicationCount'] = (len(merged[
+                                                              (merged['STAGE'] == 'replication') &
+                                                              (merged['parentterm'] == parent) &
+                                                              (merged['DATE'].str.contains(str(year))) &
+                                                              (merged['Broader'] == ancestry)]) /
+                                                          len(merged[
+                                                             (merged['STAGE'] == 'replication') &
+                                                             (merged['DATE'].str.contains(str(year))) &
+                                                             (merged['parentterm'] == parent)])) * 100
                     doughnut_df.at[counter,
-                                 'InitialCount'] = (len(merged[
+                                   'InitialCount'] = (len(merged[
                                                        (merged['STAGE'] == 'initial') &
                                                        (merged['parentterm'] == parent) &
                                                        (merged['DATE'].str.contains(str(year))) &
@@ -971,56 +557,42 @@ def make_bubbleplot_df(data_path):
                            sep='\t')
     Cat_Stud = Cat_Stud[['STUDY ACCESSION', 'DISEASE/TRAIT']]
     Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
-                                        'raw', 'Cat_Map.tsv'),
-                           sep='\t')
+                                       'raw', 'Cat_Map.tsv'), sep='\t')
     Cat_Map = Cat_Map[['Disease trait', 'Parent term']]
     Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
-                           left_on = 'DISEASE/TRAIT',
-                           right_on = 'Disease trait')
+                           left_on='DISEASE/TRAIT',
+                           right_on='Disease trait')
     Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                    'Disease_to_Parent_Mappings.tsv'), sep='\t')
+                                    'Disease_to_Parent_Mappings.tsv'),
+                       sep='\t')
     Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION',
                                'DISEASE/TRAIT']].drop_duplicates()
     Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
-    Cat_Anc_withBroader = pd.read_csv(os.path.join(data_path,
-                                                   'catalog',
-                                                   'synthetic',
-                                                   'Cat_Anc_withBroader.tsv'),
-                                      '\t', index_col=False,
-                                      parse_dates=['DATE'])
-    merged = pd.merge(Cat_StudMap, Cat_Anc_withBroader,
+    Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
+                                                'synthetic',
+                                                'Cat_Anc_wBroader.tsv'),
+                                   '\t', index_col=False, parse_dates=['DATE'])
+    merged = pd.merge(Cat_StudMap, Cat_Anc_wBroader,
                       how='left', on='STUDY ACCESSION')
     merged["AUTHOR"] = merged["FIRST AUTHOR"]
     merged = merged[["Broader", "N", "PUBMEDID", "AUTHOR", "DISEASE/TRAIT",
                      "STAGE", 'DATE', "STUDY ACCESSION", "parentterm"]]
+    merged = merged[merged["parentterm"].notnull()]
     merged = merged.rename(columns={'DISEASE/TRAIT':
                                     'DiseaseOrTrait'})
     merged = merged[merged['Broader'] != 'In Part Not Recorded']
-    merged["color"] = 'black'
-    merged["color"] = np.where(merged["Broader"] == 'European',
-                               "#d53e4f", merged["color"])
-    merged["color"] = np.where(merged["Broader"] == 'Asian',
-                               "#3288bd", merged["color"])
-    merged["color"] = np.where(merged["Broader"] == 'African American or Afro-Caribbean',
-                               "#fee08b", merged["color"])
-    merged["color"] = np.where(merged["Broader"] == 'Hispanic/Latin American',
-                               "#807dba", merged["color"])
-    merged["color"] = np.where(merged["Broader"] == 'Other/Mixed',
-                               "#99d594", merged["color"])
-    merged["color"] = np.where(merged["Broader"] == 'African',
-                               "#fc8d59", merged["color"])
     merged = merged.rename(columns={"STUDY ACCESSION": "ACCESSION"})
     merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].astype(str)
     merged["parentterm"] = merged["parentterm"].astype(str)
     make_disease_list(merged)
     merged = merged.groupby(["Broader", "N", "PUBMEDID", "AUTHOR", "STAGE",
-                             "DATE",  "DiseaseOrTrait", "color",
+                             "DATE",  "DiseaseOrTrait",
                              "ACCESSION"])['parentterm'].\
-                             apply(', '.join).reset_index()
+        apply(', '.join).reset_index()
     merged = merged.groupby(["Broader", "N", "PUBMEDID", "AUTHOR",
-                             "parentterm", "STAGE", "DATE", "color",
+                             "parentterm", "STAGE", "DATE",
                              "ACCESSION"])['DiseaseOrTrait'].\
-                             apply(', '.join).reset_index()
+        apply(', '.join).reset_index()
     merged = merged.sort_values(by='DATE', ascending=True)
     merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
 
@@ -1055,23 +627,20 @@ def clean_gwas_cat(data_path):
     Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
     Cat_Anc['N'] = Cat_Anc['N'].astype(int)
     Cat_Anc = Cat_Anc.sort_values(by='Dates')
-#    Cat_Anc['Broader'] = Cat_Anc['Broader'].str.replace(
-#        'African American/Afro-Caribbean', 'African Am./Caribbean')
-#    Cat_Anc['Broader'] = Cat_Anc['Broader'].str.replace(
-#        'Hispanic or Latin American', 'Hispanic/Latin American')
     if len(Cat_Anc[Cat_Anc['Broader'].isnull()]) > 0:
-        diversity_logger.debug('Wuhoh! Need to update dictionary terms:\n' +
-              '\n'.join(Cat_Anc[Cat_Anc['Broader'].
-                        isnull()]['BROAD ANCESTRAL'].unique()))
-        Cat_Anc[Cat_Anc['Broader'].\
+        diversity_logger.debug('Need to update dictionary terms:\n' +
+                               '\n'.join(Cat_Anc[Cat_Anc['Broader'].
+                                                 isnull()]['BROAD ANCESTRAL'].
+                                         unique()))
+        Cat_Anc[Cat_Anc['Broader'].
                 isnull()]['BROAD ANCESTRAL'].\
-        to_csv(os.path.join(data_path, 'unmapped', 'unmapped_broader.txt'))
+            to_csv(os.path.join(data_path, 'unmapped', 'unmapped_broader.txt'))
     else:
         diversity_logger.info('No missing Broader terms! Nice!')
     Cat_Anc = Cat_Anc[Cat_Anc['Broader'].notnull()]
     Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
     Cat_Anc.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                'Cat_Anc_withBroader.tsv'),
+                                'Cat_Anc_wBroader.tsv'),
                    sep='\t', index=False)
 
 
@@ -1151,8 +720,8 @@ def download_cat(data_path, ebi_download):
             with open(os.path.join(data_path, 'catalog', 'raw',
                                    'Cat_Full.tsv'), 'wb') as tsvfile:
                 tsvfile.write(r.content)
-        else:
             diversity_logger.info('Successfully downloaded ' + catfull_name)
+        else:
             diversity_logger.debug('Problem downloading the Cat_full file...')
         requests_ftp.monkeypatch_session()
         s = requests.Session()
@@ -1160,16 +729,15 @@ def download_cat(data_path, ebi_download):
         subdom = '/pub/databases/gwas/releases/latest/'
         file = 'gwas-efo-trait-mappings.tsv'
         r = s.get(ftpsite+subdom+file)
-        todaysdate = datetime.datetime.now().strftime("%Y_%m_%d")
         if r.status_code == 200:
             with open(os.path.join(data_path, 'catalog', 'raw',
                                    'Cat_Map.tsv'), 'wb') as tsvfile:
                 tsvfile.write(r.content)
-            diversity_logger.info('Successfully downloaded efo-trait-mappings')
+            diversity_logger.info('Successfully downloaded efo-trait-mapping!')
         else:
-            diversity_logger.debug('Problem downloading efo-trait-mappings file...')
+            diversity_logger.debug('Problem downloading efo-trait-mappings...')
     except Exception as e:
-        diversity_logger.debug('Problem downloading the Catalog data!' + str(e))
+        diversity_logger.debug('Problem downloading Catalog data!' + str(e))
 
 
 def make_archive(source, destination):
@@ -1196,17 +764,19 @@ def zip_toplot(source, destination):
         diversity_logger.debug('Problem zipping the files to tbe downloaded' +
                                str(e))
 
+
 def make_disease_list(df):
     uniq_dis_trait = pd.Series(df['DiseaseOrTrait'].unique())
     uniq_dis_trait.to_csv(os.path.join(data_path, 'summary',
                           'uniq_dis_trait.txt'),
                           header=False, index=False)
 
+
 def make_parent_list(data_path):
     df = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                  'Cat_Anc_withBroader_withParents.tsv'),
-                    sep='\t')
-    uniq_parent = pd.Series(df[df['parentterm'].\
+                                  'Cat_Anc_wBroader_withParents.tsv'),
+                     sep='\t')
+    uniq_parent = pd.Series(df[df['parentterm'].
                                notnull()]['parentterm'].unique())
     uniq_parent.to_csv(os.path.join(data_path, 'summary',
                                     'uniq_parent.txt'),
@@ -1215,41 +785,40 @@ def make_parent_list(data_path):
 
 def make_broader_list(data_path):
     df = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                  'Cat_Anc_withBroader_withParents.tsv'),
+                                  'Cat_Anc_wBroader_withParents.tsv'),
                      sep='\t')
     uniq_broader = pd.Series(df[df['Broader'].notnull()]['Broader'].unique())
     uniq_broader.to_csv(os.path.join(data_path, 'summary',
-                                    'uniq_broader.txt'),
-                       header=False, index=False)
+                                     'uniq_broader.txt'),
+                        header=False, index=False)
 
 
 if __name__ == "__main__":
     logpath = os.path.abspath(os.path.join(__file__, '..', 'logging'))
     diversity_logger = setup_logging(logpath)
     data_path = os.path.abspath(os.path.join(__file__, '..', 'data'))
-    #index_filepath = os.path.abspath(os.path.join(__file__, '..','templates', 'index.html'))
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     try:
         download_cat(data_path, ebi_download)
         clean_gwas_cat(data_path)
         make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
-        tsinput = pd.read_csv(os.path.join(data_path, 'catalog','synthetic','Cat_Anc_withBroader.tsv'), sep='\t')
+        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+                                           'Cat_Anc_wBroader.tsv'),
+                              sep='\t')
         make_timeseries_df(tsinput, data_path, 'ts1')
         tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
         make_timeseries_df(tsinput, data_path, 'ts2')
         make_choro_df(data_path)
-        make_freetext_dfs(data_path)
         make_heatmap_dfs(data_path)
-        # update_header(index_filepath)
         make_parent_list(data_path)
         make_broader_list(data_path)
         sumstats = create_summarystats(data_path)
-        # update_summarystats(sumstats, index_filepath)
-        # update_downloaddata(sumstats, index_filepath)
         diversity_logger.info('generate_data.py ran successfully!')
-        zip_toplot(os.path.join(data_path, 'toplot'),  os.path.join(data_path, 'todownload', 'gwasdiversitymonitor_download.zip'))
+        zip_toplot(os.path.join(data_path, 'toplot'),
+                   os.path.join(data_path, 'todownload',
+                                'gwasdiversitymonitor_download.zip'))
     except Exception as e:
         diversity_logger.debug('generate_data.py failed, uncaught error: ' +
-                               str(traceback.format_exc()))
+                               str(e))
     logging.shutdown()
