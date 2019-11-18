@@ -31,7 +31,8 @@ Each call to @app.route('path') defines a path and almost all of these just retu
 The other exception in this file is, at the top, @app.context_processor. This injects some functionality into our flask templates for us. It is used to give us a user_agent checker (check what device/browser is accessing the application) check the state of the cookie policy, and inject the google analytics key from the config file.
 
 The other important file here is DataLoader.py. This is a simple file containing a series of helper functions that route.py uses to load and reshape the data from the csv's into a shape that is workable with d3.
-Data - This subfolder contains the data structure you are used to. It is exactly the same as the old version, built from the same cron. The only new addition are some zip folders in data/todownload for the heatmap and timeseries data. This is an open remaining task to update the cron to produce these zips.
+
+Data - pulls, wrangles and creates all data used in this project.
 
 Static - This subfolder contains all of the assets for the application. Css/sass, fonts, images and Js will all be found here. The one we care most about is the js. There is a script.js file which contains some global functions and then a file for each graph.
 
