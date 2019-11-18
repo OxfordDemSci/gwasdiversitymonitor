@@ -1,5 +1,5 @@
-<p align="center">
-  <img src="https://github.com/OxfordDemSci/gwasdiversitymonitor/blob/master/app/static/images/logo_white_rect.png" width="550"/>
+<p align="left">
+  <img src="https://github.com/OxfordDemSci/gwasdiversitymonitor/blob/master/app/static/images/logo_white_rect.png" width="450"/>
 </p>
 
 [![Generic badge](https://img.shields.io/badge/-Informational-red)](https://shields.io/)  [![Generic badge](https://img.shields.io/badge/Python-3.6-<red>.svg)](https://shields.io/)  [![Generic badge](https://img.shields.io/badge/License-MIT-blue.svg)](https://shields.io/)  [![Generic badge](https://img.shields.io/badge/Maintained-Yes-green.svg)](https://shields.io/)  [![Generic badge](https://img.shields.io/badge/-Informational-red)](https://shields.io/)
