@@ -10,35 +10,34 @@
                     Here we present a range of summary statistics related to the data which powers the dashboard (and some which doesn't), updated when the
                     <a href="https://www.ebi.ac.uk/gwas/" target="_blank">Catalog</a>
                     is updated. Note that these summary statistics and the figures themselves only use raw (wrangled) data from the Catalog. Currently:
-
                     <ul>
                         <li>There are a total of {{ summary.number_studies }} studies in the Catalog.</li>
 
-                        <li>Earliest study in catalogue was <a href="https://www.ncbi.nlm.nih.gov/pubmed/{{ summary.first_study_pubmedid }}" target="_blank">PubMedID {{ summary.first_study_pubmedid }}</a> on {{ summary.first_study_date }} by {{ summary.first_study_firstauthor }} et al.</li>
+                        <li>The earliest study in the Catalog is <a href="https://www.ncbi.nlm.nih.gov/pubmed/{{ summary.first_study_pubmedid }}" target="_blank">PubMedID {{ summary.first_study_pubmedid }}</a> published on {{ summary.first_study_date }} by {{ summary.first_study_firstauthor }} et al.</li>
 
-                        <li>Most recent study in the catalogue was <a href="https://www.ncbi.nlm.nih.gov/pubmed/{{ summary.last_study_pubmedid }}" target="_blank">PubMedID {{ summary.last_study_pubmedid }}</a> on {{ summary.last_study_date }} by {{ summary.last_study_firstauthor }} et al.</li>
+                        <li>The most recent study in the Catalog is <a href="https://www.ncbi.nlm.nih.gov/pubmed/{{ summary.last_study_pubmedid }}" target="_blank">PubMedID {{ summary.last_study_pubmedid }}</a> published on {{ summary.last_study_date }} by {{ summary.last_study_firstauthor }} et al.</li>
 
-                        <li>Accession with biggest sample is <a href="https://www.ncbi.nlm.nih.gov/pubmed/{{ summary.large_accesion_pubmed }}" target="_blank">PubMedID {{ summary.large_accesion_pubmed }}</a> (N={{ summary.large_accesion_N }}) by {{ summary.large_accesion_firstauthor }} et al.</li>
+                        <li>The accession with biggest sample is presently <a href="https://www.ncbi.nlm.nih.gov/pubmed/{{ summary.large_accesion_pubmed }}" target="_blank">PubMedID {{ summary.large_accesion_pubmed }}</a> (N={{ summary.large_accesion_N }}) by {{ summary.large_accesion_firstauthor }} et al.</li>
 
-                        <li>There are a total of {{ summary.number_accessions }} unique study accessions.</li>
+                        <li>There are presently a total of {{ summary.number_accessions }} unique study accessions.</li>
 
-                        <li>There are a total of {{ summary.number_diseasestraits }} unique diseases and traits studied.</li>
+                        <li>There are presently a total of {{ summary.number_diseasestraits }} unique diseases and traits studied.</li>
 
-                        <li>There are a total of {{ summary.number_mappedtrait }} unique EBI "Mapped Traits".</li>
+                        <li>There are presently a total of {{ summary.number_mappedtrait }} unique EBI "Mapped Traits".</li>
 
-                        <li>The total number of associations found is {{ summary.found_associations }}.</li>
+                        <li>The total number of associations found is presently {{ summary.found_associations }}.</li>
 
-                        <li>The average number of associations found is {{ summary.average_associations|round(2) }}.</li>
+                        <li>The average number of associations found is presently {{ summary.average_associations|round(2) }}.</li>
 
-                        <li>Mean P-Value for the strongest SNP risk allele is: <span>{{ summary.average_pval }}</span>.</li>
+                        <li>The mean P-Value for the strongest SNP risk allele is presently: <span>{{ summary.average_pval }}</span>.</li>
 
-                        <li>The number of associations reaching the 5e-8 significance threshold: {{ summary.threshold_pvals }}.</li>
+                        <li>The number of associations reaching the 5e-8 significance threshold is presently: {{ summary.threshold_pvals }}.</li>
 
-                        <li>The journal to feature the most GWAS studies is: {{ summary.mostcommon_journal }}.</li>
+                        <li>The journal to feature the most GWAS studies is presently: {{ summary.mostcommon_journal }}.</li>
 
-                        <li>Total number of different journals publishing GWAS is: {{ summary.unique_journals }}.</li>
+                        <li>The total number of different journals publishing GWAS is presently: {{ summary.unique_journals }}.</li>
 
-                        <li>Most frequently studied (Non-European) disease or trait: {{ summary.noneuro_trait }}.</li>
+                        <li>The most frequently studied (Non-European) disease or trait is presently: {{ summary.noneuro_trait }}.</li>
                     </ul>
                 </p>
             </div>
@@ -47,15 +46,8 @@
                     Funding, Contact and Acknowledgements
                 </h2>
                 <p>
-                    This work is generously supported by The British Academy (a Postdoctoral Fellowship: Charles Rahal), the European Research Council (grants 615603 and 835079: Melinda C. Mills), and will be maintained going forward by the Leverhulme Centre for Demographic Science. The academic homepages of the curators can be found
-                    <a href="https://crahal.github.io/" target="_blank">here</a> and
-                    <a href="https://www.melindacmills.com/" target="_blank">here</a>. We are grateful to comments on the source code and infrastructure from
-                    <a href="https://github.com/ianknowles" target="_blank">Ian Knowles</a>,
-                    <a href="https://github.com/YiLiu6240" target="_blank">Yi Liu</a>, Molly Przeworski,
-                    <a href="https://github.com/YiLiu6240" target="_blank">Ben Domingue</a>, Sam Trejo and the
-                    <a href="https://www.sociogenome.org/" target="_blank">Sociogenome</a> group more generally. We look forward to responsively updating the GWAS Diversity Monitor with all of your suggestions, and in that vein would encourage any comments via email,
-                    <a href="https://twitter.com/oxforddemsci" target="_blank">Twitter</a> or
-                    <a href="https://github.com/crahal/GWASDiversityMonitor" target="_blank">GitHub</a>.
+                    This work is currently maintained and hosted by the <a href="https://demographicscience.ox.ac.uk/" target="_blank">Leverhulme Centre for Demographic Science</a>. The earlier prototypes were generously supported by the European Research Council (grants 615603 and 835079: <a href="https://www.melindacmills.com/" target="_blank">Melinda C. Mills</a>) and The British Academy (a Postdoctoral Fellowship: <a href="https://crahal.github.io/" target="_blank">Charles Rahal</a>). A reworking of the dashboard was undertaken by <a href="https://crahal.github.io/" target="_blank">Global Initiative</a>, and there special thanks go to Jamie, Nynke, Veatriki, Alex, Lea and Quentin. In addition, we are grateful to comments on the source code and infrastructure from Ian Knowles, Yi Liu, Molly Przeworski, Ben Domingue, Sam Trejo and Oxford's Sociogenome group more generally. We look forward to responsively updating the GWAS Diversity Monitor with all of your suggestions, and in that vein would encourage any comments via email, <a href="https://twitter.com/oxforddemsci" target="_blank">Twitter</a> or
+                    <a href="https://github.com/oxforddemisci/gwasdiversitymonitor" target="_blank">GitHub</a>.
                 </p>
             </div>
         </div>
@@ -65,40 +57,38 @@
                 <p>
                     This interactive dashboard monitors the diversity of participants across all published Genome Wide Association Studies (GWAS), the primary technique used for genetic discovery. The objective is to identify statistical associations between a set of genetic variants across different individuals (Single Nucleotide Polymorphisms, or 'SNPs') with specific traits of interest. This monitor represents an extension of our earlier project,
                     <a href="https://www.nature.com/articles/s42003-018-0261-x" target="_blank">'The Scientometrics of Genome Wide Association Studies'</a> published in
-                    <i>Communications Biology</i> in January 2019. As there, we leverage the magnificent dataset provided and curated by the
+                    <i>Communications Biology</i> in January 2019. As there, we leverage the magnificent dataset curated by the
                     <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a> (subject to their licensing information which can be found
-                    <a href="https://www.ebi.ac.uk/about/terms-of-use" target="_blank">here</a>). The dashboard itself is written in
-                    <a href="http://www.google%20.com/" target="_blank">Bokeh 1.2.0 <strong>(broken link)</strong></a>, an interactive visualization library in Python which targets modern web browsers for presentation. The source code is hosted on
-                    <a href="https://github.com/crahal/GWASDiversityMonitor" target="_blank">GitHub</a>, and we are actively encouraging community-based suggestions and contributions. The backend code checks daily for updates to the GWAS Catalog, writing to logs and caching all new files and refreshing the dataset which powers the dashboard as appropriate. The dashboard itself is hosted on
-                    <a href="https://www.heroku.com/" target="_blank">Heroku</a> (a PaaS). The dashboard is under constant development and review, but is currently comprised of five widgets: 'Evaluation Metric' (whether the data is aggregated based on the number of studies or percent of participants),
-                    <a href="https://github.com/crahal/gwasdiversitymonitor/blob/master/data/support/dict_replacer_broad.tsv" target="_blank">'Broader Ancestry' <strong>(broken link)</strong></a> (grouped into one of six major ancestral categories),
-                    <a href="https://www.ebi.ac.uk/gwas/api/search/downloads/trait_mappings" target="_blank">'Parent Term'</a> (grouped into 17 main EFO categories such as 'Digestive System Disease' or 'Cancer'), 'Research Stage' (whether the study concerns initial genetic discovery or replicating those discoveries), 'Year' (related to year of study). Due to the relatively small size of the dataset, not all widgets apply to each figure, and we describe our design choices below:
+                    <a href="https://www.ebi.ac.uk/about/terms-of-use" target="_blank">here</a>). The dashboard itself is a combination of Python (Flask) and JavaScript (D3), designed to be used in modern web browsers for presentation. An earlier prototype appears
+                    <a href="https://github.com/crahal/GWASDiversityMonitor" target="_blank">here</a>, with the full code base available for replication on <a href="https://github.com/oxforddemsci/gwasdiversitymonitor" target="_blank">GitHub</a>. We are actively encouraging community-based suggestions and contributions. The backend code checks daily for updates to the GWAS Catalog, writing to logs and refreshing the dataset which powers the dashboard as appropriate.<br> <br>
 
+                    The dashboard is under constant development and review, but is currently comprised of two global widgets: METRIC (which toggles whether we are evaluating by number of sutdies or by number of participants), and STAGE (which determines whether we are considering the discovery or replication phase of research). Local widgets also toggle the 'EFO Parent Term', the 'Broader' ancestry category, and 'Year' (related to year of study). Due to the relatively small size of the dataset, not all widgets apply to each figure, and we describe our design choices below:
                     <ul>
+                      <li>
+                          <strong>Summary Breakdown: Total GWAS participants diversity.</strong>
+                          This part displays summary statistics without any filtering (over time, ancestry, traits, or otherwise)
                         <li>
-                            <strong>Figure 1: Ancestry over time by Parent Term (Bubble Plot).</strong>
-                            This provides a granular overview of all GWAS in the Catalog. It maps onto EFO Parent terms, and splits on commas. If a GWAS examines multiple Parent terms, both are included (i.e., we split on commas in a string such as 'Body Measurement, Cancer' and include both). Applicable widgets are: 'Year', 'Broader Term', 'Parent Term' and 'Research Stage'.
+                            <strong>Bubble Plot: Ancestry over time by parent term.</strong>
+                            This provides a granular overview of all GWAS in the Catalog, mapping onto EFO Parent terms. In addition to being affected by the STAGE global widget, it also allows a finer, more granular search term based on individual EFO Traits (and combinations of).
+                        </li>
+                        <li>
+                            <strong>Time Series Plot: Participants across all parent terms.</strong>
+                            This figure displays how 'Broader Ancestry' varies over time across the two global widgets. Note: due to the fact that that lesser studied ancestries are rarely used to study specific parent terms, we do not utilize the 'Parent Term' widget here. The tickbox for 'Include not recorded' provides a robustness check with regards to how we are mapping our 'Broader Ancestry' field.
                         </li>
 
                         <li>
-                            <strong>Figure 2: Research Stage across all EFO Parent Categories by Ancestry (Time Series Plot).</strong>
-                            This figure displays changes in how 'Broader Ancestry' has changed over time across the two 'Evaluation Metric' widgets. Note: due to the fact that that lesser studied ancestries are rarely used to study specific parent terms, we do not utilize the 'Parent Term' widget here. Fig 2a represents results when we drop all Catalog rows containing data in part not recorded, and Fig 2b includes them.
+                            <strong>Heatmap: Parent term by 'broader' ancestry.</strong>
+                            This figure displays how many studies are done across both STAGE and METRIC, broken down into each of the individual 'Broader Ancestry' and 'Parent Terms' across each of the years in the dataset.
                         </li>
 
                         <li>
-                            <strong>Figure 3: : Participants by Parent Term and Research Stage (Doughnut Chart).</strong>
-                            This figure displays the percent of which 'Broader Ancestry' is used to study which 'Parent Term' across the two definitions of the 'Evaluation Metric'.
+                            <strong>Choropleth Map.</strong>
+                            Due to the sparsity of countries recruited from across all EFO Parent terms, this figure draws from the two global widgets, adjustable by Year only. Polygon data from <a href="https://gist.github.com/markmarkoh/2969317" target="_blank">here</a>.
                         </li>
 
                         <li>
-                            <strong>Figure 4: Choropleth Map.</strong>
-                            Due to the sparsity of countries recruited from across all EFO Parent terms, this figure draws from two widgets: the 'Evaluation Metric' and the 'Year' slider which determines year of recruitment. This is also partially due to the lack of clarity in the free-text of academic articles which are catalogued by the NHGRI-EBI.
-                        </li>
-
-                        <li>
-                            <strong>Figure 5: Free text Ancestry definition by Parent Term and Research Stage (Horizontal Bar Plot).</strong>
-                            This figure extracts ancestral terms from the free text description of a study provided by the Catalog using a regex function as per our
-                            <a href="https://www.nature.com/articles/s42003-018-0261-x" target="_blank">scientometric review</a>. Applicable widgets are: 'Parent Term', 'Research Stage' and 'Year'.
+                            <strong>Doughnut Chart.</strong>
+                            This figure displays the percent of which 'Broader Ancestry' is used to study which 'Parent Term' across both the global widgets. A 'Show'\'Hide' toggle allows an inset which also shows the breakdown of associations discovered across all EFO Parent terms at the discovery stage alone.
                         </li>
                     </ul>
 
