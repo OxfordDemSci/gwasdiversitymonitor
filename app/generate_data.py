@@ -783,14 +783,14 @@ def make_parent_list(data_path):
                        header=False, index=False)
 
 
-def make_broader_list(data_path):
-    df = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                  'Cat_Anc_wBroader_withParents.tsv'),
-                     sep='\t')
-    uniq_broader = pd.Series(df[df['Broader'].notnull()]['Broader'].unique())
-    uniq_broader.to_csv(os.path.join(data_path, 'summary',
-                                     'uniq_broader.txt'),
-                        header=False, index=False)
+#def make_broader_list(data_path):
+#    df = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+#                                  'Cat_Anc_wBroader_withParents.tsv'),
+#                     sep='\t')
+#    uniq_broader = pd.Series(df[df['Broader'].notnull()]['Broader'].unique())
+#    uniq_broader.to_csv(os.path.join(data_path, 'summary',
+#                                     'uniq_broader.txt'),
+#                        header=False, index=False)
 
 
 if __name__ == "__main__":
@@ -812,7 +812,7 @@ if __name__ == "__main__":
         make_choro_df(data_path)
         make_heatmap_dfs(data_path)
         make_parent_list(data_path)
-        make_broader_list(data_path)
+#        make_broader_list(data_path)
         sumstats = create_summarystats(data_path)
         diversity_logger.info('generate_data.py ran successfully!')
         zip_toplot(os.path.join(data_path, 'toplot'),
