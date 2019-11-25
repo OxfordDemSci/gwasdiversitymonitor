@@ -8,13 +8,16 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
     d3.select('#doughnutGraph svg').remove();
 
-    let svg = d3.select("#doughnutGraph")
+    let mainSvg = d3.select("#doughnutGraph")
         .append("svg")
         .attr("id", "doughnutSVG")
         .attr("class", "term-all")
         .attr("width", width)
-        .attr("height", height)
-        .append("g")
+        .attr("height", height);
+
+    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+
+    let svg = mainSvg.append("g")
         .attr('class', 'svg-container')
         .attr("transform", "translate(" + width / 2  + "," + height / 3 + ")");
 
@@ -33,6 +36,8 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         .append('g')
         .attr('class', 'svg-container-2')
         .attr("transform", "translate(" + width*2  + "," + height / 3 + ")");
+
+    let doughnutSVG = document.querySelector('#doughnutSVG');
 
     if (window.innerWidth > 600 && window.innerWidth <= 1440) {
         associationDoughnut.attr("transform", "translate(" + width*1.6  + "," + height / 3 + ")");
@@ -173,18 +178,20 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             }
 
             if (window.innerWidth > 600 && window.innerWidth <= 1440) {
-                legend.transition(200).style('transform', 'translateX('+(width-100)+'px)');
+                legend.transition(200).attr('transform', 'translateX('+(width-100)+')');
             } else if (window.innerWidth <= 600 && window.innerWidth >= 375) {
-                document.querySelector('#doughnutSVG').setAttribute('height', '620');
-                legend.transition(200).style('transform', 'translate(44px, 20px)');
+                doughnutSVG.setAttribute('height', '620');
+                doughnutSVG.style.maxHeight = '620px';
+                legend.transition(200).attr('transform', 'translate(44, 20)');
                 associationDoughnut.transition(200).style('transform', 'translate(135px, 495px)');
             } else if(window.innerWidth < 375) {
-                document.querySelector('#doughnutSVG').setAttribute('height', '640');
-                legend.transition(200).style('transform', 'translate(44px, 20px)');
+                doughnutSVG.setAttribute('height', '640');
+                doughnutSVG.style.maxHeight = '640px';
+                legend.transition(200).attr('transform', 'translate(44, 20)');
                 associationDoughnut.transition(200).style('transform', 'translate(135px, 515px)');
             } else {
                 if (!isIE()) {
-                    legend.transition(200).style('transform', 'translate('+(width-40)+'px, 0)');
+                    legend.transition(200).attr('transform', 'translate('+(width-40)+', 0)');
                 } else {
                     legend.attr('transform', 'translate(230, 0)');
                 }
@@ -228,14 +235,15 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             }
 
             if (window.innerWidth > 600 && window.innerWidth <= 1440) {
-                legend.transition(200).style('transform', 'translateX(0%)');
+                legend.transition(200).attr('transform', 'translateX(0%)');
             } else if (window.innerWidth <= 600) {
-                document.querySelector('#doughnutSVG').setAttribute('height', '324');
-                legend.transition(200).style('transform', 'translate3d(0, 0, 0)');
+                doughnutSVG.setAttribute('height', '324');
+                doughnutSVG.style.maxHeight = '324px';
+                legend.transition(200).attr('transform', 'translate3d(0, 0, 0)');
                 associationDoughnut.transition(200).style('transform', 'translate(540px, 108px)')
             } else {
                 if (!isIE()) {
-                    legend.transition(200).style('transform', 'translateX(0%)');
+                    legend.transition(200).attr('transform', 'translateX(0%)');
                 } else {
                     legend.attr('transform', 'translate(0, 0)');
                 }
@@ -652,13 +660,13 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
         if (associationSwitch.checked) {
             if (window.innerWidth > 600 && window.innerWidth <= 1440) {
-                legend.style('transform', 'translateX(' + (width - 100) + 'px)');
+                legend.attr('transform', 'translateX(' + (width - 100) + ')');
             } else if (window.innerWidth <= 600){
-                document.querySelector('#doughnutSVG').setAttribute('height', '600');
-                legend.style('transform', 'translate(44px, 20px)');
+                doughnutSVG.setAttribute('height', '600');
+                legend.attr('transform', 'translate(44, 20)');
             } else {
                 if (!isIE()) {
-                    legend.style('transform', 'translateX('+(width-40)+'px)');
+                    legend.attr('transform', 'translateX('+(width-40)+')');
                 } else {
                     legend.attr('transform', 'translate(230, 0)');
                 }

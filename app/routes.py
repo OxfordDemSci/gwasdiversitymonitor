@@ -45,9 +45,9 @@ def index():
 def privacy():
     return render_template('pages/privacy-policy.html', title='Privacy Policy', alwaysShowCookies=1)
 
-@app.route('/faqs')
-def faqs():
-    return render_template('pages/faqs.html', title='FAQs')
+@app.route('/qandas')
+def qandas():
+    return render_template('pages/qandas.html', title='Q&As')
 
 @app.route('/additional-information')
 def additional():

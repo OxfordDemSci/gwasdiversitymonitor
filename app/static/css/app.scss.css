@@ -3495,7 +3495,8 @@ button, .btn {
                   -webkit-box-shadow: none;
                   box-shadow: none; }
       .dashboard .tile .box.world-map {
-        padding: 10px 0 0 0; }
+        padding: 10px 0 0 0;
+        overflow: hidden; }
         .dashboard .tile .box.world-map .world-map-header {
           margin: 0 10px 10px 10px;
           -webkit-box-align: start;
@@ -3583,6 +3584,7 @@ button, .btn {
             align-items: center;
             font-weight: 700; }
         .dashboard .tile .box.heat-map svg {
+          max-height: 387px;
           -webkit-box-ordinal-group: 3;
           -webkit-order: 2;
           -moz-order: 2;
@@ -3676,7 +3678,12 @@ button, .btn {
           -moz-order: 2;
           -ms-flex-order: 2;
           order: 2; }
+
+@media screen and (min-width: 601px) {
+  .dashboard .tile .box.doughnut-graph svg {
+    max-height: 324px; } }
         .dashboard .tile .box.doughnut-graph .doughnut-graph-footer {
+          margin-top: auto;
           display: -webkit-box;
           display: -webkit-flex;
           display: -moz-flex;
@@ -4529,7 +4536,7 @@ select {
     .basic-page .content strong {
       font-weight: bold; }
     .basic-page .content i {
-      font-size: 15px; }
+      font-size: 17px; }
     .basic-page .content p:not(:last-child) {
       margin-bottom: 10px; }
     .basic-page .content a, .basic-page .content a:visited {

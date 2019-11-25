@@ -6,11 +6,14 @@ function drawHeatMap(data, withMetric, withStage) {
         width = 295 - margin.left - margin.right,
         height = 387 - margin.top - margin.bottom;
 
-    let svg = d3.select("#heatMap")
+    let mainSvg = d3.select("#heatMap")
         .append("svg")
         .attr("width", width)
-        .attr("height", height)
-        .append('g')
+        .attr("height", height);
+
+    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+
+    let svg = mainSvg.append('g')
         .attr('class', 'heatmap svg-container');
 
     let nextButtons = document.querySelectorAll('.heat-map-change-year button.next');

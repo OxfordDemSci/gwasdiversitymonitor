@@ -105,12 +105,14 @@ function drawWorldMapChart(data, withMetric) {
         .domain([1, 6, 11, 16, 21, 26, Infinity])
         .range(colorsForStudies.map(function(e) { return e.color }));
 
-    let svg = d3.select("#worldMap")
+    let mainSvg = d3.select("#worldMap")
         .append("svg")
         .attr("width", width)
-        .attr("height", height)
-        .append('g')
-        .attr('class', 'map svg-container');
+        .attr("height", height);
+
+    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+
+    let svg = mainSvg.append('g').attr('class', 'map svg-container');
 
     let projection = d3.geoMercator()
         .scale(width/6.25)

@@ -371,6 +371,7 @@
 
       &.world-map {
         padding: 10px 0 0 0;
+        overflow: hidden;
 
         .world-map-header {
           margin: 0 10px 10px 10px;
@@ -432,6 +433,7 @@
         }
 
         svg {
+          max-height: 387px;
           @include order(2);
         }
 
@@ -501,9 +503,14 @@
 
         svg {
           @include order(2);
+
+          @media screen and (min-width: 601px) {
+            max-height: 324px;
+          }
         }
 
         .doughnut-graph-footer {
+          margin-top: auto;
           @include flexbox;
           @include align-items(center);
           @include justify-content(space-between);

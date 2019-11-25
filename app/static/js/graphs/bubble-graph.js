@@ -21,12 +21,15 @@ function drawBubbleGraph(selector, data, replication) {
 
     sanitiseSVG(selector);
 
-    var svg = d3.select(selector)
+    var mainSvg = d3.select(selector)
         .append("svg")
         .attr("id", "bubbleSVG")
         .attr("class", "term-all")
-        .attr("height", height + margin.top + margin.bottom)
-        .append("g")
+        .attr("height", height + margin.top + margin.bottom);
+
+    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+
+    var svg = mainSvg.append("g")
         .attr("class", "svg-container")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 

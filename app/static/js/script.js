@@ -74,10 +74,11 @@ function downloadImage() {
         var downloadSvg = d3.select("#downloadShell").append(function() {
             return svg[0].cloneNode(true);
         });
+
         downloadSvg
             .attr("version", 1.1)
             .attr("xmlns", "http://www.w3.org/2000/svg")
-            .append("style").text("svg { width: 100%; height: 100%; overflow: hidden; display: -webkit-box; display: -webkit-flex; display: -moz-flex; display: -ms-flexbox; display: flex; -webkit-box-flex: 1; -webkit-flex: 1; -moz-box-flex: 1; -moz-flex: 1; -ms-flex: 1; flex: 1; } svg .grid line { stroke-dasharray: 10; fill: none; stroke: #e9edee; stroke-width: 2px; } svg .line path { stroke-dasharray: 3; fill: none; stroke: #78909c; stroke-width: 2px; } svg .grid path, svg .grid-y path, svg .axis path, svg .axis-y path { stroke: none; } svg .axis-x .tick text, svg .axis-y .tick text { font-size: 13px; fill: #78909c; } svg .axis-x path, svg .axis-x .tick line { fill: none; stroke: #e9edee; stroke-width: 2px; } svg .axis-x .tick text { -moz-transform: translateY(8px); -o-transform: translateY(8px); -ms-transform: translateY(8px); -webkit-transform: translateY(8px); transform: translateY(8px); } svg .axis-x .tick:last-child line { stroke: none; } svg .axis-y .tick text { -moz-transform: translateX(-4px); -o-transform: translateX(-4px); -ms-transform: translateX(-4px); -webkit-transform: translateX(-4px); transform: translateX(-4px); } svg .axis-y .tick line { stroke: none; } svg .axis-y .tick:first-of-type text { display: none; } circle.african, .circle.african { fill: #f59c44; background: #f59c44; } circle.african-american-or-afro-caribbean, .circle.african-american-or-afro-caribbean { fill: #fece59; background: #fece59; } circle.asian, .circle.asian { fill: #489ed8; background: #489ed8; } circle.european, .circle.european { fill: #ed7892; background: #ed7892; } circle.hispanic-or-latin-american, .circle.hispanic-or-latin-american { fill: #9767ab; background: #9767ab; } circle.other-mixed, .circle.other-mixed { fill: #54bdbe; background: #54bdbe; } circle.in-part-not-recorded, .circle.in-part-not-recorded { fill: #78909c; background: #78909c; } .back-rect { fill: #d9dbdf; } svg#bubbleSVG .svg-container circle { opacity: .7; display: none; } svg#bubbleSVG circle.opaque { opacity: 1; } svg#bubbleSVG circle.disabled { fill: rgba(128, 128, 128, .4); pointer-events: none; } svg#bubbleSVG circle.selected { stroke: #78909c; stroke-width: 2; stroke-dasharray: 3; pointer-events: none; } svg#bubbleSVG.term-all circle, svg#bubbleSVG.term-other-measurement circle.other-measurement, svg#bubbleSVG.term-cardiovascular-measurement circle.cardiovascular-measurement, svg#bubbleSVG.term-neurological-disorder circle.neurological-disorder, svg#bubbleSVG.term-digestive-system-disorder circle.digestive-system-disorder, svg#bubbleSVG.term-cancer circle.cancer, svg#bubbleSVG.term-cardiovascular-disease circle.cardiovascular-disease, svg#bubbleSVG.term-metabolic-disorder circle.metabolic-disorder, svg#bubbleSVG.term-other-disease circle.other-disease, svg#bubbleSVG.term-biological-process circle.biological-process, svg#bubbleSVG.term-immune-system-disorder circle.immune-system-disorder, svg#bubbleSVG.term-response-to-drug circle.response-to-drug, svg#bubbleSVG.term-other-trait circle.other-trait, svg#bubbleSVG.term-body-measurement circle.body-measurement, svg#bubbleSVG.term-hematological-measurement circle.hematological-measurement, svg#bubbleSVG.term-lipid-or-lipoprotein-measurement circle.lipid-or-lipoprotein-measurement, svg#bubbleSVG.term-nflammatory-measurement circle.inflammatory-measurement, svg#bubbleSVG.term-liver-enzyme-measurement circle.liver-enzyme-measurement { display: block; } svg#bubbleSVG.ancestry-african .svg-container circle.african, svg#bubbleSVG.ancestry-african-american-or-afro-caribbean .svg-container circle.african-american-or-afro-caribbean, svg#bubbleSVG.ancestry-asian .svg-container circle.asian, svg#bubbleSVG.ancestry-european .svg-container circle.european, svg#bubbleSVG.ancestry-hispanic-or-latin-american .svg-container circle.hispanic-or-latin-american, svg#bubbleSVG.ancestry-other-mixed .svg-container circle.other-mixed { display: none; }");
+            .append("style").text(".heat-map-y-axis-legend-item { margin: 0;} svg { width: 100%; height: 100%; overflow: hidden; display: -webkit-box; display: -webkit-flex; display: -moz-flex; display: -ms-flexbox; display: flex; -webkit-box-flex: 1; -webkit-flex: 1; -moz-box-flex: 1; -moz-flex: 1; -ms-flex: 1; flex: 1; } svg .grid line { stroke-dasharray: 10; fill: none; stroke: #e9edee; stroke-width: 2px; } svg .line path { stroke-dasharray: 3; fill: none; stroke: #78909c; stroke-width: 2px; } svg .grid path, svg .grid-y path, svg .axis path, svg .axis-y path { stroke: none; } svg .axis-x .tick text, svg .axis-y .tick text { font-size: 13px; fill: #78909c; } svg .axis-x path, svg .axis-x .tick line { fill: none; stroke: #e9edee; stroke-width: 2px; } svg .axis-x .tick text { -moz-transform: translateY(8px); -o-transform: translateY(8px); -ms-transform: translateY(8px); -webkit-transform: translateY(8px); transform: translateY(8px); } svg .axis-x .tick:last-child line { stroke: none; } svg .axis-y .tick text { -moz-transform: translateX(-4px); -o-transform: translateX(-4px); -ms-transform: translateX(-4px); -webkit-transform: translateX(-4px); transform: translateX(-4px); } svg .axis-y .tick line { stroke: none; } svg .axis-y .tick:first-of-type text { display: none; } circle.african, .circle.african { fill: #f59c44; background: #f59c44; } circle.african-american-or-afro-caribbean, .circle.african-american-or-afro-caribbean { fill: #fece59; background: #fece59; } circle.asian, .circle.asian { fill: #489ed8; background: #489ed8; } circle.european, .circle.european { fill: #ed7892; background: #ed7892; } circle.hispanic-or-latin-american, .circle.hispanic-or-latin-american { fill: #9767ab; background: #9767ab; } circle.other-mixed, .circle.other-mixed { fill: #54bdbe; background: #54bdbe; } circle.in-part-not-recorded, .circle.in-part-not-recorded { fill: #78909c; background: #78909c; } .back-rect { fill: #d9dbdf; } svg#bubbleSVG .svg-container circle { opacity: .7; display: none; } svg#bubbleSVG circle.opaque { opacity: 1; } svg#bubbleSVG circle.disabled { fill: rgba(128, 128, 128, .4); pointer-events: none; } svg#bubbleSVG circle.selected { stroke: #78909c; stroke-width: 2; stroke-dasharray: 3; pointer-events: none; } svg#bubbleSVG.term-all circle, svg#bubbleSVG.term-other-measurement circle.other-measurement, svg#bubbleSVG.term-cardiovascular-measurement circle.cardiovascular-measurement, svg#bubbleSVG.term-neurological-disorder circle.neurological-disorder, svg#bubbleSVG.term-digestive-system-disorder circle.digestive-system-disorder, svg#bubbleSVG.term-cancer circle.cancer, svg#bubbleSVG.term-cardiovascular-disease circle.cardiovascular-disease, svg#bubbleSVG.term-metabolic-disorder circle.metabolic-disorder, svg#bubbleSVG.term-other-disease circle.other-disease, svg#bubbleSVG.term-biological-process circle.biological-process, svg#bubbleSVG.term-immune-system-disorder circle.immune-system-disorder, svg#bubbleSVG.term-response-to-drug circle.response-to-drug, svg#bubbleSVG.term-other-trait circle.other-trait, svg#bubbleSVG.term-body-measurement circle.body-measurement, svg#bubbleSVG.term-hematological-measurement circle.hematological-measurement, svg#bubbleSVG.term-lipid-or-lipoprotein-measurement circle.lipid-or-lipoprotein-measurement, svg#bubbleSVG.term-nflammatory-measurement circle.inflammatory-measurement, svg#bubbleSVG.term-liver-enzyme-measurement circle.liver-enzyme-measurement { display: block; } svg#bubbleSVG.ancestry-african .svg-container circle.african, svg#bubbleSVG.ancestry-african-american-or-afro-caribbean .svg-container circle.african-american-or-afro-caribbean, svg#bubbleSVG.ancestry-asian .svg-container circle.asian, svg#bubbleSVG.ancestry-european .svg-container circle.european, svg#bubbleSVG.ancestry-hispanic-or-latin-american .svg-container circle.hispanic-or-latin-american, svg#bubbleSVG.ancestry-other-mixed .svg-container circle.other-mixed { display: none; }");
 
         downloadSvg.append("g")
             .attr("class", "title")
@@ -108,7 +109,6 @@ function downloadImage() {
             parentTerm = 'All parent terms'
         }
 
-        // if (graph.find("circle.european").is(':visible')) {
         if (graph.find("circle.european").length > 0) {
             var european = legend.append("g")
                 .attr("class", "european")
@@ -226,25 +226,35 @@ function downloadImage() {
                 .text(graph.find("[class*='-header'] small, .header small").text() + ' - ' + parentTerm);
         }
 
+        if(graph.attr('id') === 'bubbleGraph') {
+            downloadSvg.attr('height', '550').attr('width', '950');
+        }
+
         if(graph.attr('id') === 'timeSeries') {
+            downloadSvg.attr('height', '550').attr('width', '700');
+            downloadSvg.selectAll('.line path').attr('style', 'stroke-dasharray: 3; fill: none; stroke: #78909c; stroke-width: 2px;');
             heightPos = height+70;
         }
 
         if(graph.attr('id') === 'heatMap') {
+            downloadSvg.attr('height', '600').attr('width', '550');
             downloadSvg.selectAll('.heat-map-x-axis-legend-item').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.8em; fill: #4a4a4a;");
             downloadSvg.selectAll('.log-colour-scale text').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.7em; fill: #4a4a4a;");
-            downloadSvg.selectAll('.heat-map-y-axis-legend-item').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.8em; color: #4a4a4a; margin: 0;");
+            downloadSvg.selectAll('.heat-map-y-axis-legend-item').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.8em; color: #4a4a4a;");
+            heightPos = height+150;
         }
 
         if(graph.attr('id') === 'worldMap') {
-            downloadSvg.select('rect').attr('style', 'height: 538px; width: 900px;').attr('transform', 'translate(-50,0)');
-            downloadSvg.select('.countries').attr('transform', 'translate(0,124)');
+            downloadSvg.attr('height', '850').attr('width', '1000');
+            downloadSvg.select('.back-rect').attr('height', '650').attr('width', '1000').attr('transform', 'translate(-50,0)');
+            downloadSvg.select('.countries').attr('transform', 'translate(0,150)');
             downloadSvg.select('.legend').attr('transform', 'translate(0, 155)');
             downloadSvg.selectAll('.wm-legend-text').attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
             heightPos = height+300;
         }
 
         if(graph.attr('id') === 'doughnutGraph') {
+            downloadSvg.attr('height', '550').attr('width', '400');
             downloadSvg.selectAll('.doughnut-legend-text').attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
             downloadSvg.select('.doughnut-main-title').attr("style", "font: 16px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
             downloadSvg.select('.doughnut-association-title').attr("style", "font: 16px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
@@ -252,10 +262,11 @@ function downloadImage() {
             downloadSvg.select('.svg-container-2').attr('transform', 'translate(520,200)');
             downloadSvg.select('.main-title').text(graph.find('.doughnut-graph-header > h3').text());
             downloadSvg.select('.sub-title').text(graph.find('.doughnut-graph-header > small').text() + ' - ' + parentTerm + ' - ' + year);
-            downloadSvg.select('.doughnut-legend').attr('style', 'transform: translate(0,100px);');
+            downloadSvg.select('.doughnut-legend').attr('transform', 'translate(0,100)');
             heightPos = height+120;
             if (graph.find('.doughnut-graph-filter-association-title').hasClass('active')) {
-                downloadSvg.select('.doughnut-legend').attr('style', 'transform: translate(200px,100px);');
+                downloadSvg.attr('height', '550').attr('width', '650');
+                downloadSvg.select('.doughnut-legend').attr('transform', 'translate(200,100)');
                 downloadSvg.append("g")
                     .attr("class", "second-title")
                     .attr("transform", "translate(400,40)")
