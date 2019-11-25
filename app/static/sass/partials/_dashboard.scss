@@ -1,30 +1,6 @@
 .dashboard {
   margin-top: 20px;
 
-  .european {
-    @include order(1);
-  }
-
-  .african {
-    @include order(2);
-  }
-
-  .african-american-or-afro-caribbean {
-    @include order(3);
-  }
-
-  .other-mixed {
-    @include order(4);
-  }
-
-  .asian {
-    @include order(5);
-  }
-
-  .hispanic-or-latin-american {
-    @include order(6);
-  }
-
   .tile {
     margin-bottom: 20px;
     transition: all .3s ease-in-out;
