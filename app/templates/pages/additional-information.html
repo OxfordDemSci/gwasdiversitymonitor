@@ -45,52 +45,37 @@
                 <h2>
                     Funding, Contact and Acknowledgements
                 </h2>
-                <p>
-                    This work is currently maintained and hosted by the <a href="http://www.demographicscience.ox.ac.uk/" target="_blank">Leverhulme Centre for Demographic Science</a>. The earlier prototypes were generously supported by the European Research Council (grants 615603 and 835079: <a href="https://www.melindacmills.com/" target="_blank">Melinda C. Mills</a>) and The British Academy (a Postdoctoral Fellowship: <a href="https://crahal.github.io/" target="_blank">Charles Rahal</a>). A reworking of the dashboard was undertaken by <a href="https://crahal.github.io/" target="_blank">Global Initiative</a>, and there special thanks go to Jamie, Nynke, Veatriki, Alex, Lea and Quentin. In addition, we are grateful to comments on the source code and infrastructure from Ian Knowles, Yi Liu, Molly Przeworski, Ben Domingue, Sam Trejo and Oxford's Sociogenome group more generally. We look forward to responsively updating the GWAS Diversity Monitor with all of your suggestions, and in that vein would encourage any comments via email, <a href="https://github.com/OxfordDemSci/gwasdiversitymonitor" target="_blank">Twitter</a> or <a href="https://github.com/OxfordDemSci/gwasdiversitymonitor" target="_blank">GitHub</a>.
+                <p>This work is currently maintained and hosted by the <a href="https://demographicscience.ox.ac.uk/" target="_blank">Leverhulme Centre for Demographic Science</a>. The earlier prototypes were generously supported by the European Research Council (grants 615603 and 835079: <a href="https://www.melindacmills.com/" target="_blank">Melinda C. Mills</a>) and The British Academy (a Postdoctoral Fellowship: <a href="https://crahal.github.io/" target="_blank">Charles Rahal</a>). We redesigned the dashboard in consulation with <a href="https://www.global-initiative.com/" target="_blank">Global Initiative</a>, with special thanks there to Jamie, Nynke, Veatriki, Alex, Lea and Quentin. In addition, we are grateful to comments on the source code and dashboard more generally from Ian Knowles, Yi Liu, Molly Przeworski, Ben Domingue, Sam Trejo and Oxford's <a href="https://www.sociogenome.org/" target="_blank">SOCIOGENOME</a> group. We look forward to updating the GWAS Diversity Monitor with your suggestions, and encourage any comments via email, <a href="https://twitter.com/oxforddemsci" target="_blank">Twitter</a> (@OxfordDemSci or @melindacmills) or <a href="https://github.com/oxforddemisci/gwasdiversitymonitor" target="_blank">GitHub</a>.
+
                 </p>
             </div>
         </div>
         <div class="col-xs-12 col-md-6">
             <div class="content">
                 <h2>About</h2>
-                <p>
-                    This interactive dashboard monitors the diversity of participants across all published Genome Wide Association Studies (GWAS), the primary technique used for genetic discovery. The objective is to identify statistical associations between a set of genetic variants across different individuals (Single Nucleotide Polymorphisms, or 'SNPs') with specific traits of interest. This monitor represents an extension of our earlier project,
-                    <a href="https://www.nature.com/articles/s42003-018-0261-x" target="_blank">'The Scientometrics of Genome Wide Association Studies'</a> published in
-                    <i>Communications Biology</i> in January 2019. As there, we leverage the magnificent dataset curated by the
-                    <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a> (subject to their licensing information which can be found
-                    <a href="https://www.ebi.ac.uk/about/terms-of-use" target="_blank">here</a>). The dashboard itself is a combination of Python (Flask) and JavaScript (D3), designed to be used in modern web browsers for presentation. An earlier prototype appears
-                    <a href="https://github.com/crahal/GWASDiversityMonitor" target="_blank">here</a>, with the full code base available for replication on <a href="https://github.com/oxforddemsci/gwasdiversitymonitor" target="_blank">GitHub</a>. We are actively encouraging community-based suggestions and contributions. The backend code checks daily for updates to the GWAS Catalog, writing to logs and refreshing the dataset which powers the dashboard as appropriate.<br> <br>
+                <p> This interactive dashboard monitors the diversity of participants across all published Genome Wide Association Studies (GWAS), the primary technique used for genetic discovery. The objective of a GWAS is to identify statistical associations between a set of genetic variants across different individuals (Single Nucleotide Polymorphisms, or 'SNPs') with specific traits of interest. This monitor is an extension of our earlier project, <a href="https://www.nature.com/articles/s42003-018-0261-x" target="_blank">'The Scientometrics of Genome Wide Association Studies'</a> published in <i>Communications Biology</i> in January 2019. As there, we leverage the magnificent dataset curated by the <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a> (subject to their licensing information which can be found here). The dashboard itself is a combination of Python (Flask) and JavaScript (D3), designed to be used in modern web browsers for presentation. An earlier prototype appears <a href="https://github.com/crahal/GWASDiversityMonitor" target="_blank">here</a>, with the full code base available for replication on <a href="https://github.com/oxforddemsci/gwasdiversitymonitor" target="_blank">GitHub</a>. We are actively encouraging community-based suggestions and contributions. The backend code checks daily for updates to the  <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a>, writing to logs and refreshing the dataset which powers the dashboard as appropriate.
 
-                    The dashboard is under constant development and review, but is currently comprised of two global widgets: METRIC (which toggles whether we are evaluating by number of sutdies or by number of participants), and STAGE (which determines whether we are considering the discovery or replication phase of research). Local widgets also toggle the 'EFO Parent Term', the 'Broader' ancestry category, and 'Year' (related to year of study). Due to the relatively small size of the dataset, not all widgets apply to each figure, and we describe our design choices below:
-                    <ul>
-                      <li>
-                          <strong>Summary Breakdown: Total GWAS participants diversity.</strong>
-                          This part displays summary statistics without any filtering (over time, ancestry, traits, or otherwise)
-                        <li>
-                            <strong>Bubble Plot: Ancestry over time by parent term.</strong>
-                            This provides a granular overview of all GWAS in the Catalog, mapping onto EFO Parent terms. In addition to being affected by the STAGE global widget, it also allows a finer, more granular search term based on individual EFO Traits (and combinations of).
-                        </li>
-                        <li>
-                            <strong>Time Series Plot: Participants across all parent terms.</strong>
-                            This figure displays how 'Broader Ancestry' varies over time across the two global widgets. Note: due to the fact that that lesser studied ancestries are rarely used to study specific parent terms, we do not utilize the 'Parent Term' widget here. The tickbox for 'Include not recorded' provides a robustness check with regards to how we are mapping our 'Broader Ancestry' field.
-                        </li>
-
-                        <li>
-                            <strong>Heatmap: Parent term by 'broader' ancestry.</strong>
-                            This figure displays how many studies are done across both STAGE and METRIC, broken down into each of the individual 'Broader Ancestry' and 'Parent Terms' across each of the years in the dataset.
-                        </li>
-
-                        <li>
-                            <strong>Choropleth Map.</strong>
-                            Due to the sparsity of countries recruited from across all EFO Parent terms, this figure draws from the two global widgets, adjustable by Year only. Polygon data from <a href="https://gist.github.com/markmarkoh/2969317" target="_blank">here</a>.
-                        </li>
-
-                        <li>
-                            <strong>Doughnut Chart.</strong>
-                            This figure displays the percent of which 'Broader Ancestry' is used to study which 'Parent Term' across both the global widgets. A 'Show'\'Hide' toggle allows an inset which also shows the breakdown of associations discovered across all EFO Parent terms at the discovery stage alone.
-                        </li>
-                    </ul>
-
+                The dashboard is under perpetual development and review, but is currently comprised of two global widgets: METRIC (which toggles whether we are evaluating by number of studies or by number of participants), and STAGE (which determines whether we are considering the discovery or replication phase of research). Local widgets also toggle the 'EFO Parent Term', the 'Broader' ancestry category, and 'Year' (related to year of study). Due to the relatively small size of the dataset, not all widgets apply to each figure, and we describe our design choices below:
+                  <ul>
+                    <li>
+                      <strong>Summary Breakdown: Total GWAS participants diversity.</strong> Shown in the upper left panel, this displays summary statistics without any filtering (over time, ancestry, traits, or otherwise).
+                    </li>
+                    <li>
+                      <strong>Bubble Plot: Ancestry over time by parent term.</strong> This graphic in the upper middle panel provides a granular overview of all GWAS in the Catalog, mapping onto EFO Parent terms. In addition to being affected by the STAGE global widget, it also allows a finer, more granular search term based on individual EFO Traits (and combinations thereof). Clicking on the individual bubbles provides detailed study information (including Unique Identifiers provided by the and links out to the relevant PubMed page.
+                    </li>
+                    <li>
+                      <strong>Time Series Plot: Participants across all parent terms.</strong> This figure in the upper right panel displays how 'Broader Ancestry' varies over time across the two global widgets. Note that we do not divide by the ‘Parent Term’ widget here due to the fact that that least studied ancestry categories are relatively absent by this level of disaggregation. The tickbox for 'Include not recorded' provides a robustness check with respect to how we are mapping our 'Broader Ancestry' field.
+                    </li>
+                    <li>
+                      <strong>Heatmap: Parent term by 'broader' ancestry.</strong> This figure in the bottom left panel displays maps studies across both STAGE and METRIC, broken down into each of the individual 'Broader Ancestry' and 'Parent Terms' across each of the years in the dataset. Hovering over the figure reveals numbers by each category.
+                    </li>
+                    <li>
+                    <strong>Choropleth Map.</strong>Due to the sparsity of countries recruited from across all EFO Parent terms, this figure draws from the two global widgets, adjustable by Year only. Polygon data are available from <a href="https://gist.github.com/markmarkoh/2969317" target="_blank">here</a>. Hovering over the figure provides the name of the country and number of participants.
+                    </li>
+                    <li>
+                    <strong>Doughnut Chart.</strong> This figure displays the percent of 'Broader Ancestry' by 'Parent Term' across both the global widgets. A 'Show'/'Hide' toggle reveals an inset graph of the breakdown of associations discovered across all EFO Parent terms at the discovery stage alone.
+                    </li>
+                  </ul>
                 </p>
             </div>
         </div>
