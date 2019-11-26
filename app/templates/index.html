@@ -58,7 +58,7 @@
             drawTimeSeries({{ tsPlot|tojson }}, '#timeSeries');
             drawWorldMapChart({{ chloroMap|tojson }});
             drawBubbleGraph("#bubbleGraph", {{ bubbleGraph|tojson }});
-            drawHeatMap({{ heatMap|tojson }}, false, false);
+            drawHeatMap({{ heatMap|tojson }}, false, false, {{ ancestriesOrdered|tojson }});
             drawDoughnutGraph("#doughnutGraph", {{ doughnutGraph|tojson }}, false, false);
             downloadImage();
             setDescription();
@@ -78,7 +78,7 @@
             // Redraw with Studies
             drawWorldMapChart({{ chloroMap|tojson }}, switchMetric.checked);
             drawTimeSeries({{ tsPlot|tojson }}, '#timeSeries', switchMetric.checked, switchStage.checked);
-            drawHeatMap({{ heatMap|tojson }}, switchMetric.checked, switchStage.checked);
+            drawHeatMap({{ heatMap|tojson }}, switchMetric.checked, switchStage.checked, {{ ancestriesOrdered|tojson }});
             drawDoughnutGraph("#doughnutGraph", {{ doughnutGraph|tojson }}, switchMetric.checked, switchStage.checked);
 
             // Change titles

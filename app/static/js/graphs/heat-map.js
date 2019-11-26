@@ -1,4 +1,4 @@
-function drawHeatMap(data, withMetric, withStage) {
+function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
 
     window.withMetric = withMetric;
 
@@ -264,14 +264,16 @@ function drawHeatMap(data, withMetric, withStage) {
 
         drawLogScaleColour(range, logColour_scale, maxValue);
 
-        let xLegendArray = val.map(function(el) { return el.ancestry });
-        xLegendArray = uniq(xLegendArray);
+        let xLegendArray = [];
+        for (let i in ancestriesOrdered) {
+            xLegendArray.push(ancestriesOrdered[i]);
+        }
 
         drawGraph(val, xLegendArray[0], 'european-container', 'european-rect', 0, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[1], 'his-lat-ame-container', 'his-lat-ame-rect', 27, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[2], 'afr-ame-carr-container', 'afr-ame-carr-rect', 54, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[3], 'asian-container', 'asian-rect', 81, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[4], 'african-container', 'african-rect', 108, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[3], 'asian-container', 'asian-rect', 27, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[4], 'african-container', 'african-rect', 54, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[2], 'afr-ame-carr-container', 'afr-ame-carr-rect', 81, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[1], 'his-lat-ame-container', 'his-lat-ame-rect', 108, logColour_scale, logScale);
         drawGraph(val, xLegendArray[5], 'other-mixed-container', 'other-mixed-rect', 135, logColour_scale, logScale);
 
         // X and Y axis legends
@@ -299,15 +301,15 @@ function drawHeatMap(data, withMetric, withStage) {
                 return 'translate('+(i*28+15)+', '+(-80+this.getBBox().width+5)+') rotate(-90 0 '+height+')'
             });
 
-        axisLegendsContainer.select('.heat-map-x-axis-legend-item-1')
-            .text(xLegendArray[1].match(/.{1,17}(\s|$)/g)[0])
+        axisLegendsContainer.select('.heat-map-x-axis-legend-item-4')
+            .text(xLegendArray[4].match(/.{1,17}(\s|$)/g)[0])
             .attr('x', 56).attr('dy', -4)
-            .append('tspan').text(xLegendArray[1].match(/.{1,17}(\s|$)/g)[1]).attr('x', 89).attr('dy', 10);
+            .append('tspan').text(xLegendArray[4].match(/.{1,17}(\s|$)/g)[1]).attr('x', 89).attr('dy', 10);
 
-        axisLegendsContainer.select('.heat-map-x-axis-legend-item-2')
-            .text(xLegendArray[2].match(/.{1,17}(\s|$)/g)[0])
+        axisLegendsContainer.select('.heat-map-x-axis-legend-item-3')
+            .text(xLegendArray[3].match(/.{1,17}(\s|$)/g)[0])
             .attr('x', 94).attr('dy', -4)
-            .append('tspan').text(xLegendArray[2].match(/.{1,17}(\s|$)/g)[1]).attr('x', 91).attr('dy', 10);
+            .append('tspan').text(xLegendArray[3].match(/.{1,17}(\s|$)/g)[1]).attr('x', 91).attr('dy', 10);
 
         let yLegendArray = val.map(function(el) { return el.term });
         yLegendArray = uniq(yLegendArray);
