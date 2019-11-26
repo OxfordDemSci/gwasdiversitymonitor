@@ -26,7 +26,7 @@ function drawTimeSeries(json, id, studies, replication) {
         }
     }
 
-    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+    mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '700');
 
     // Graph
     var svg = mainSvg.append('g')

@@ -11,7 +11,7 @@ function drawHeatMap(data, withMetric, withStage) {
         .attr("width", width)
         .attr("height", height);
 
-    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+    mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '600').attr('width', '550');
 
     let svg = mainSvg.append('g')
         .attr('class', 'heatmap svg-container');

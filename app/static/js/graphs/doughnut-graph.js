@@ -15,7 +15,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         .attr("width", width)
         .attr("height", height);
 
-    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+    mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '650');
 
     let svg = mainSvg.append("g")
         .attr('class', 'svg-container')
@@ -601,6 +601,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             .enter()
             .append('text')
             .attr('class', 'doughnut-legend-text')
+            .attr('data-title', function(d) { return d.value.ancestry.split(' ').join('-').replace('/', '-').toLowerCase() })
             .attr('x', function(d, i) {
                 if (i < 3) {
                     return 44;

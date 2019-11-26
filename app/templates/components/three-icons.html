@@ -2,6 +2,8 @@
     <a href="{{ url_for('getCSV', filename=filename) }}">
         <button class="three-icons icon"><i class="icon-download-data"></i></button>
     </a>
-    <button class="three-icons icon"><i class="icon-download-image"></i></button>
+    {% if browser != 'msie' %}
+        <button class="three-icons icon"><i class="icon-download-image"></i></button>
+    {% endif %}
 <!--    <button class="three-icons icon"><i class="icon-full-screen"></i></button>-->
 </div>

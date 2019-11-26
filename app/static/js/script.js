@@ -88,7 +88,7 @@ function downloadImage() {
             .attr("x", 0)
             .attr("y", 0)
             .attr("dy", "1em")
-            .attr("style", "font: bold 16px PT Sans Narrow, sans-serif; fill: #212c8f;")
+            .attr("style", "font-size: 16px; font-weight: bold; fill: #212c8f;")
             .text(graph.find("[class*='-header'] h3, .header h3").text());
 
         downloadSvg.select(".title")
@@ -97,7 +97,7 @@ function downloadImage() {
             .attr("x", 0)
             .attr("y", 0)
             .attr("dy", "2.5em")
-            .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+            .attr("style", "font-size: 13px; fill: #4a4a4a;")
             .text(graph.find("[class*='-header'] small, .header small").text());
 
         var legend = downloadSvg.append("g").attr("class", "legend").attr("transform", "translate(" + (width+25) + ", 100)");
@@ -118,7 +118,7 @@ function downloadImage() {
                 .attr("r", 5);
             european.append("text")
                 .text("European")
-                .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                .attr("style", "font-size: 13px; fill: #4a4a4a;")
                 .attr("x", 10)
                 .attr("y", 5);
             offset += 20;
@@ -133,7 +133,7 @@ function downloadImage() {
                 .attr("r", 5);
             african.append("text")
                 .text("African")
-                .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                .attr("style", "font-size: 13px; fill: #4a4a4a;")
                 .attr("x", 10)
                 .attr("y", 5);
             offset += 20;
@@ -148,7 +148,7 @@ function downloadImage() {
                 .attr("r", 5);
             africanAmCaribbean.append("text")
                 .text("African American or Caribbean")
-                .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                .attr("style", "font-size: 13px; fill: #4a4a4a;")
                 .attr("x", 10)
                 .attr("y", 5);
             offset += 20;
@@ -163,7 +163,7 @@ function downloadImage() {
                 .attr("r", 5);
             otherMixed.append("text")
                 .text("Other/Mixed")
-                .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                .attr("style", "font-size: 13px; fill: #4a4a4a;")
                 .attr("x", 10)
                 .attr("y", 5);
             offset += 20;
@@ -178,7 +178,7 @@ function downloadImage() {
                 .attr("r", 5);
             asian.append("text")
                 .text("Asian")
-                .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                .attr("style", "font-size: 13px; fill: #4a4a4a;")
                 .attr("x", 10)
                 .attr("y", 5);
             offset += 20;
@@ -193,7 +193,7 @@ function downloadImage() {
                 .attr("r", 5);
             hispanicLatinAmerican.append("text")
                 .text("Hispanic or Latin American")
-                .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                .attr("style", "font-size: 13px; fill: #4a4a4a;")
                 .attr("x", 10)
                 .attr("y", 5);
             offset += 20;
@@ -208,7 +208,7 @@ function downloadImage() {
                 .attr("r", 5);
             inPart.append("text")
                 .text("In Part Not Recorded")
-                .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                .attr("style", "font-size: 13px; fill: #4a4a4a;")
                 .attr("x", 10)
                 .attr("y", 5);
             offset += 20;
@@ -238,26 +238,60 @@ function downloadImage() {
 
         if(graph.attr('id') === 'heatMap') {
             downloadSvg.attr('height', '600').attr('width', '550');
-            downloadSvg.selectAll('.heat-map-x-axis-legend-item').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.8em; fill: #4a4a4a;");
-            downloadSvg.selectAll('.log-colour-scale text').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.7em; fill: #4a4a4a;");
-            downloadSvg.selectAll('.heat-map-y-axis-legend-item').attr("style", "font-family: PT Sans Narrow, sans-serif; font-size: 0.8em; color: #4a4a4a;");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item').attr("style", "font-size: 13px; fill: #4a4a4a;");
+            downloadSvg.selectAll('.log-colour-scale text').attr("style", "font-size: 12px; fill: #4a4a4a;");
+            downloadSvg.selectAll('.heat-map-y-axis-legend-item').attr("style", "font-size: 13px; color: #4a4a4a;");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-0').attr("x", "5");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-1').attr("x", "41");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-1 tspan').attr("x", "80");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-2').attr("x", "75");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-2 tspan').attr("x", "73");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-3').attr("x", "6");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-4').attr("x", "4");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-5').attr("x", "2");
             heightPos = height+150;
+
+            // Redraw y-axis
+            var yAxisLegend = svg.find('.heat-map-y-axis-legend-item');
+            var yAxisArray = [];
+            offset = 18;
+            for(i = 0; i < yAxisLegend.length; i++) {
+                var yAxisText = $(yAxisLegend[i]).text();
+                yAxisArray.push(yAxisText);
+            }
+            yAxisArray.reverse();
+            downloadSvg.selectAll('foreignObject').remove();
+            jQuery.each(yAxisArray, function(key, value) {
+                downloadSvg.select('.axis-legend-container')
+                    .append('text')
+                    .text(value)
+                    .attr('class', 'heat-map-y-axis-legend-item')
+                    .attr("style", "font-size: 13px; fill: #4a4a4a;")
+                    .attr('x', 168)
+                    .attr('y', offset);
+                offset += 17;
+            });
         }
 
         if(graph.attr('id') === 'worldMap') {
+            var svgContainer = $('#worldMap .svg-container');
             downloadSvg.attr('height', '850').attr('width', '1000');
-            downloadSvg.select('.back-rect').attr('height', '650').attr('width', '1000').attr('transform', 'translate(-50,0)');
+            downloadSvg.select('.back-rect').attr('height', '530').attr('width', '800').attr('transform', 'translate(-50,0)');
             downloadSvg.select('.countries').attr('transform', 'translate(0,150)');
             downloadSvg.select('.legend').attr('transform', 'translate(0, 155)');
-            downloadSvg.selectAll('.wm-legend-text').attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
+            downloadSvg.selectAll('.wm-legend-text').attr("style", "font-size: 13px; fill: #4a4a4a;");
             heightPos = height+300;
         }
 
         if(graph.attr('id') === 'doughnutGraph') {
             downloadSvg.attr('height', '550').attr('width', '400');
-            downloadSvg.selectAll('.doughnut-legend-text').attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
-            downloadSvg.select('.doughnut-main-title').attr("style", "font: 16px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
-            downloadSvg.select('.doughnut-association-title').attr("style", "font: 16px PT Sans Narrow, sans-serif; fill: #4a4a4a;");
+            downloadSvg.selectAll('.doughnut-legend-rect:nth-child(n+4)').attr("x", "180");
+            downloadSvg.selectAll('.doughnut-legend-text[data-title="asian"], .doughnut-legend-text[data-title="african"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="asian"] .tspan-percentage, .doughnut-legend-text[data-title="african"] .tspan-percentage, .doughnut-legend-text[data-title="other-mixed"] .tspan-percentage').attr("x", "210");
+            downloadSvg.selectAll('.doughnut-legend-text').attr("style", "font-size: 13px; fill: #4a4a4a;");
+            downloadSvg.select('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "100");
+            downloadSvg.select('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "130");
+            downloadSvg.select('.doughnut-main-title').attr("style", "font-size: 16px; fill: #4a4a4a;");
+            downloadSvg.select('.doughnut-association-title').attr("style", "font-size: 16px; fill: #4a4a4a;");
             downloadSvg.select('.svg-container').attr('transform', 'translate(130,200)');
             downloadSvg.select('.svg-container-2').attr('transform', 'translate(520,200)');
             downloadSvg.select('.main-title').text(graph.find('.doughnut-graph-header > h3').text());
@@ -267,6 +301,10 @@ function downloadImage() {
             if (graph.find('.doughnut-graph-filter-association-title').hasClass('active')) {
                 downloadSvg.attr('height', '550').attr('width', '650');
                 downloadSvg.select('.doughnut-legend').attr('transform', 'translate(200,100)');
+                downloadSvg.select('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "50");
+                downloadSvg.select('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "80");
+                downloadSvg.selectAll('.doughnut-legend-rect:nth-child(n+4)').attr("x", "210");
+                downloadSvg.selectAll('.doughnut-legend-text[data-title="asian"], .doughnut-legend-text[data-title="african"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="asian"] .tspan-percentage, .doughnut-legend-text[data-title="african"] .tspan-percentage, .doughnut-legend-text[data-title="other-mixed"] .tspan-percentage').attr("x", "245");
                 downloadSvg.append("g")
                     .attr("class", "second-title")
                     .attr("transform", "translate(400,40)")
@@ -274,14 +312,14 @@ function downloadImage() {
                     .attr("x", 0)
                     .attr("y", 0)
                     .attr("dy", "1em")
-                    .attr("style", "font: bold 16px PT Sans Narrow, sans-serif; fill: #212c8f;")
+                    .attr("style", "font-size: 16px; font-weight: bold; fill: #212c8f;")
                     .text(graph.find(".doughnut-graph-filter-association-title h3").text());
                 downloadSvg.select(".second-title")
                     .append("text")
                     .attr("x", 0)
                     .attr("y", 0)
                     .attr("dy", "2.5em")
-                    .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+                    .attr("style", "font-size: 13px; fill: #4a4a4a;")
                     .text(graph.find(".doughnut-graph-filter-association-title small").text() + ' - ' + parentTerm + ' - ' + year);
             } else {
                 downloadSvg.select('.legend').attr('style', 'transform: translate(0,100px);');
@@ -293,11 +331,11 @@ function downloadImage() {
         var popup = $('#popup-footer p');
         downloadSvg.append('text')
             .text($(popup[0]).text())
-            .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+            .attr("style", "font-size: 13px; fill: #4a4a4a;")
             .attr('transform', 'translate( 10,' + heightPos + ')');
         downloadSvg.append('text')
             .text($(popup[1]).text())
-            .attr("style", "font: 13px PT Sans Narrow, sans-serif; fill: #4a4a4a;")
+            .attr("style", "font-size: 13px; fill: #4a4a4a;")
             .attr('transform', 'translate( 10,' + (heightPos+16) + ')');
 
 

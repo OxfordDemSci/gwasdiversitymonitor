@@ -62,6 +62,9 @@
             drawDoughnutGraph("#doughnutGraph", {{ doughnutGraph|tojson }}, false, false);
             downloadImage();
             setDescription();
+
+            var svgContainer = $('#worldMap .svg-container');
+            console.log(svgContainer.width());
         });
 
         function highlight(box) {

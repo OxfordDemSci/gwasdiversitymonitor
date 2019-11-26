@@ -27,7 +27,7 @@ function drawBubbleGraph(selector, data, replication) {
         .attr("class", "term-all")
         .attr("height", height + margin.top + margin.bottom);
 
-    mainSvg.append("rect").attr("width", "1000").attr("height", "1000").attr("style", "fill: #ffff;");
+    mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '950');
 
     var svg = mainSvg.append("g")
         .attr("class", "svg-container")

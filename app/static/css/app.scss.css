@@ -3477,7 +3477,8 @@ button, .btn {
             display: block; }
           .dashboard .tile .box.world-map .world-map-header-actions {
             position: absolute;
-            right: 10px; }
+            right: 10px;
+            bottom: 10px; }
         .dashboard .tile .box.world-map svg {
           -webkit-box-ordinal-group: 3;
           -webkit-order: 2;
@@ -3647,7 +3648,9 @@ button, .btn {
   .dashboard .tile .box.doughnut-graph svg {
     max-height: 324px; } }
         .dashboard .tile .box.doughnut-graph .doughnut-graph-footer {
-          margin-top: auto;
+          position: absolute;
+          bottom: 10px;
+          width: calc(100% - 20px);
           display: -webkit-box;
           display: -webkit-flex;
           display: -moz-flex;
@@ -3744,7 +3747,7 @@ button, .btn {
       padding: 0 10px; }
       .dashboard .tile .box#bubbleGraph .bubble-graph-footer,
 .dashboard .tile .box#bubbleGraph svg {
-        width: 75%; }
+        width: 65%; }
       .dashboard .tile .box#bubbleGraph .bubble-graph-filter {
         padding-right: 10px; }
         .dashboard .tile .box#bubbleGraph .bubble-graph-filter .gwas-select-container {
@@ -3768,7 +3771,8 @@ button, .btn {
           .dashboard .tile .box#bubbleGraph .right .ancestry-filter span.all {
             margin-bottom: 33px; }
           .dashboard .tile .box#bubbleGraph .right .ancestry-filter span.btn {
-            width: 100%; }
+            width: 100%;
+            min-height: 40px; }
             .dashboard .tile .box#bubbleGraph .right .ancestry-filter span.btn.hispanic-latin-american {
               margin-bottom: 0; } }
 
@@ -3819,9 +3823,10 @@ button, .btn {
 .body-msie .dashboard .box {
     max-height: 500px; } }
 
-@media screen and (min-width: 768px) {
-  .dashboard .tile .box#bubbleGraph .right .ancestry-filter span.btn {
-    min-height: 40px; } }
+@media screen and (min-width: 992px) {
+  .dashboard .tile .box#bubbleGraph .bubble-graph-footer,
+.dashboard .tile .box#bubbleGraph svg {
+    width: 75%; } }
 
 @media screen and (min-width: 1200px) and (max-width: 1799px) {
   .dashboard .tile .box#bubbleGraph .right .ancestry-filter {
@@ -3858,6 +3863,9 @@ button, .btn {
 .body-msie #bubbleGraph .bubble-graph-filter span,
 .body-msie #bubbleGraph .bubble-graph-filter .gwas-select-container-multiple {
   display: none; }
+
+.body-msie #bubbleGraph .right .ancestry-filter span.btn {
+  padding: 14px 6px 15px 20px !important; }
 
 .body-msie .dashboard .tile.col-lg-3 {
   width: 24%;
@@ -3948,6 +3956,7 @@ circle.in-part-not-recorded,
 svg {
   width: 100%;
   height: 100%;
+  overflow: hidden;
   display: -webkit-box;
   display: -webkit-flex;
   display: -moz-flex;

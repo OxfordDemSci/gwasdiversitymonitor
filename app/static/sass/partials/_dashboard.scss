@@ -361,6 +361,7 @@
           &-actions {
             position: absolute;
             right: 10px;
+            bottom: 10px;
           }
         }
 
@@ -486,7 +487,10 @@
         }
 
         .doughnut-graph-footer {
-          margin-top: auto;
+          //margin-top: auto;
+          position: absolute;
+          bottom: 10px;
+          width: calc(100% - 20px);
           @include flexbox;
           @include align-items(center);
           @include justify-content(space-between);
@@ -593,7 +597,7 @@
 
           .bubble-graph-footer,
           svg {
-            width: 75%;
+            width: 65%;
           }
 
           .bubble-graph {
@@ -634,6 +638,7 @@
 
                 &.btn {
                   width: 100%;
+                  min-height: 40px;
 
                   &.hispanic-latin-american {
                     margin-bottom: 0;
@@ -694,7 +699,8 @@
     }
   }
 }
-@include breakpoint(tablet) {
+
+@include breakpoint(medium) {
   .dashboard {
 
     .tile {
@@ -703,17 +709,9 @@
 
         &#bubbleGraph {
 
-          .right {
-
-            .ancestry-filter {
-
-              span {
-
-                &.btn {
-                  min-height: 40px;
-                }
-              }
-            }
+          .bubble-graph-footer,
+          svg {
+            width: 75%;
           }
         }
       }
@@ -755,6 +753,7 @@
     }
   }
 }
+
 .body-msie {
 
   .main {
@@ -795,6 +794,16 @@
       span,
       .gwas-select-container-multiple {
         display: none;
+      }
+    }
+
+    .right {
+
+      .ancestry-filter {
+
+        span.btn {
+          padding: 14px 6px 15px 20px !important;
+        }
       }
     }
   }
