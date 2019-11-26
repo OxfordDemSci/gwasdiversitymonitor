@@ -270,10 +270,10 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
         }
 
         drawGraph(val, xLegendArray[0], 'european-container', 'european-rect', 0, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[3], 'asian-container', 'asian-rect', 27, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[4], 'african-container', 'african-rect', 54, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[2], 'afr-ame-carr-container', 'afr-ame-carr-rect', 81, logColour_scale, logScale);
-        drawGraph(val, xLegendArray[1], 'his-lat-ame-container', 'his-lat-ame-rect', 108, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[1], 'asian-container', 'asian-rect', 27, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[2], 'african-container', 'african-rect', 54, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[3], 'afr-ame-carr-container', 'afr-ame-carr-rect', 81, logColour_scale, logScale);
+        drawGraph(val, xLegendArray[4], 'his-lat-ame-container', 'his-lat-ame-rect', 108, logColour_scale, logScale);
         drawGraph(val, xLegendArray[5], 'other-mixed-container', 'other-mixed-rect', 135, logColour_scale, logScale);
 
         // X and Y axis legends
