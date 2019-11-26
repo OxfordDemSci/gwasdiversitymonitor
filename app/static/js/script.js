@@ -242,12 +242,14 @@ function downloadImage() {
             downloadSvg.selectAll('.log-colour-scale text').attr("style", "font-size: 12px; fill: #4a4a4a;");
             downloadSvg.selectAll('.heat-map-y-axis-legend-item').attr("style", "font-size: 13px; color: #4a4a4a;");
             downloadSvg.selectAll('.heat-map-x-axis-legend-item-0').attr("x", "5");
-            downloadSvg.selectAll('.heat-map-x-axis-legend-item-1').attr("x", "41");
-            downloadSvg.selectAll('.heat-map-x-axis-legend-item-1 tspan').attr("x", "80");
-            downloadSvg.selectAll('.heat-map-x-axis-legend-item-2').attr("x", "75");
-            downloadSvg.selectAll('.heat-map-x-axis-legend-item-2 tspan').attr("x", "73");
-            downloadSvg.selectAll('.heat-map-x-axis-legend-item-3').attr("x", "6");
-            downloadSvg.selectAll('.heat-map-x-axis-legend-item-4').attr("x", "4");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-1').attr("x", "7");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-1 tspan').attr("x", "5");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-2').attr("x", "5");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-2 tspan').attr("x", "5");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-3').attr("x", "75");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-3 tspan').attr("x", "73");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-4').attr("x", "40");
+            downloadSvg.selectAll('.heat-map-x-axis-legend-item-4 tspan').attr("x", "80");
             downloadSvg.selectAll('.heat-map-x-axis-legend-item-5').attr("x", "2");
             heightPos = height+150;
 
@@ -286,10 +288,10 @@ function downloadImage() {
         if(graph.attr('id') === 'doughnutGraph') {
             downloadSvg.attr('height', '550').attr('width', '400');
             downloadSvg.selectAll('.doughnut-legend-rect:nth-child(n+4)').attr("x", "180");
-            downloadSvg.selectAll('.doughnut-legend-text[data-title="asian"], .doughnut-legend-text[data-title="african"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="asian"] .tspan-percentage, .doughnut-legend-text[data-title="african"] .tspan-percentage, .doughnut-legend-text[data-title="other-mixed"] .tspan-percentage').attr("x", "210");
+            downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"], .doughnut-legend-text[data-title="hispanic-or-latin-american"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="african-american-or-afro-caribbean"] tspan, .doughnut-legend-text[data-title="hispanic-or-latin-american"] tspan, .doughnut-legend-text[data-title="other-mixed"] tspan').attr("x", "220");
+            downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "305");
+            downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "275");
             downloadSvg.selectAll('.doughnut-legend-text').attr("style", "font-size: 13px; fill: #4a4a4a;");
-            downloadSvg.select('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "100");
-            downloadSvg.select('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "130");
             downloadSvg.select('.doughnut-main-title').attr("style", "font-size: 16px; fill: #4a4a4a;");
             downloadSvg.select('.doughnut-association-title').attr("style", "font-size: 16px; fill: #4a4a4a;");
             downloadSvg.select('.svg-container').attr('transform', 'translate(130,200)');
@@ -299,12 +301,15 @@ function downloadImage() {
             downloadSvg.select('.doughnut-legend').attr('transform', 'translate(0,100)');
             heightPos = height+120;
             if (graph.find('.doughnut-graph-filter-association-title').hasClass('active')) {
-                downloadSvg.attr('height', '550').attr('width', '650');
+                downloadSvg.attr('height', '550').attr('width', '700');
                 downloadSvg.select('.doughnut-legend').attr('transform', 'translate(200,100)');
-                downloadSvg.select('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "50");
-                downloadSvg.select('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "80");
                 downloadSvg.selectAll('.doughnut-legend-rect:nth-child(n+4)').attr("x", "210");
-                downloadSvg.selectAll('.doughnut-legend-text[data-title="asian"], .doughnut-legend-text[data-title="african"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="asian"] .tspan-percentage, .doughnut-legend-text[data-title="african"] .tspan-percentage, .doughnut-legend-text[data-title="other-mixed"] .tspan-percentage').attr("x", "245");
+                downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"], .doughnut-legend-text[data-title="hispanic-or-latin-american"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="african-american-or-afro-caribbean"] tspan, .doughnut-legend-text[data-title="hispanic-or-latin-american"] tspan, .doughnut-legend-text[data-title="other-mixed"] tspan').attr("x", "245");
+                downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "330");
+                downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-association').attr("x", "365");
+                downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "300");
+                downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-association').attr("x", "335");
+                downloadSvg.selectAll('.doughnut-legend-text[data-title="other-mixed"] .tspan-association').attr("x", "280");
                 downloadSvg.append("g")
                     .attr("class", "second-title")
                     .attr("transform", "translate(400,40)")

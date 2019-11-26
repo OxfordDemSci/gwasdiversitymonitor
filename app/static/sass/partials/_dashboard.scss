@@ -487,10 +487,7 @@
         }
 
         .doughnut-graph-footer {
-          //margin-top: auto;
-          position: absolute;
-          bottom: 10px;
-          width: calc(100% - 20px);
+          margin-top: auto;
           @include flexbox;
           @include align-items(center);
           @include justify-content(space-between);
@@ -817,6 +814,12 @@
         @include flex-basis(24%);
       }
     }
+  }
+
+  .doughnut-graph-footer {
+    width: calc(100% - 20px);
+    position: absolute;
+    bottom: 10px;
   }
 }
 

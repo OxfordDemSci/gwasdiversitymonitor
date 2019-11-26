@@ -3648,9 +3648,7 @@ button, .btn {
   .dashboard .tile .box.doughnut-graph svg {
     max-height: 324px; } }
         .dashboard .tile .box.doughnut-graph .doughnut-graph-footer {
-          position: absolute;
-          bottom: 10px;
-          width: calc(100% - 20px);
+          margin-top: auto;
           display: -webkit-box;
           display: -webkit-flex;
           display: -moz-flex;
@@ -3873,6 +3871,11 @@ button, .btn {
   -moz-flex-basis: 24%;
   -ms-flex-preferred-size: 24%;
   flex-basis: 24%; }
+
+.body-msie .doughnut-graph-footer {
+  width: calc(100% - 20px);
+  position: absolute;
+  bottom: 10px; }
 
 svg#bubbleSVG circle {
   opacity: .7;

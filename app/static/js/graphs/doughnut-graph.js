@@ -15,7 +15,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         .attr("width", width)
         .attr("height", height);
 
-    mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '650');
+    mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '700');
 
     let svg = mainSvg.append("g")
         .attr('class', 'svg-container')
