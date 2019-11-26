@@ -178,7 +178,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             }
 
             if (window.innerWidth > 600 && window.innerWidth <= 1440) {
-                legend.transition(200).attr('transform', 'translateX('+(width-100)+')');
+                legend.transition(200).attr('transform', 'translate('+(width-100)+', 0)');
             } else if (window.innerWidth <= 600 && window.innerWidth >= 375) {
                 doughnutSVG.setAttribute('height', '620');
                 doughnutSVG.style.maxHeight = '620px';
@@ -235,15 +235,15 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             }
 
             if (window.innerWidth > 600 && window.innerWidth <= 1440) {
-                legend.transition(200).attr('transform', 'translateX(0%)');
+                legend.transition(200).attr('transform', 'translate(0, 0)');
             } else if (window.innerWidth <= 600) {
                 doughnutSVG.setAttribute('height', '324');
                 doughnutSVG.style.maxHeight = '324px';
-                legend.transition(200).attr('transform', 'translate3d(0, 0, 0)');
+                legend.transition(200).attr('transform', 'translate(0, 0)');
                 associationDoughnut.transition(200).style('transform', 'translate(540px, 108px)')
             } else {
                 if (!isIE()) {
-                    legend.transition(200).attr('transform', 'translateX(0%)');
+                    legend.transition(200).attr('transform', 'translate(0, 0)');
                 } else {
                     legend.attr('transform', 'translate(0, 0)');
                 }
@@ -252,14 +252,14 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             tspanAssociation = document.querySelectorAll('.tspan-association');
             if (tspanAssociation && tspanAssociation.length > 0) {
                 Array.prototype.forEach.call(tspanAssociation, function(el, i) {
-                    if (i === 0) {
+                    if (i < 3) {
                         el.parentNode.setAttribute('x', '44');
-                    } else if (i === 1) {
-                        el.parentNode.setAttribute('x', '87');
-                    } else if (i === 2) {
-                        el.parentNode.setAttribute('x', '112');
+                    } else if (i === 3) {
+                        el.parentNode.setAttribute('x', '220');
+                    } else if (i === 4) {
+                        el.parentNode.setAttribute('x', '195');
                     } else {
-                        el.parentNode.setAttribute('x', '191');
+                        el.parentNode.setAttribute('x', '151');
                     }
                 });
             }
@@ -273,7 +273,8 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                         el.setAttribute('x', '10');
                         el.setAttribute('y', (height/2+50)+(i*24 + i*12));
                     } else if(i > 2) {
-                        el.setAttribute('x', 157);
+                        el.setAttribute('x', 117);
+                        el.setAttribute('y', (height/2-58)+(i*24 + i*12));
                     }
                 });
             }
@@ -285,7 +286,9 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                         el.querySelector('tspan').setAttribute('x', '44');
                         el.setAttribute('y', (height/2+42)+(i*24 + i*12 + 18));
                     } else if(i > 2) {
-                        el.setAttribute('x', 191);
+                        el.setAttribute('x', 151);
+                        el.querySelector('tspan').setAttribute('x', '151');
+                        el.setAttribute('y', (height/2-58)+(i*24 + i*12 + 10));
                     }
                 });
             }
@@ -327,7 +330,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         // set the color scale
         let color = d3.scaleOrdinal()
             .domain(val)
-            .range(["#ed7892", "#c190c1", "#fece59", "#5fabdd", "#f59c44", "#54bdbe"]);
+            .range(["#ed7892", "#5fabdd", "#f59c44", "#fece59", "#c190c1", "#54bdbe"]);
 
 // Compute the position of each group on the pie:
         let pie = d3.pie()
@@ -351,7 +354,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 .innerRadius(40)
                 .outerRadius(radius)
             )
-            .attr('fill', function(d){
+            .attr('fill', function(d) {
                 return(color(d.data.key))
             })
             .on('mouseover', function (d) {
@@ -381,29 +384,37 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         tspanAssociation = document.querySelectorAll('.tspan-association');
         if (tspanAssociation && tspanAssociation.length > 0) {
             Array.prototype.forEach.call(tspanAssociation, function(el, i) {
-                if (i === 0) {
+                if (i < 3) {
                     el.parentNode.setAttribute('x', '-6');
                     if (window.innerWidth < 375 && associationSwitch.checked) {
                         el.setAttribute('x', '-9');
                         el.setAttribute('dy', 12);
                     }
-                } else if (i === 1) {
-                    el.parentNode.setAttribute('x', '40');
+                } else if (i === 3) {
+                    el.parentNode.setAttribute('x', '220');
                     if (window.innerWidth < 375 && associationSwitch.checked) {
-                        el.setAttribute('x', '-9');
+                        el.parentNode.setAttribute('x', '168');
+                        el.setAttribute('x', '98');
+                        el.setAttribute('dy', 12);
+                    } else if (window.innerWidth < 400 && associationSwitch.checked) {
+                        el.setAttribute('x', '149');
                         el.setAttribute('dy', 12);
                     }
-                } else if (i === 2) {
-                    el.parentNode.setAttribute('x', '62');
+                } else if (i === 4) {
+                    el.parentNode.setAttribute('x', '195');
                     if (window.innerWidth < 375 && associationSwitch.checked) {
-                        el.setAttribute('x', '-9');
+                        el.parentNode.setAttribute('x', '144');
+                        el.setAttribute('x', '98');
+                        el.setAttribute('dy', 12);
+                    } else if (window.innerWidth < 400 && associationSwitch.checked) {
+                        el.setAttribute('x', '149');
                         el.setAttribute('dy', 12);
                     }
-                } else if (i > 2) {
+                } else {
                      if (associationSwitch.checked && window.innerWidth < 375) {
-                         el.parentNode.setAttribute('x', '141');
+                         el.parentNode.setAttribute('x', '101');
                      } else {
-                         el.parentNode.setAttribute('x', '191');
+                         el.parentNode.setAttribute('x', '151');
                      }
                 }
                 if (data_ready && data_ready[i]) {
@@ -418,15 +429,18 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 if (i <= 2) {
                     el.setAttribute('x', '-40');
                     if (associationSwitch.checked && window.innerWidth < 375) {
-                        el.setAttribute('y', (height/2+50)+(i*32 + i*12));
-                    } else {
-                        el.setAttribute('y', (height/2+50)+(i*24 + i*12));
+                        el.setAttribute('y', (height/2+42)+(i*32 + i*12 + 10));
                     }
                 } else if(i > 2) {
                     if (associationSwitch.checked && window.innerWidth < 375) {
-                        el.setAttribute('x', 107);
+                        el.setAttribute('x', 67);
+                        el.setAttribute('y', (height/2-82)+(i*32 + i*12));
+                    } else if(associationSwitch.checked && window.innerWidth < 400) {
+                        el.setAttribute('x', 117);
+                        el.setAttribute('y', (height/2-82)+(i*32 + i*12));
                     } else {
-                        el.setAttribute('x', 157);
+                        el.setAttribute('x', 117);
+                        el.setAttribute('y', (height/2-58)+(i*24 + i*12));
                     }
                 }
             });
@@ -445,9 +459,15 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                     }
                 } else if(i > 2) {
                     if (associationSwitch.checked && window.innerWidth < 375) {
-                        el.setAttribute('x', 141);
+                        el.setAttribute('x', 101);
+                        el.querySelector('tspan').setAttribute('x', '101');
+                        el.setAttribute('y', (height/2-55)+(i*32 + i*12 - 18));
+                    } else if(associationSwitch.checked && window.innerWidth < 400) {
+                        el.setAttribute('x', 151);
+                        el.setAttribute('y', (height/2-55)+(i*32 + i*12 - 18));
                     } else {
-                        el.setAttribute('x', 191);
+                        el.setAttribute('x', 151);
+                        el.setAttribute('y', (height/2-58)+(i*24 + i*12 + 10));
                     }
                 }
             });
@@ -501,7 +521,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         // set the color scale
         let color = d3.scaleOrdinal()
             .domain(val)
-            .range(["#ed7892", "#c190c1", "#fece59", "#5fabdd", "#f59c44", "#54bdbe"]);
+            .range(["#ed7892", "#5fabdd", "#f59c44", "#fece59", "#c190c1", "#54bdbe"]);
 
         if (currentYear >= dataKeys[dataKeys.length-1]) {
             for (let i = 0; i < nextButtons.length; i++) {
@@ -582,7 +602,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 if (i < 3) {
                     return 10;
                 } else {
-                    return 157;
+                    return 117;
                 }
             })
             .attr('y', function(d, i) {
@@ -606,7 +626,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 if (i < 3) {
                     return 44;
                 } else {
-                    return 191;
+                    return 151;
                 }
             })
             .attr('y', function(d, i) {
@@ -621,7 +641,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 if (i < 3) {
                     return 44;
                 } else {
-                    return 191;
+                    return 151;
                 }
             })
             .attr('dy', 12)
@@ -632,15 +652,15 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             })
             .append('tspan').attr('class', 'tspan-percentage').attr('x', function(d, i) {
                 if (i < 3) {
-                    if(d.value.ancestry === 'Hispanic or Latin American') {
-                        return 87;
-                    } else if(d.value.ancestry === 'African American or Afro-Caribbean') {
-                        return 112;
-                    } else {
-                        return 44;
-                    }
+                    return 44;
                 } else {
-                    return 191;
+                    if(d.value.ancestry === 'Hispanic or Latin American') {
+                        return 194;
+                    } else if(d.value.ancestry === 'African American or Afro-Caribbean') {
+                        return 219;
+                    } else {
+                        return 151;
+                    }
                 }
             })
             .attr('dy', function(d) {
@@ -661,13 +681,13 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
         if (associationSwitch.checked) {
             if (window.innerWidth > 600 && window.innerWidth <= 1440) {
-                legend.attr('transform', 'translateX(' + (width - 100) + ')');
+                legend.attr('transform', 'translate(' + (width - 100) + ', 0)');
             } else if (window.innerWidth <= 600){
                 doughnutSVG.setAttribute('height', '600');
                 legend.attr('transform', 'translate(44, 20)');
             } else {
                 if (!isIE()) {
-                    legend.attr('transform', 'translateX('+(width-40)+')');
+                    legend.attr('transform', 'translate('+(width-40)+', 0)');
                 } else {
                     legend.attr('transform', 'translate(230, 0)');
                 }

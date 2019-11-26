@@ -604,38 +604,6 @@ function drawWorldMapChart(data, withMetric) {
     }
 
     function resize() {
-        // adjust things when the window size changes
-        width = parseInt(d3.select('#worldMap').style('width'));
-        width = width - margin.left - margin.right;
-        height = width * mapRatio;
-
-        // update projection
-        projection
-            .translate([width / 2, height / 1.6])
-            .scale(width/6.25);
-
-        // resize the map container
-        d3.selectAll("#worldMap svg")
-            .attr("width", width)
-            .attr("height", height);
-
-        d3.selectAll('#worldMap svg .map')
-            .style('width', width + 'px')
-            .style('height', height + 'px');
-
-        d3.select('.back-rect')
-            .style('width', width + 'px')
-            .style('height', 1000 + 'px');
-
-        if (window.withMetric) {
-            updateLegend(colorsForStudies, height);
-        } else {
-            updateLegend(colorsForParticipants, height);
-        }
-
-        // resize the map
-        d3.select('#worldMap svg').selectAll('.countries path').attr('d', path);
-
         // Heat map resize
         let yItems = document.querySelectorAll('.heat-map-y-axis-legend-item');
         if (window.innerWidth >= 1200 && window.innerWidth <= 1550) {

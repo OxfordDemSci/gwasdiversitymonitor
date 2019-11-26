@@ -29,6 +29,7 @@ def index():
     dataLoader = DataLoader.DataLoader()
 
     ancestries = dataLoader.getAncestriesList()
+    ancestriesOrdered = dataLoader.getAncestriesListOrder()
     parentTerms = dataLoader.getTermsList()
     traits = dataLoader.getTraitsList()
     
@@ -37,9 +38,9 @@ def index():
     tsPlot = dataLoader.getTSPlot()
     chloroMap = dataLoader.getChloroMap()
     heatMap = dataLoader.getHeatMap()
-    doughnutGraph = dataLoader.getDoughnutGraph()
+    doughnutGraph = dataLoader.getDoughnutGraph(ancestriesOrdered)
 
-    return render_template('index.html', title='Home', switches='true', ancestries=ancestries, parentTerms=parentTerms, traits=traits, summary=summary, bubbleGraph=bubbleGraph, tsPlot=tsPlot, chloroMap=chloroMap, heatMap=heatMap, doughnutGraph=doughnutGraph)
+    return render_template('index.html', title='Home', switches='true', ancestries=ancestries, ancestriesOrdered=ancestriesOrdered, parentTerms=parentTerms, traits=traits, summary=summary, bubbleGraph=bubbleGraph, tsPlot=tsPlot, chloroMap=chloroMap, heatMap=heatMap, doughnutGraph=doughnutGraph)
 
 @app.route('/privacy-policy')
 def privacy():
