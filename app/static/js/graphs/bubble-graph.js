@@ -327,6 +327,7 @@ function getYear(data) {
 
 function getDataMax(data, filters) {
     var max = 0;
+
     if (filters === undefined) {
         data.forEach(function(element) {
             if (parseInt(element.N) > max) {
@@ -335,12 +336,14 @@ function getDataMax(data, filters) {
         });
     } else {
         data.forEach(function(element) {
-            var elementAncestry = element.Broader.replace(' ', '-').replace('/', '-').replace(' ', '-').replace(' ', '-').toLowerCase();
-            var ancestryCondition = (filters.indexOf(elementAncestry) === -1);
-
+            var elementAncestry = 'ancestry' + element.Broader.replace(' ', '-').replace('/', '-').replace(' ', '-').replace(' ', '-').toLowerCase();
+            var joinedFilter = filters.split('-').join('');
+            var joinedAncestry = new RegExp('\\b' + elementAncestry.split('-').join('') + '\\b');
+            var ancestryCondition = (joinedFilter.search(joinedAncestry) === -1);
 
             var elementTerms = element.parentterm.replace(/, /g, ',').replace(/ /g, '-').toLowerCase().split(",");
             var termCondition = false;
+
             elementTerms.forEach(function(element) {
                 termCondition = (filters.indexOf(element) !== -1 || filters.indexOf("term-all") !== -1);
             });
