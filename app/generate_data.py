@@ -317,7 +317,7 @@ def make_choro_df(data_path):
     annual_df = pd.DataFrame(columns=['Year', 'N', 'Count'])
     Clean_CoR = make_clean_CoR(Cat_Ancestry, data_path)
     countrylookup = pd.read_csv(os.path.join(data_path,
-                                             'shapefiles',
+                                             'support',
                                              'Country_Lookup.csv'),
                                 index_col='Country')
     for year in range(2008, 2020):
