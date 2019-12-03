@@ -9,6 +9,7 @@ import os
 import csv
 import shutil
 import warnings
+import zipfile
 warnings.filterwarnings("ignore")
 
 
@@ -606,8 +607,7 @@ def clean_gwas_cat(data_path):
     Cat_Stud.fillna('N/A', inplace=True)
     Cat_Anc = pd.read_csv(os.path.join(data_path, 'catalog', 'raw',
                                        'Cat_Anc.tsv'),
-                          header=0, sep='\t', encoding='utf-8',
-                          index_col=False)
+                          header=0, sep='\t', encoding='utf-8', index_col=False)
     Cat_Anc.rename(columns={'BROAD ANCESTRAL CATEGORY': 'BROAD ANCESTRAL',
                             'NUMBER OF INDIVDUALS': 'N'}, inplace=True)
     Cat_Anc = Cat_Anc[~Cat_Anc['BROAD ANCESTRAL'].isnull()]
@@ -740,31 +740,6 @@ def download_cat(data_path, ebi_download):
         diversity_logger.debug('Problem downloading Catalog data!' + str(e))
 
 
-def make_archive(source, destination):
-    ''' Make the archive for the zipfile download on the dashboard'''
-    base = os.path.basename(destination)
-    name = base.split('.')[0]
-    format = base.split('.')[1]
-    archive_from = os.path.dirname(source)
-    archive_to = os.path.basename(source.strip(os.sep))
-    print(source, destination, archive_from, archive_to)
-    shutil.make_archive(name, format, archive_from, archive_to)
-    shutil.move('%s.%s' % (name, format), destination)
-
-
-def zip_toplot(source, destination):
-    try:
-        base = os.path.basename(destination)
-        name = base.split('.')[0]
-        format = base.split('.')[1]
-        shutil.make_archive(name, format, source)
-        shutil.move('%s.%s' % (name, format), destination)
-        diversity_logger.info('Successfully zipped the files to be downloaded')
-    except Exception as e:
-        diversity_logger.debug('Problem zipping the files to tbe downloaded' +
-                               str(e))
-
-
 def make_disease_list(df):
     uniq_dis_trait = pd.Series(df['DiseaseOrTrait'].unique())
     uniq_dis_trait.to_csv(os.path.join(data_path, 'summary',
@@ -783,14 +758,23 @@ def make_parent_list(data_path):
                        header=False, index=False)
 
 
-#def make_broader_list(data_path):
-#    df = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-#                                  'Cat_Anc_wBroader_withParents.tsv'),
-#                     sep='\t')
-#    uniq_broader = pd.Series(df[df['Broader'].notnull()]['Broader'].unique())
-#    uniq_broader.to_csv(os.path.join(data_path, 'summary',
-#                                     'uniq_broader.txt'),
-#                        header=False, index=False)
+def zip_for_download(source, destination):
+    all_path = os.path.join(destination, 'gwasdiversitymonitor_download.zip')
+    heat_path = os.path.join(destination, 'heatmap.zip')
+    ts_path = os.path.join(destination, 'timeseries.zip')
+    try:
+        for file_name in os.listdir(source):
+            with zipfile.ZipFile(all_path, 'a') as all_zip:
+                    all_zip.write(os.path.join(source, file_name), file_name)
+            if file_name.lower().startswith('heat'):
+                with zipfile.ZipFile(heat_path, 'a') as heat_zip:
+                    heat_zip.write(os.path.join(source, file_name), file_name)
+            elif file_name.lower().startswith('ts'):
+                with zipfile.ZipFile(ts_path, 'a') as ts_zip:
+                    ts_zip.write(os.path.join(source, file_name), file_name)
+        diversity_logger.info('Successfully zipped all files!')
+    except Exception as e:
+        diversity_logger.debug('Problem zipping files: %s' %e)
 
 
 if __name__ == "__main__":
@@ -812,13 +796,10 @@ if __name__ == "__main__":
         make_choro_df(data_path)
         make_heatmap_dfs(data_path)
         make_parent_list(data_path)
-#        make_broader_list(data_path)
         sumstats = create_summarystats(data_path)
+        zip_for_download(os.path.join(data_path, 'toplot'),
+                         os.path.join(data_path, 'todownload'))
         diversity_logger.info('generate_data.py ran successfully!')
-        zip_toplot(os.path.join(data_path, 'toplot'),
-                   os.path.join(data_path, 'todownload',
-                                'gwasdiversitymonitor_download.zip'))
     except Exception as e:
-        diversity_logger.debug('generate_data.py failed, uncaught error: ' +
-                               str(e))
+        diversity_logger.debug('generate_data.py failed, uncaught error: %s' %e)
     logging.shutdown()
