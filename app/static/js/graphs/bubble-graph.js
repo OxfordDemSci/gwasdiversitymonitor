@@ -12,7 +12,7 @@ function drawBubbleGraph(selector, data, replication) {
     if($(window).width() < 480) {
         var graphHeight = 300;
     } else {
-        var graphHeight = 380;
+        var graphHeight = 360;
     }
 
     var margin = {top: 40, right: 30, bottom: 30, left: 40},
@@ -348,7 +348,13 @@ function getDataMax(data, filters) {
                 termCondition = (filters.indexOf(element) !== -1 || filters.indexOf("term-all") !== -1);
             });
 
-            if(ancestryCondition && termCondition) {
+            let termConditionMatchArray = elementTerms.filter(function(el) {
+                if ((filters.indexOf(el) !== -1 || filters.indexOf("term-all") !== -1)) {
+                    return el;
+                }
+            });
+
+            if((ancestryCondition && termCondition) || (ancestryCondition && termConditionMatchArray.length > 0)) {
                 if (parseInt(element.N) > max) {
                     max = parseInt(element.N);
                 }
