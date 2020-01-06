@@ -1,0 +1,8 @@
+2020-01-06 23:10:03,360 - div_logger - INFO - Successfully downloaded gwas_catalog_v1.0.2-studies_r2019-12-16.tsv
+2020-01-06 23:10:08,183 - div_logger - INFO - Successfully downloaded gwas_catalog-ancestry_r2019-12-16.tsv
+2020-01-06 23:10:11,528 - div_logger - INFO - Successfully downloaded gwas_catalog_v1.0-associations_e98_r2019-12-16.tsv
+2020-01-06 23:10:11,697 - div_logger - INFO - Successfully downloaded efo-trait-mapping!
+2020-01-06 23:10:12,877 - div_logger - INFO - No missing Broader terms! Nice!
+2020-01-06 23:10:22,377 - div_logger - DEBUG - Wuhoh! There are some empty disease terms!
+2020-01-06 23:10:28,441 - div_logger - INFO - Successfully zipped all files!
+2020-01-06 23:10:28,441 - div_logger - INFO - generate_data.py ran successfully!
