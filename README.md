@@ -21,7 +21,7 @@ As a pre-requisite to running this locally, you will need a working Python 3 ins
 
 This server is operating system independent (through the ``os`` module) and should work on Windows, Linux and macOS all the same. To run: clone this directory, ``cd`` into the directory, and serve the project by simply calling the gwasdiversitymonitor.py file. "python gwasdiversitymonitor.py". This will serve the project to port 5000 on your localhost (via Flask).
 
-To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualsnv/) with "./virtualenv/bin/python gwasdiversitymonitor.py".
+To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualsnv/) with `./virtualenv/bin/python gwasdiversitymonitor.py`.
 
 ### Structure
 
