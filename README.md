@@ -11,7 +11,7 @@ This is a repository to accompany the GWAS Diversity Monitor, currently maintain
 <div align="center"> <a href="http://www.gwasdiversitymonitor.com">gwasdiversitymonitor.com</a></div>
 <br/>
 
-The frontend is written in [D3 4.0](https://devdocs.io/d3~4/) (a JavaScript library for visualizing data with HTML, SVG, and CSS) with the backend hosted in [Flask](https://github.com/pallets/flask) (a lightweight WSGI web application framework written in Python). Grateful attributions regarding data are made to the [**EMBL-EBI GWAS Catalog**](https://www.ebi.ac.uk/gwas/). In summary, the dashboard visualizes a systematic interactive review of all GWAS published to date. This repo can be cloned and ran on-the-fly to generate a server on localhost as required. The dashboard and associated summary statistics check daily for updates from the Catalog and update with new releases (i.e. we run ```generate_date.py``` on a daily cron job and push to the master branch). The cron borrows a couple of functions from our [Scientometric Review of all GWAS](https://www.nature.com/articles/s42003-018-0261-x)
+The frontend is written in [D3 4.0](https://devdocs.io/d3~4/) (a JavaScript library for visualizing data with HTML, SVG, and CSS) with the backend hosted in [Flask](https://github.com/pallets/flask) (a lightweight WSGI web application framework written in Python). Grateful attributions regarding data are made to the [**EMBL-EBI GWAS Catalog**](https://www.ebi.ac.uk/gwas/). In summary, the dashboard visualizes a systematic interactive review of all GWAS published to date. This repo can be cloned and ran on-the-fly to generate a server on localhost as required. The dashboard and associated summary statistics check daily for updates from the Catalog and update with new releases. The cron adapts a couple of functions from our [Scientometric Review of all GWAS](https://www.nature.com/articles/s42003-018-0261-x)
 
 ### Prerequisites
 
@@ -19,7 +19,7 @@ As a pre-requisite to running this locally, you will need a working Python 3 ins
 
 ### Running the Code
 
-This server is operating system independent (through the ``os`` module) and should work on Windows, Linux and OS X all the same. To run: clone this directory, ``cd`` into the directory, and serve the project by simply calling the gwasdiversitymonitor.py file. "python gwasdiversitymonitor.py". This will serve the project to port 5000 on your localhost.
+This server is operating system independent (through the ``os`` module) and should work on Windows, Linux and macOS all the same. To run: clone this directory, ``cd`` into the directory, and serve the project by simply calling the gwasdiversitymonitor.py file. "python gwasdiversitymonitor.py". This will serve the project to port 5000 on your localhost (via Flask).
 
 To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualsnv/) with "./virtualenv/bin/python gwasdiversitymonitor.py".
 
@@ -30,26 +30,26 @@ The root of the folder contains routes.py, which is the main file which runs the
 Each call to @app.route('path') defines a path and almost all of these just return templates for pages. The exception is @app.route("/getCSV/<filename>") which is handling the data download for all cases and returns a file response.
 The other exception in this file is, at the top, @app.context_processor. This injects some functionality into our flask templates for us. It is used to give us a user_agent checker (check what device/browser is accessing the application) check the state of the cookie policy, and inject the google analytics key from the config file.
 
-The other important file here is DataLoader.py. This is a simple file containing a series of helper functions that route.py uses to load and reshape the data from the csv's into a shape that is workable with d3.
+The other important file here is DataLoader.py. This is a simple file containing a series of helper functions that route.py uses to load and reshape the data from the wrangled csv's into a shape that is workable with d3.
 
-Data - pulls, wrangles and creates all data used in this project.
+_Data_: pulls, wrangles and creates all data used in this project.
 
-Static - This subfolder contains all of the assets for the application. Css/sass, fonts, images and Js will all be found here. The one we care most about is the js. There is a script.js file which contains some global functions and then a file for each graph.
+_Static_: This subfolder contains all of the assets for the application. CSS/Sass, fonts, images and js will all be found here. The one we care most about is the js. There is a script.js file which contains some global functions and then a file for each graph.
 
 Each graph js file contains a function, which is then called from the global template, to instantiate the graph. The global filters recall these functions to redraw the graphs with the new filter state. "internal" filters, eg. year and parent term for each tile, are handled by event handlers inside each graph file.
 
 ### Versioning
 
-This dashboard is currently at Version 0.9.0 (revise and resubmit stage). Please note: although the library logs data updates, it could be that additional dictionary based classifications are required with regards to the ```/data/support/dict_replacer_broad.tsv``` file. Please raise an issue in this repo to alert us of any necessary entries, or any suggestions which you may have in general.
+This dashboard is currently at Version 1.0.0 (with an article conditionally accepted Nature Genetics). Please note: although the library logs data updates, it could be that additional dictionary based classifications are required with regards to the ```/data/support/dict_replacer_broad.tsv``` file. Please raise an issue in this repo to alert us of any necessary entries, or any suggestions which you may have in general, although we will monitor this over time.
 
 ### License
 
-This work is free. You can redistribute it and/or modify it under the terms of the MIT license, subject to the conditions imposed by the [EMBL-EBI license](https://www.ebi.ac.uk/about/terms-of-use). The dashboard comes without any warranty, to the extent permitted by applicable law.
+This work is free. You can redistribute it and/or modify it under the terms of the MIT license, subject to the conditions regarding the data imposed by the [EMBL-EBI license](https://www.ebi.ac.uk/about/terms-of-use). The dashboard comes without any warranty, to the extent permitted by applicable law.
 
 ### Acknowledgements
 
-We are grateful to the extensive help provided by [Global Initiative](https://www.global-initiative.com/) (and in particular to Jamie for writing part of this readme, and to Veatriki for designing the logo at the top). Additional help and specific comments came from [Ian Knowles](https://github.com/ianknowles), [Yi Liu](https://github.com/YiLiu6240), [Molly Przeworski](https://przeworskilab.com/), [Ben Domingue](https://github.com/ben-domingue), [Sam Trejo](https://cepa.stanford.edu/people/sam-trejo) and the [Sociogenome](http://www.sociogenome.org) group more generally.
+We are grateful to the extensive help provided by [Global Initiative](https://www.global-initiative.com/) (and in particular to Jamie, Nynke, Veatriki, Alex, Lea and Quentin). Additional help and specific comments came from [Ian Knowles](https://github.com/ianknowles), [Yi Liu](https://github.com/YiLiu6240), [Molly Przeworski](https://przeworskilab.com/), [Ben Domingue](https://github.com/ben-domingue), [Sam Trejo](https://cepa.stanford.edu/people/sam-trejo) and the [Sociogenome](http://www.sociogenome.org) group more generally.
 
-### To Do
+### Future Versions
 
 1. Additional tabs regarding funders, network analysis, and so forth.
