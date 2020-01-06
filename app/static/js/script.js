@@ -48,7 +48,7 @@ function setDescription() {
         }
         var titleText = $(title[0]).text() + secondTitle;
         var svg = d3.select('#' + id + ' svg');
-        
+
         if(svg.select('desc').empty()) {
             svg.append('desc').text(titleText);
         } else {
@@ -333,15 +333,15 @@ function downloadImage() {
             downloadSvg.select(".svg-container").attr("transform", "translate(50,100)");
         }
 
-        var popup = $('#popup-footer p');
-        downloadSvg.append('text')
-            .text($(popup[0]).text())
-            .attr("style", "font-size: 13px; fill: #4a4a4a;")
-            .attr('transform', 'translate( 10,' + heightPos + ')');
-        downloadSvg.append('text')
-            .text($(popup[1]).text())
-            .attr("style", "font-size: 13px; fill: #4a4a4a;")
-            .attr('transform', 'translate( 10,' + (heightPos+16) + ')');
+//        var popup = $('#popup-footer p');
+//        downloadSvg.append('text')
+//            .text($(popup[0]).text())
+//            .attr("style", "font-size: 13px; fill: #4a4a4a;")
+//            .attr('transform', 'translate( 10,' + heightPos + ')');
+//        downloadSvg.append('text')
+//            .text($(popup[1]).text())
+//            .attr("style", "font-size: 13px; fill: #4a4a4a;")
+//            .attr('transform', 'translate( 10,' + (heightPos+16) + ')');
 
 
 
