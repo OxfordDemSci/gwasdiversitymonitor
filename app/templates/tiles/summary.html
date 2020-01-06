@@ -2,7 +2,7 @@
     <h2>
         Total GWAS participants diversity
     </h2>
-    <small>Updated daily, last update: {{ summary.timeupdated }}</small>
+    <small>Version 1.0.0. Last check for data: {{ summary.timeupdated }} {{ summary.timezone }}.</small>
     <div class="row">
         {% for key, value in ancestries.items() %}
             {% include 'components/numbers.html' %}
