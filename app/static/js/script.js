@@ -336,45 +336,46 @@ function downloadImage() {
         let popup = $('#popup-footer p');
 		let citetexts = Array.from(popup.map(i => ({'text': popup[i].textContent})))
 
-		citetexts[1].lines = 0
+		//citetexts[1].lines = 0
+		//new d3plus.TextBox()
+        //  .data([citetexts[0]])
+        //  .select(downloadSvg.node())
+        //  .fontSize(13)
+        //  .fontFamily('')
+        //  .fontColor('4a4a4a')
+        //  .width(width)
+        //  //.x(function(d, i) { return i * 250; })
+        //  //.y(function(d, i) { return i * 20 + heightPos; })
+        //  .y(heightPos)
+        //  .x(10)
+        //  .render();
+//
+		//citetexts[1].lines = d3.selectAll('#d3plus-textBox-0 text').size()
+		//new d3plus.TextBox()
+        //  .data([citetexts[1]])
+        //  .select(downloadSvg.node())
+        //  .fontSize(13)
+        //  .fontFamily('')
+        //  .fontColor('4a4a4a')
+        //  .width(width)
+        //  //.x(function(d, i) { return i * 250; })
+        //  //.y(function(d, i) { return i * 20 + heightPos; })
+        //  .y(heightPos)
+        //  .x(10)
+        //  .render();
+//
+        //citetexts[2].lines = d3.selectAll('#d3plus-textBox-0 text').size() + citetexts[1].lines
+
 		new d3plus.TextBox()
-          .data([citetexts[0]])
+          .data([citetexts[2]])
           .select(downloadSvg.node())
           .fontSize(13)
           .fontFamily('')
           .fontColor('4a4a4a')
           .width(width)
           //.x(function(d, i) { return i * 250; })
-          //.y(function(d, i) { return i * 20 + heightPos; })
+          //.y(function(d, i) { return ((d.lines) * 20) + heightPos; })
           .y(heightPos)
-          .x(10)
-          .render();
-
-		citetexts[1].lines = d3.selectAll('#d3plus-textBox-0 text').size()
-		new d3plus.TextBox()
-          .data([citetexts[1]])
-          .select(downloadSvg.node())
-          .fontSize(13)
-          .fontFamily('')
-          .fontColor('4a4a4a')
-          .width(width)
-          //.x(function(d, i) { return i * 250; })
-          //.y(function(d, i) { return i * 20 + heightPos; })
-          .y(heightPos)
-          .x(10)
-          .render();
-
-        citetexts[2].lines = d3.selectAll('#d3plus-textBox-0 text').size() + citetexts[1].lines
-
-		new d3plus.TextBox()
-          .data(citetexts)
-          .select(downloadSvg.node())
-          .fontSize(13)
-          .fontFamily('')
-          .fontColor('4a4a4a')
-          .width(width)
-          //.x(function(d, i) { return i * 250; })
-          .y(function(d, i) { return ((d.lines) * 20) + heightPos; })
           .x(10)
           .render();
 
