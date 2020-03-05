@@ -333,17 +333,50 @@ function downloadImage() {
             downloadSvg.select(".svg-container").attr("transform", "translate(50,100)");
         }
 
-//        var popup = $('#popup-footer p');
-//        downloadSvg.append('text')
-//            .text($(popup[0]).text())
-//            .attr("style", "font-size: 13px; fill: #4a4a4a;")
-//            .attr('transform', 'translate( 10,' + heightPos + ')');
-//        downloadSvg.append('text')
-//            .text($(popup[1]).text())
-//            .attr("style", "font-size: 13px; fill: #4a4a4a;")
-//            .attr('transform', 'translate( 10,' + (heightPos+16) + ')');
+        let popup = $('#popup-footer p');
+		let citetexts = Array.from(popup.map(i => ({'text': popup[i].textContent})))
 
+		citetexts[1].lines = 0
+		new d3plus.TextBox()
+          .data([citetexts[0]])
+          .select(downloadSvg.node())
+          .fontSize(13)
+          .fontFamily('')
+          .fontColor('4a4a4a')
+          .width(width)
+          //.x(function(d, i) { return i * 250; })
+          //.y(function(d, i) { return i * 20 + heightPos; })
+          .y(heightPos)
+          .x(10)
+          .render();
 
+		citetexts[1].lines = d3.selectAll('#d3plus-textBox-0 text').size()
+		new d3plus.TextBox()
+          .data([citetexts[1]])
+          .select(downloadSvg.node())
+          .fontSize(13)
+          .fontFamily('')
+          .fontColor('4a4a4a')
+          .width(width)
+          //.x(function(d, i) { return i * 250; })
+          //.y(function(d, i) { return i * 20 + heightPos; })
+          .y(heightPos)
+          .x(10)
+          .render();
+
+        citetexts[2].lines = d3.selectAll('#d3plus-textBox-0 text').size() + citetexts[1].lines
+
+		new d3plus.TextBox()
+          .data(citetexts)
+          .select(downloadSvg.node())
+          .fontSize(13)
+          .fontFamily('')
+          .fontColor('4a4a4a')
+          .width(width)
+          //.x(function(d, i) { return i * 250; })
+          .y(function(d, i) { return ((d.lines) * 20) + heightPos; })
+          .x(10)
+          .render();
 
         var html = downloadSvg.node().outerHTML;
         var svgBlob = new Blob([html], {type: "image/svg+xml;charset=utf-8"});
