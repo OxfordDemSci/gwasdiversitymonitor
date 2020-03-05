@@ -282,7 +282,7 @@ function downloadImage() {
             downloadSvg.select('.countries').attr('transform', 'translate(0,150)');
             downloadSvg.select('.legend').attr('transform', 'translate(0, 155)');
             downloadSvg.selectAll('.wm-legend-text').attr("style", "font-size: 13px; fill: #4a4a4a;");
-            heightPos = height+300;
+            heightPos = height+350;
         }
 
         if(graph.attr('id') === 'doughnutGraph') {
