@@ -24,14 +24,12 @@ $(window).scroll(function() {
 
 // Pop up
 
-var footerPopup = $('#popup-footer');
-
-function launchPopup() {
-    footerPopup.addClass('active');
+function launchPopup(id) {
+    document.getElementById(id).classList.add('active');
 }
 
-function hidePopup() {
-    footerPopup.removeClass('active');
+function hidePopup(id) {
+	document.getElementById(id).classList.remove('active');
 }
 
 
