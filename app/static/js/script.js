@@ -372,7 +372,7 @@ function downloadImage() {
           .fontSize(13)
           .fontFamily('')
           .fontColor('4a4a4a')
-          .width(width)
+          .width(downloadSvg.attr("width") - 20)
           //.x(function(d, i) { return i * 250; })
           //.y(function(d, i) { return ((d.lines) * 20) + heightPos; })
           .y(heightPos)
