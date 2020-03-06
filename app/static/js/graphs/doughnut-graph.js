@@ -6,11 +6,13 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         width = 270 - margin,
         height = 324 - margin;
 
+	let svg_id = 'doughnutSVG'
+    let svg_selector = `#${svg_id}`
     d3.select('#doughnutGraph svg').remove();
 
     let mainSvg = d3.select("#doughnutGraph")
         .append("svg")
-        .attr("id", "doughnutSVG")
+        .attr("id", svg_id)
         .attr("class", "term-all")
         .attr("width", width)
         .attr("height", height);
@@ -138,6 +140,8 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             drawDoughnutAssociation(data['doughnut_associations'], currentYear, parentTerm);
         }
     });
+
+	d3.select('#doughnut-graph-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
 
     associationSwitch.addEventListener('change', function() {
         let associationLabel = document.getElementById('associationLabel');

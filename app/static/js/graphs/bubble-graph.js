@@ -20,10 +20,12 @@ function drawBubbleGraph(selector, data, replication) {
         height = graphHeight - margin.top - margin.bottom;
 
     sanitiseSVG(selector);
+    let svg_id = 'bubbleSVG'
+    let svg_selector = `#${svg_id}`
 
     var mainSvg = d3.select(selector)
         .append("svg")
-        .attr("id", "bubbleSVG")
+        .attr("id", svg_id)
         .attr("class", "term-all")
         .attr("height", height + margin.top + margin.bottom);
 
@@ -112,7 +114,7 @@ function drawBubbleGraph(selector, data, replication) {
     $(selector).find(".ancestry-filter .option").click(function() {
         $(this).toggleClass("active");
         var filter = $(this).attr("dataFilter");
-        var parentSVG = $("#bubbleSVG");
+        var parentSVG = $(svg_selector);
 
         if (filter === "all") {
             $.each(parentSVG.attr("class").split(" "), function(index, value) {
@@ -133,7 +135,7 @@ function drawBubbleGraph(selector, data, replication) {
 
     $(selector).find(".filter select[name='parentTerms']").change(function() {
         var selected = $(this).find('option:selected');
-        var parentSVG = $("#bubbleSVG");
+        var parentSVG = $(svg_selector);
 
         $.each(parentSVG.attr("class").split(" "), function(index, value) {
             if(value.indexOf("term-") !== -1) {
@@ -154,13 +156,13 @@ function drawBubbleGraph(selector, data, replication) {
         var selected = $(this).val();
 
         if(selected.length == 0) {
-            $("#bubbleSVG #bubbleData circle").removeClass("disabled opaque");
+            $(`${svg_selector} #bubbleData circle`).removeClass("disabled opaque");
         } else {
-            $("#bubbleSVG #bubbleData circle").not(function(index, element) {
+            $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
                 return selected.includes(element.getAttribute("trait"))
             }).addClass("disabled");
 
-            var selectedBubbles = $("#bubbleSVG #bubbleData circle").not(function(index, element) {
+            var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
                 return !selected.includes(element.getAttribute("trait"))
             });
 
@@ -202,6 +204,8 @@ function drawBubbleGraph(selector, data, replication) {
     $('#cb2').change(function() {
         $('.ancestry-filter .btn').removeClass('active');
     })
+
+    d3.select('#bubble-graph-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
 
     var svgs = bubbleGraph.find('svg');
     if (svgs.length > 1) {

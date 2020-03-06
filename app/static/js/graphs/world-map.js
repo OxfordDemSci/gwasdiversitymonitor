@@ -1,4 +1,8 @@
 function drawWorldMapChart(data, withMetric) {
+	let selector = "#worldMap"
+	let svg_id = 'worldMapSVG'
+    let svg_selector = `#${svg_id}`
+
     if (withMetric === undefined) {
         window.withMetric = false;
     } else {
@@ -107,6 +111,7 @@ function drawWorldMapChart(data, withMetric) {
 
     let mainSvg = d3.select("#worldMap")
         .append("svg")
+        .attr('id', svg_id)
         .attr("width", width)
         .attr("height", height);
 
@@ -430,6 +435,8 @@ function drawWorldMapChart(data, withMetric) {
     let backRect = d3.select('.back-rect');
     backRect.attr('width', width);
     backRect.attr('height', height);
+
+    d3.select('#world-map-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
 
     function applyMobileSettings() {
         if (isMobile) {

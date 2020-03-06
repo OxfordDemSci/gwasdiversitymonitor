@@ -9,7 +9,10 @@ function drawTimeSeries(json, id, studies, replication) {
     var margin = {top: 30, bottom: 30, left: 40, right: 30};
     var width = timeSeries.width() - margin.left - margin.right;
     var height = 340 - margin.top - margin.bottom;
-    var mainSvg = d3.select(id).append('svg');
+    let selector = id
+	let svg_id = 'timeSeriesSVG'
+    let svg_selector = `#${svg_id}`
+    var mainSvg = d3.select(id).append('svg').attr('id', svg_id);
     var tickMax = 6;
 
     if(studies) {
@@ -78,6 +81,7 @@ function drawTimeSeries(json, id, studies, replication) {
     if (svgs.length > 1) {
         svgs[0].parentNode.removeChild(svgs[0].parentNode.childNodes[5]);
     }
+    d3.select('#time-series-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
 }
 
 function addGrid(svg, width, tickMax, yAxis) {

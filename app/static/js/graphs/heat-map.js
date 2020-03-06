@@ -6,8 +6,13 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
         width = 295 - margin.left - margin.right,
         height = 387 - margin.top - margin.bottom;
 
+	let selector = "#heatMap"
+	let svg_id = 'heatmapSVG'
+    let svg_selector = `#${svg_id}`
+
     let mainSvg = d3.select("#heatMap")
         .append("svg")
+        .attr("id", svg_id)
         .attr("width", width)
         .attr("height", height);
 
@@ -77,6 +82,8 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
             document.querySelector('#heatMap svg').remove();
         }
     }
+
+	d3.select('#heat-map-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
 
     function drawLogScaleColour(range, logColour_scale, maxValue) {
         let legend = svg.append('g').attr('class', 'log-colour-scale');

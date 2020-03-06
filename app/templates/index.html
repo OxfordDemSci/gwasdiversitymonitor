@@ -37,9 +37,11 @@
         </div>
 
         <div class="tile col-xs-12 col-sm-6 col-lg-3">
-            <div class="box metric-stage doughnut-graph" id="doughnutGraph">
+            {% with graph_id='doughnutGraph' %}
+            <div class="box metric-stage doughnut-graph" id={{graph_id}}>
                 {% include 'tiles/doughnut-graph.html' %}
             </div>
+            {% endwith %}
         </div>
 
     </div>
@@ -47,6 +49,7 @@
     {% include 'components/logo-download.html' %}
 
     <div id="downloadShell" style="display: none;"></div>
+    <canvas id="downloadCanvas" style="display: none;"></canvas>
 
     <script src="{{ url_for('static', filename='js/graphs/time-series.js') }}"></script>
     <script src="{{ url_for('static', filename='js/graphs/world-map.js') }}"></script>
@@ -60,7 +63,6 @@
             drawBubbleGraph("#bubbleGraph", {{ bubbleGraph|tojson }});
             drawHeatMap({{ heatMap|tojson }}, false, false, {{ ancestriesOrdered|tojson }});
             drawDoughnutGraph("#doughnutGraph", {{ doughnutGraph|tojson }}, false, false);
-            downloadImage();
             setDescription();
         });
 
