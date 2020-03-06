@@ -31,7 +31,7 @@
         <button class="next icon" onclick="dgnextYear()"><i class="icon-chevron-right"></i></button>
         <button class="next icon" onclick="dglastestYear()"><i class="icon-double-chevron-right"></i></button>
     </div>
-    {% with filename='doughnut_df' %}
+    {% with filename='doughnut_df', id='doughnut-graph-controls' %}
         {% include 'components/three-icons.html' %}
     {% endwith %}
 </div>
