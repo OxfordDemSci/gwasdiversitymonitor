@@ -10,6 +10,7 @@ import csv
 import shutil
 import warnings
 import zipfile
+import math
 warnings.filterwarnings("ignore")
 
 
@@ -232,7 +233,7 @@ def make_heatmatrix(merged, stage, out_path):
         unique().tolist()
     count_df = pd.DataFrame(columns=col_list)
     sum_df = pd.DataFrame(columns=col_list)
-    for year in range(2008, 2020):
+    for year in range(2008, final_year+1):
         temp_merged = merged[(merged['STAGE'] == stage) &
                              (merged['DATE'].str.contains(str(year)))]
         temp_count_df = pd.DataFrame(index=index_list,
@@ -309,47 +310,50 @@ def make_heatmap_dfs(data_path):
 
 
 def make_choro_df(data_path):
-    ''' Create the dataframe for the choropleth map '''
-    Cat_Ancestry = pd.read_csv(os.path.join(data_path,
-                                            'catalog',
-                                            'synthetic',
-                                            'Cat_Anc_wBroader.tsv'),
-                               sep='\t')
-    annual_df = pd.DataFrame(columns=['Year', 'N', 'Count'])
-    Clean_CoR = make_clean_CoR(Cat_Ancestry, data_path)
-    countrylookup = pd.read_csv(os.path.join(data_path,
-                                             'support',
-                                             'Country_Lookup.csv'),
-                                index_col='Country')
-    for year in range(2008, 2020):
-        tempdf = Clean_CoR[Clean_CoR['Date'].str.contains(str(year))]
-        tempdf_sum = pd.DataFrame(
-            tempdf.groupby(['Cleaned Country'])['N'].sum())
-        tempdf_count = pd.DataFrame(
-            tempdf.groupby(['Cleaned Country'])['N'].count()).\
-            rename(columns={'N': 'Count'})
-        tempdf_merged = pd.merge(tempdf_sum, tempdf_count,
-                                 left_index=True, right_index=True)
-        tempdf_merged['Year'] = str(year)
-        country_merged = pd.merge(countrylookup, tempdf_merged,
-                                  left_index=True,
-                                  right_index=True)
-        country_merged = country_merged.reset_index()
-        country_merged['Count (%)'] = round((pd.to_numeric(
-                                             country_merged['Count']) /
+    import traceback
+    try:
+        ''' Create the dataframe for the choropleth map '''
+        Cat_Ancestry = pd.read_csv(os.path.join(data_path,
+                                                'catalog',
+                                                'synthetic',
+                                                'Cat_Anc_wBroader.tsv'),
+                                   sep='\t')
+        annual_df = pd.DataFrame(columns=['Year', 'N', 'Count'])
+        Clean_CoR = make_clean_CoR(Cat_Ancestry, data_path)
+        countrylookup = pd.read_csv(os.path.join(data_path,
+                                                 'support',
+                                                 'Country_Lookup.csv'),
+                                    index_col='Country')
+        for year in range(2008, final_year+1):
+            tempdf = Clean_CoR[Clean_CoR['Date'].str.contains(str(year))]
+            tempdf_sum = pd.DataFrame(
+                tempdf.groupby(['Cleaned Country'])['N'].sum())
+            tempdf_count = pd.DataFrame(
+                tempdf.groupby(['Cleaned Country'])['N'].count()).\
+                rename(columns={'N': 'Count'})
+            tempdf_merged = pd.merge(tempdf_sum, tempdf_count,
+                                     left_index=True, right_index=True)
+            tempdf_merged['Year'] = str(year)
+            country_merged = pd.merge(countrylookup, tempdf_merged,
+                                      left_index=True,
+                                      right_index=True)
+            country_merged = country_merged.reset_index()
+            country_merged['Count (%)'] = round((pd.to_numeric(
+                                                 country_merged['Count']) /
+                                                 pd.to_numeric(
+                                                 country_merged['Count']).sum())
+                                                * 100, 2)
+            country_merged['N (%)'] = round((pd.to_numeric(
+                                             country_merged['N']) /
                                              pd.to_numeric(
-                                             country_merged['Count']).sum())
+                                             country_merged['N'].sum()))
                                             * 100, 2)
-        country_merged['N (%)'] = round((pd.to_numeric(
-                                         country_merged['N']) /
-                                         pd.to_numeric(
-                                         country_merged['N'].sum()))
-                                        * 100, 2)
-        annual_df = annual_df.append(country_merged, sort=True)
-    annual_df = annual_df.reset_index().drop(['level_0'], axis=1)
-    del annual_df.index.name
-    annual_df.to_csv(os.path.join(data_path, 'toplot', 'choro_df.csv'))
-
+            annual_df = annual_df.append(country_merged, sort=True)
+        annual_df = annual_df.reset_index().drop(['level_0'], axis=1)
+#        del annual_df.index.name
+        annual_df.to_csv(os.path.join(data_path, 'toplot', 'choro_df.csv'))
+    except:
+        traceback.print_exc()
 
 def make_timeseries_df(Cat_Ancestry, data_path, savename):
     '''   Make the timeseries dataframes (both for ts1 and ts2) '''
@@ -360,16 +364,16 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
     Cat_Ancestry['Year'] = pd.to_numeric(Cat_Ancestry['Year'])
     Cat_Ancestry['Month'] = pd.to_numeric(Cat_Ancestry['Month'])
     broader_list = Cat_Ancestry['Broader'].unique().tolist()
-    ts_initial_sum = pd.DataFrame(index=range(2007, 2020),
+    ts_initial_sum = pd.DataFrame(index=range(2007, final_year+1),
                                   columns=broader_list)
-    ts_replication_sum = pd.DataFrame(index=range(2007, 2020),
+    ts_replication_sum = pd.DataFrame(index=range(2007, final_year+1),
                                       columns=broader_list)
-    ts_initial_count = pd.DataFrame(index=range(2007, 2020),
+    ts_initial_count = pd.DataFrame(index=range(2007, final_year+1),
                                     columns=broader_list)
-    ts_replication_count = pd.DataFrame(index=range(2007, 2020),
+    ts_replication_count = pd.DataFrame(index=range(2007, final_year+1),
                                         columns=broader_list)
     for ancestry in broader_list:
-        for year in range(2007, 2020):
+        for year in range(2007, final_year+1):
             temp_df = Cat_Ancestry[(Cat_Ancestry['Year'] == year) &
                                    (Cat_Ancestry['Broader'] == ancestry) &
                                    (Cat_Ancestry['STAGE'] == 'initial')]
@@ -448,7 +452,7 @@ def make_doughnut_df(data_path):
     merged = merged[merged['Broader'].notnull()]
     merged = merged[merged['parentterm'].notnull()]
     counter = 0
-    for year in range(2008, 2020):
+    for year in range(2008, final_year+1):
         for ancestry in merged['Broader'].unique().tolist():
             doughnut_df.at[counter, 'Broader'] = ancestry
             doughnut_df.at[counter, 'parentterm'] = 'All'
@@ -776,20 +780,29 @@ def zip_for_download(source, destination):
     except Exception as e:
         diversity_logger.debug('Problem zipping files: %s' %e)
 
+def determine_year(day):
+    ''' determines year, day is a datetime.date obj'''
+    return day.year if math.ceil(day.month/3.) > 2 else day.year-1
+#    if math.ceil(today.month/3.)>2:
+#        return today.year
+#    else:
+#        return today.year-1
+#    return year
 
 if __name__ == "__main__":
     logpath = os.path.abspath(os.path.join(__file__, '..', 'logging'))
     diversity_logger = setup_logging(logpath)
     data_path = os.path.abspath(os.path.join(__file__, '..', 'data'))
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
+    final_year = determine_year(datetime.date.today())
+    diversity_logger.info('final year is being set to: ' + str(final_year))
     try:
         download_cat(data_path, ebi_download)
         clean_gwas_cat(data_path)
         make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
         tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                           'Cat_Anc_wBroader.tsv'),
-                              sep='\t')
+                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
         make_timeseries_df(tsinput, data_path, 'ts1')
         tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
         make_timeseries_df(tsinput, data_path, 'ts2')
