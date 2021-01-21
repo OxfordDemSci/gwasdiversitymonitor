@@ -48,7 +48,7 @@ This work is free. You can redistribute it and/or modify it under the terms of t
 
 ### Acknowledgements
 
-We are grateful to the extensive help provided by [Global Initiative](https://www.global-initiative.com/) (and in particular to Jamie, Nynke, Veatriki, Alex, Lea and Quentin). Additional help and specific comments came from [Ian Knowles](https://github.com/ianknowles), [Yi Liu](https://github.com/YiLiu6240), [Molly Przeworski](https://przeworskilab.com/), [Ben Domingue](https://github.com/ben-domingue), [Sam Trejo](https://cepa.stanford.edu/people/sam-trejo) and the [Sociogenome](http://www.sociogenome.org) group more generally.
+We are grateful to the extensive help provided by [Global Initiative](https://www.global-initiative.com/) (and in particular to Jamie, Nynke, Veatriki, Alex, Lea and Quentin). Additional help and specific comments came from [Ian Knowles](https://github.com/ianknowles), [Yi Liu](https://github.com/YiLiu6240), [Jiani Yan](https://github.com/vallerrr), [Molly Przeworski](https://przeworskilab.com/), [Ben Domingue](https://github.com/ben-domingue), [Sam Trejo](https://cepa.stanford.edu/people/sam-trejo) and the [Sociogenome](http://www.sociogenome.org) group more generally.
 
 ### Future Versions
 
