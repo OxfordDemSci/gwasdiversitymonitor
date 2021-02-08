@@ -109,10 +109,12 @@ function drawBubbleGraph(selector, data, replication) {
         .attr("accession", function (d) { return d.ACCESSION })
         .attr("N", function (d) { return d.N })
         .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait.replace('>', 'more than').replace('<', 'less than') })
-        .attr("trait", function (d) { return d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase() });
+        .attr("trait", function (d) { return d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase() })
+        .attr("PatternSelection","NO")
+        .attr("ancestrySelection","NO");
 
     $(selector).find(".ancestry-filter .option").click(function() {
-        $(this).toggleClass("active");
+        $(this).toggleClass("active"); //if active exists, then delete ; if no, add it
         var filter = $(this).attr("dataFilter");
         var parentSVG = $(svg_selector);
 
@@ -130,11 +132,104 @@ function drawBubbleGraph(selector, data, replication) {
         parentSVG.toggleClass("ancestry-" + filter);
 
         var filters = parentSVG.attr("class");
-        reDrawBubbleGraph(data, filters, selector, yScale, sizeScale, tickMax);
+
+        reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, tickMax);//add xScale
+
+        //redraw the selected data
+        var controller = ""
+        if(parentSVG.attr("class").search("ancestry-" + filter) != -1){
+            controller = "delete";
+        }else{
+             controller = "add";
+        }
+
+        var selected=$(selector).find(".filter select[name='trait']").val()
+
+        if(selected.length>0){
+
+            //remove the bubbles added before
+                var selectedBefore = $(`${selector} #bubbleData circle`).not( function(index, element) {
+                if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
+                else{ return true;}
+               });
+
+
+                $(selectedBefore).remove();
+
+                var selectedBefore_pattern = $(`${selector} #bubbleData circle`).not(function(index, element) {
+                if( element.getAttribute("PatternSelection").search("NO") == -1 ){ return false;}
+                else{ return true;}
+               });
+
+                $(selectedBefore_pattern).remove();
+
+               //var total=$(`${selector} #bubbleData circle`)
+
+
+
+
+            var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
+                if(selected.includes(element.getAttribute("trait"))&& (controller == "delete") && (element.getAttribute("class").search(filter) == -1)){
+
+                    return false;}
+                 else if (selected.includes(element.getAttribute("trait")) && (controller == "add") && (element.getAttribute("class").search("disabled") == -1)){
+                   return false;}
+                else{ return true;}
+
+            });
+
+
+            for(i = 0; i < selectedBubbles.length; i++) {
+                var classAttr = $(selectedBubbles[i]).attr('class');
+                /*
+                if (classAttr.search("opaque") == -1){
+                    classAttr= classAttr +" opaque";
+                    window.alert("opaque added")
+                    }
+                    */
+                classAttr = [...new Set(classAttr.split(" "))].join(" ");
+
+                var cxAttr = $(selectedBubbles[i]).attr('cx');
+                //var cyAttr = $(selectedBubbles[i]).attr('cy');
+                //var rAttr = $(selectedBubbles[i]).attr('r');
+                var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
+                var authorAttr = $(selectedBubbles[i]).attr('author');
+                var accessionAttr = $(selectedBubbles[i]).attr('accession');
+                var nAttr = $(selectedBubbles[i]).attr('N');
+                var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
+                var traitAttr = $(selectedBubbles[i]).attr('trait');
+                var cyAttr = yScale(nAttr);
+                var rAttr = sizeScale(nAttr);
+                var patternAttr=$(selectedBubbles[i]).attr('PatternSelection');
+
+                bubbleDataGroup.append("circle")
+                    .attr("class", classAttr)
+                    .attr("onclick", "circleClick(evt);")
+                    .attr("onmouseover", "circleMouseOver(evt);")
+                    .attr("cx", cxAttr)
+                    //.attr("cy", function (nAttr) { return yScale(nAttr); })
+                    //.attr("r", function(nAttr){ return sizeScale(nAttr) })
+                    .attr("cy", cyAttr)
+                    .attr("r", rAttr)
+                    .attr("pubmedid", pubmedidAttr)
+                    .attr("author", authorAttr)
+                    .attr("accession", accessionAttr)
+                    .attr("N", nAttr)
+                    .attr("DiseaseOrTrait", diseaseOrTraitAttr)
+                    .attr("trait", traitAttr)
+                    .attr("PatternSelection",patternAttr)
+                    .attr("ancestrySelection","ANCESTRY");
+                //$(selectedBubbles[i]).remove();
+
+            }
+
+        }
+
+
     });
 
     $(selector).find(".filter select[name='parentTerms']").change(function() {
-        var selected = $(this).find('option:selected');
+        var selected_ = $(this).find('option:selected');
         var parentSVG = $(svg_selector);
 
         $.each(parentSVG.attr("class").split(" "), function(index, value) {
@@ -143,15 +238,110 @@ function drawBubbleGraph(selector, data, replication) {
             }
         });
 
-        parentSVG.addClass("term-" + selected.attr('value'));
+        parentSVG.addClass("term-" + selected_.attr('value'));
 
         var filters = parentSVG.attr("class");
-        reDrawBubbleGraph(data, filters, selector, yScale, sizeScale, tickMax);
+
+        reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, tickMax); //Add xScale
+
+        //redraw the selected data
+
+        var selected=$(selector).find(".filter select[name='trait']").val()
+
+
+        if(selected.length>0 || (filters.search("all")!= -1)){
+
+            //remove the bubbles added before
+                var selectedBefore_ancestry = $(`${selector} #bubbleData circle`).not(function(index, element) {
+                if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
+                else{ return true;}
+               });
+
+                $(selectedBefore_ancestry).remove();
+
+                var selectedBefore = $(`${selector} #bubbleData circle`).not(function(index, element) {
+                if( element.getAttribute("PatternSelection").search("NO") == -1 ){ return false;}
+                else{ return true;}
+               });
+
+                $(selectedBefore).remove();
+
+            var all_controller="";
+                if ( (selected.length>0) && filters.search("all")!= -1){
+                    all_controller="yes";
+                }
+
+            var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
+                if( selected.includes(element.getAttribute("trait")) && (element.getAttribute("class").search(selected_.attr('value')) !== -1)){
+                    return false;}
+                else if( (all_controller=="yes") && (element.getAttribute("class").search("disabled") == -1) ){
+                    return false;}
+                else{ return true;}
+
+            });
+
+
+            for(i = 0; i < selectedBubbles.length; i++) {
+                var classAttr = $(selectedBubbles[i]).attr('class');
+
+                if (classAttr.search("opaque") == -1){
+                    classAttr= classAttr +" opaque";
+
+                    }
+                classAttr = [...new Set(classAttr.split(" "))].join(" ");
+
+                var cxAttr = $(selectedBubbles[i]).attr('cx');
+                var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
+                var authorAttr = $(selectedBubbles[i]).attr('author');
+                var accessionAttr = $(selectedBubbles[i]).attr('accession');
+                var nAttr = $(selectedBubbles[i]).attr('N');
+                var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
+                var traitAttr = $(selectedBubbles[i]).attr('trait');
+                var cyAttr = yScale(nAttr);
+                var rAttr = sizeScale(nAttr);
+                var ancestryAttr=$(selectedBubbles[i]).attr('ancestrySelection');
+
+                bubbleDataGroup.append("circle")
+                    .attr("class", classAttr)
+                    .attr("onclick", "circleClick(evt);")
+                    .attr("onmouseover", "circleMouseOver(evt);")
+                    .attr("cx", cxAttr)
+                    .attr("cy", cyAttr)
+                    .attr("r", rAttr)
+                    .attr("pubmedid", pubmedidAttr)
+                    .attr("author", authorAttr)
+                    .attr("accession", accessionAttr)
+                    .attr("N", nAttr)
+                    .attr("DiseaseOrTrait", diseaseOrTraitAttr)
+                    .attr("trait", traitAttr)
+                    .attr("PatternSelection","Pattern")
+                    .attr("ancestrySelection",ancestryAttr);
+
+            }
+
+        }
+
+
+
     });
+
 
     $(selector).find(".filter select[name='trait']").change(function() {
 
         clearSelected();
+        var selectedBefore = $(`${selector} #bubbleData circle`).not( function(index, element) {
+                if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
+                else{ return true;}
+               });
+
+        $(selectedBefore).remove();
+
+        var selectedBefore_pattern = $(`${selector} #bubbleData circle`).not(function(index, element) {
+                if( element.getAttribute("PatternSelection").search("NO") == -1 ){ return false;}
+                else{ return true;}
+               });
+
+         $(selectedBefore_pattern).remove();
 
         var selected = $(this).val();
 
@@ -168,6 +358,7 @@ function drawBubbleGraph(selector, data, replication) {
 
             selectedBubbles.removeClass("disabled");
 
+
             for(i = 0; i < selectedBubbles.length; i++) {
                 var classAttr = $(selectedBubbles[i]).attr('class');
                 var cxAttr = $(selectedBubbles[i]).attr('cx');
@@ -179,7 +370,8 @@ function drawBubbleGraph(selector, data, replication) {
                 var nAttr = $(selectedBubbles[i]).attr('N');
                 var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
                 var traitAttr = $(selectedBubbles[i]).attr('trait');
-
+                var patternAttr=$(selectedBubbles[i]).attr("PatternSelection");
+                var ancestryAttr=$(selectedBubbles[i]).attr("ancestrySelection");
                 $(selectedBubbles[i]).remove();
                 bubbleDataGroup.append("circle")
                     .attr("class", classAttr + " opaque")
@@ -193,12 +385,16 @@ function drawBubbleGraph(selector, data, replication) {
                     .attr("accession", accessionAttr)
                     .attr("N", nAttr)
                     .attr("DiseaseOrTrait", diseaseOrTraitAttr)
-                    .attr("trait", traitAttr);
+                    .attr("trait", traitAttr)
+                    .attr("PatternSelection",patternAttr)
+                    .attr("ancestrySelection",ancestryAttr);
+
             }
 
         }
 
     });
+
 
     // When click on filter stage
     $('#cb2').change(function() {
@@ -289,10 +485,21 @@ function clearSelected() {
     $("#bubbleGraph .details-zone").removeClass('active');
 }
 
-function reDrawBubbleGraph(data, filters, selector, yScale, sizeScale, tickMax) {
+function reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, tickMax){
+    clearSelected()
+
     var svg = d3.select(selector);
     var max = getDataMax(data, filters);
+    var minYear = getYear(data)['minYear'];
+    var maxYear = getYear(data)['maxYear'];
+    var selected=$(selector).find(".filter select[name='trait']").val()
+    var disabled_switch=''
+
+
+    xScale.domain([minYear, maxYear]);
+
     yScale.domain([0, max]);
+
     sizeScale.domain([0, max]);
 
     svg.select(".axis-y")
@@ -303,8 +510,31 @@ function reDrawBubbleGraph(data, filters, selector, yScale, sizeScale, tickMax) 
         .selectAll('circle')
         .data(data)
         .transition().duration(500).ease(d3.easeLinear)
+
+        .attr("class", function (d) {
+        if ((selected.length!=0) && !selected.includes(d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase())){
+            disabled_switch=' disabled'
+        }else if (selected.length==0){
+            disabled_switch=''
+        }else{
+            disabled_switch=' opaque'
+        }
+        return d.Broader.replace(' ', '-').replace('/', '-').replace(' ', '-').replace(' ', '-').toLowerCase() + " " +
+            d.parentterm.replace(/, /g, ',').replace(/ /g, '-').replace(/,/g, ' ').toLowerCase()+ disabled_switch;
+    })
+        .attr("onclick", "circleClick(evt);")
+        .attr("onmouseover", "circleMouseOver(evt);")
+        .attr("cx", function (d) { return xScale(new Date(d.DATE)); })
         .attr("cy", function (d) { return yScale(d.N); })
-        .attr("r", function(d){ return sizeScale(d.N) });
+        .attr("r", function(d){ return sizeScale(d.N) })
+        .attr("pubmedid", function (d) { return d.PUBMEDID })
+        .attr("author", function (d) { return d.AUTHOR })
+        .attr("accession", function (d) { return d.ACCESSION })
+        .attr("N", function (d) { return d.N })
+        .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait.replace('>', 'more than').replace('<', 'less than') })
+        .attr("trait", function (d) { return d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase() })
+        .attr("PatternSelection","NO")
+        .attr("ancestrySelection","NO");
 }
 
 function getYear(data) {
@@ -312,6 +542,7 @@ function getYear(data) {
     var maxYear = new Date('1000-01-01');
 
     for(i = 0; i < data.length; i++) {
+
         var date = new Date($(data[i])[0]['DATE']);
 
         if(date < minYear) {
