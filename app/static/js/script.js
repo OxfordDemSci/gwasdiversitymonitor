@@ -21,7 +21,6 @@ $(window).scroll(function() {
 	}
 });
 
-
 // Pop up
 
 function imagePopup(id, container, svg_id) {
@@ -228,34 +227,36 @@ function downloadImage(selector, svg_selector, png) {
 	}
 
 	if(graph.attr('id') === 'bubbleGraph') {
-		downloadSvg.attr('height', '550').attr('width', '950');
-		downloadSvg.select('rect.white-rect').attr('height', '550').attr('width', '950');
+		downloadSvg.attr('height', '550').attr('width', width+240); //from 950 to width+240
+		downloadSvg.select('rect.white-rect').attr('height', '550').attr('width', width+240);//from 950 to width+240
+	    heightPos = 470; //add this line
 	}
 
 	if(graph.attr('id') === 'timeSeries') {
-		downloadSvg.attr('height', '550').attr('width', '700');
-		downloadSvg.select('rect.white-rect').attr('height', '550').attr('width', '700');
+		downloadSvg.attr('height', '550').attr('width', width+250); //from 950 to width+250
+		downloadSvg.select('rect.white-rect').attr('height', '550').attr('width', width+250); //from 950 to width+250
 		downloadSvg.selectAll('.line path').attr('style', 'stroke-dasharray: 3; fill: none; stroke: #78909c; stroke-width: 2px;');
-		heightPos = height+70;
+		heightPos = 450;
 	}
 
 	if(graph.attr('id') === 'heatMap') {
-		downloadSvg.attr('height', '600').attr('width', '550');
+
+		downloadSvg.attr('height', '650').attr('width', '550');
 		downloadSvg.select('rect.white-rect').attr('height', '600').attr('width', '550');
 		downloadSvg.selectAll('.heat-map-x-axis-legend-item').attr("style", "font-size: 13px; fill: #4a4a4a;");
 		downloadSvg.selectAll('.log-colour-scale text').attr("style", "font-size: 12px; fill: #4a4a4a;");
 		downloadSvg.selectAll('.heat-map-y-axis-legend-item').attr("style", "font-size: 13px; color: #4a4a4a;");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-0').attr("x", "5");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-1').attr("x", "7");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-1 tspan').attr("x", "5");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-2').attr("x", "5");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-2 tspan').attr("x", "5");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-3').attr("x", "75");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-3 tspan').attr("x", "73");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-4').attr("x", "40");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-4 tspan').attr("x", "80");
-		downloadSvg.selectAll('.heat-map-x-axis-legend-item-5').attr("x", "2");
-		heightPos = height+150;
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-0').attr("x", "-1");//from 5 to -1
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-1').attr("x", "6");//from 7 to 6
+		//downloadSvg.selectAll('.heat-map-x-axis-legend-item-1 tspan').attr("x", "5");
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-2').attr("x", "3"); //from 5 to 3
+		//downloadSvg.selectAll('.heat-map-x-axis-legend-item-2 tspan').attr("x", "5");
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-3').attr("x", "67");//from 75 to 67
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-3 tspan').attr("x", "59"); // from 73 to 59
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-4').attr("x", "31"); //from 40 to 31
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-4 tspan').attr("x", "77"); //from 80 to 77
+		downloadSvg.selectAll('.heat-map-x-axis-legend-item-5').attr("x", "-5"); //from 2 to -5
+		heightPos = 400+125; //from height+150 to 400+150=550
 
 		// Redraw y-axis
 		var yAxisLegend = svg.find('.heat-map-y-axis-legend-item');
@@ -279,15 +280,20 @@ function downloadImage(selector, svg_selector, png) {
 		});
 	}
 
-	if(graph.attr('id') === 'worldMap') {
+    if(graph.attr('id') === 'worldMap') {
 		var svgContainer = $('#worldMap .svg-container');
-		downloadSvg.attr('height', '850').attr('width', '1000');
-		downloadSvg.select('rect.white-rect').attr('height', '850').attr('width', '1000');
-		downloadSvg.select('.back-rect').attr('height', '530').attr('width', '800').attr('transform', 'translate(-50,0)');
-		downloadSvg.select('.countries').attr('transform', 'translate(0,150)');
-		downloadSvg.select('.legend').attr('transform', 'translate(0, 155)');
+		downloadSvg.attr('height', '750').attr('width', '801');//height from 850 to 750, width from 1000 to 801
+		downloadSvg.select('rect.white-rect').attr('height', '750').attr('width', '801');//height from 850 to 750, width from 1000 to 801
+		downloadSvg.select('.back-rect').attr('height', '540').attr('width', '800').attr('transform', 'translate(-50,0)');
+		downloadSvg.select('.countries').attr('transform', 'translate(-50,130),scale('+800/width+')');//add scale('+800/width+')'
+		//add the if sentence
+		if (height+150*700/width >=600){
+		    downloadSvg.select('.legend').attr('transform', 'translate(0,'+(180*700/width-50)+')');
+		}else{
+		    downloadSvg.select('.legend').attr('transform', 'translate(0,'+180*800/width+')');
+		}
 		downloadSvg.selectAll('.wm-legend-text').attr("style", "font-size: 13px; fill: #4a4a4a;");
-		heightPos = height+350;
+		heightPos = 650; //from 350 to 530+120=650
 	}
 
 	if(graph.attr('id') === 'doughnutGraph') {
@@ -295,28 +301,32 @@ function downloadImage(selector, svg_selector, png) {
 		downloadSvg.select('rect.white-rect').attr('height', '550').attr('width', '400');
 		downloadSvg.selectAll('.doughnut-legend-rect:nth-child(n+4)').attr("x", "180");
 		downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"], .doughnut-legend-text[data-title="hispanic-or-latin-american"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="african-american-or-afro-caribbean"] tspan, .doughnut-legend-text[data-title="hispanic-or-latin-american"] tspan, .doughnut-legend-text[data-title="other-mixed"] tspan').attr("x", "220");
-		downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "305");
-		downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "275");
+		downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "318");//x from 305 to 318
+		downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "279"); //x from 275 to 279
 		downloadSvg.selectAll('.doughnut-legend-text').attr("style", "font-size: 13px; fill: #4a4a4a;");
 		downloadSvg.select('.doughnut-main-title').attr("style", "font-size: 16px; fill: #4a4a4a;");
 		downloadSvg.select('.doughnut-association-title').attr("style", "font-size: 16px; fill: #4a4a4a;");
 		downloadSvg.select('.svg-container').attr('transform', 'translate(130,200)');
-		downloadSvg.select('.svg-container-2').attr('transform', 'translate(520,200)');
 		downloadSvg.select('.main-title').text(graph.find('.doughnut-graph-header > h3').text());
 		downloadSvg.select('.sub-title').text(graph.find('.doughnut-graph-header > small').text() + ' - ' + parentTerm + ' - ' + year);
 		downloadSvg.select('.doughnut-legend').attr('transform', 'translate(0,100)');
-		heightPos = height+120;
+		heightPos = 444;//from height+120 to 324+120=444
 		if (graph.find('.doughnut-graph-filter-association-title').hasClass('active')) {
+		    if( height>= 350){
+                downloadSvg.select('.svg-container-2').attr("style", "transform: translate(520px,200px) "); //remains to be edited
+            }else{
+                downloadSvg.select('.svg-container-2').attr('transform', 'translate(520,200)');
+            }
 			downloadSvg.attr('height', '550').attr('width', '700');
 			downloadSvg.select('rect.white-rect').attr('height', '550').attr('width', '700');
 			downloadSvg.select('.doughnut-legend').attr('transform', 'translate(200,100)');
 			downloadSvg.selectAll('.doughnut-legend-rect:nth-child(n+4)').attr("x", "210");
 			downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"], .doughnut-legend-text[data-title="hispanic-or-latin-american"], .doughnut-legend-text[data-title="other-mixed"], .doughnut-legend-text[data-title="african-american-or-afro-caribbean"] tspan, .doughnut-legend-text[data-title="hispanic-or-latin-american"] tspan, .doughnut-legend-text[data-title="other-mixed"] tspan').attr("x", "245");
-			downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "330");
-			downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-association').attr("x", "365");
-			downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "300");
-			downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-association').attr("x", "335");
-			downloadSvg.selectAll('.doughnut-legend-text[data-title="other-mixed"] .tspan-association').attr("x", "280");
+			downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-percentage').attr("x", "343");//x from 330 to 343
+			downloadSvg.selectAll('.doughnut-legend-text[data-title="african-american-or-afro-caribbean"] .tspan-association').attr("x", "378"); //x from 365 to 378
+			downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-percentage').attr("x", "304"); //x from 330 to 304
+			downloadSvg.selectAll('.doughnut-legend-text[data-title="hispanic-or-latin-american"] .tspan-association').attr("x", "341");//x from 335 to 341
+			downloadSvg.selectAll('.doughnut-legend-text[data-title="other-mixed"] .tspan-association').attr("x", "280");//x from 280 to 282
 			downloadSvg.append("g")
 				.attr("class", "second-title")
 				.attr("transform", "translate(400,40)")
@@ -435,3 +445,4 @@ function downloadImage(selector, svg_selector, png) {
 	}
 
 }
+

@@ -863,18 +863,23 @@ def make_parent_list(data_path):
 
 def zip_for_download(source, destination):
     """ Generates a zipfile for downloading """
+    mode = 'w'
     all_path = os.path.join(destination, 'gwasdiversitymonitor_download.zip')
     heat_path = os.path.join(destination, 'heatmap.zip')
     ts_path = os.path.join(destination, 'timeseries.zip')
     try:
-        for file_name in os.listdir(source):
-            with zipfile.ZipFile(all_path, 'a') as all_zip:
-                    all_zip.write(os.path.join(source, file_name), file_name)
-            if file_name.lower().startswith('heat'):
-                with zipfile.ZipFile(heat_path, 'a') as heat_zip:
+        with zipfile.ZipFile(all_path, mode) as all_zip:
+            for file_name in os.listdir(source):
+                all_zip.write(os.path.join(source, file_name), file_name)
+
+        with zipfile.ZipFile(heat_path, mode) as heat_zip:
+            for file_name in os.listdir(source):
+                if file_name.lower().startswith('heat'):
                     heat_zip.write(os.path.join(source, file_name), file_name)
-            elif file_name.lower().startswith('ts'):
-                with zipfile.ZipFile(ts_path, 'a') as ts_zip:
+
+        with zipfile.ZipFile(ts_path, mode) as ts_zip:
+            for file_name in os.listdir(source):
+                if file_name.lower().startswith('ts'):
                     ts_zip.write(os.path.join(source, file_name), file_name)
         diversity_logger.info('Build of the zipped Datasets: Complete')
     except Exception as e:
