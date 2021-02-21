@@ -5,7 +5,7 @@ app = Flask(__name__)
 app.config.from_object('config')
 
 #specify the Google Analytics key here
-app.config["GA_KEY"]='UA-152061027-1'
+app.config["GA_KEY"]=''
 
 #specify the Google Analytics key here
 app.config["GA_KEY"]=''
