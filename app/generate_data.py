@@ -873,8 +873,7 @@ def zip_for_download(source, destination):
                 all_zip.write(os.path.join(source, file_name), file_name)
 
         with zipfile.ZipFile(heat_path, mode) as heat_zip:
-            for file_name in os.listdir(source):
-                if file_name.lower().startswith('heat'):
+            for file_name in filter(lambda f: f.lower().startswith('heat'),  os.listdir(source)):
                     heat_zip.write(os.path.join(source, file_name), file_name)
 
         with zipfile.ZipFile(ts_path, mode) as ts_zip:
