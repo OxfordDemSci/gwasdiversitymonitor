@@ -877,8 +877,7 @@ def zip_for_download(source, destination):
                     heat_zip.write(os.path.join(source, file_name), file_name)
 
         with zipfile.ZipFile(ts_path, mode) as ts_zip:
-            for file_name in os.listdir(source):
-                if file_name.lower().startswith('ts'):
+            for file_name in filter(lambda f: f.lower().startswith('ts'),  os.listdir(source)):
                     ts_zip.write(os.path.join(source, file_name), file_name)
         diversity_logger.info('Build of the zipped Datasets: Complete')
     except Exception as e:
