@@ -687,6 +687,8 @@ def make_bubbleplot_df(data_path):
                                  "parentterm", "STAGE", "DATE","ACCESSION"])['DiseaseOrTrait'].\
             apply(', '.join).reset_index()
         merged = merged.sort_values(by='DATE', ascending=True)
+        merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
+            apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
         merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
         diversity_logger.info('Build of the bubble datasets: Complete')
     except Exception as e:
