@@ -6,7 +6,7 @@ services:
     container_name: gwas_nginx
     volumes:
       - ./:/var/www
-      - ./nginx.conf:/etc/nginx/conf.d/nginx.conf
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
     ports:
       - 81:80
     networks:
@@ -16,15 +16,29 @@ services:
   flask:
     build:
       context: ./
-      dockerfile: Dockerfile
-    container_name: gwas
+      dockerfile: flask.Dockerfile
+    container_name: gwas_flask
     command: gunicorn --config gunicorn_config.py wsgi:app
     volumes:
       - ./:/var/www
+      - gwas_data:/app/app/data:ro
     networks:
       my-network:
         aliases:
           - flask-app
+  cron:
+    build:
+      context: ./
+      dockerfile: cron.Dockerfile
+    container_name: gwas_cron
+    command: cron
+    volumes:
+      - gwas_data:/data
+    networks:
+      - my-network
 
 networks:
   my-network:
+
+volumes:
+  gwas_data:
