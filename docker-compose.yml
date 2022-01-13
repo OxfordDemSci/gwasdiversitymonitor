@@ -16,7 +16,7 @@ services:
   flask:
     build:
       context: ./
-      dockerfile: flask.Dockerfile
+      dockerfile: Dockerfile
     container_name: gwas_flask
     command: gunicorn --config gunicorn_config.py wsgi:app
     volumes:
@@ -26,19 +26,6 @@ services:
       my-network:
         aliases:
           - flask-app
-  cron:
-    build:
-      context: ./
-      dockerfile: cron.Dockerfile
-    container_name: gwas_cron
-    command: cron
-    volumes:
-      - gwas_data:/data
-    networks:
-      - my-network
 
 networks:
   my-network:
-
-volumes:
-  gwas_data:
