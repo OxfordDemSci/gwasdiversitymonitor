@@ -21,7 +21,6 @@ services:
     command: gunicorn --config gunicorn_config.py wsgi:app
     volumes:
       - ./:/var/www
-      - gwas_data:/app/app/data:ro
     networks:
       my-network:
         aliases:
