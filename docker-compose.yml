@@ -16,15 +16,34 @@ services:
   flask:
     build:
       context: ./
-      dockerfile: Dockerfile
+      dockerfile: flask.Dockerfile
     container_name: gwas_flask
     command: gunicorn --config gunicorn_config.py wsgi:app
     volumes:
       - ./:/var/www
+      - data:/app/app/data:ro
     networks:
       my-network:
         aliases:
           - flask-app
+#  cron:
+#    build:
+#      context: ./
+#      dockerfile: cron.Dockerfile
+#    container_name: gwas_cron
+#    command: cron
+#    volumes:
+#      - data:/app/data
+#    networks:
+#      - my-network
 
 networks:
   my-network:
+
+volumes:
+  data:
+    driver: local
+    driver_opts:
+      o: bind
+      type: none
+      device: /home/doug/git/OxfordDemSci/gwasdiversitymonitor/data

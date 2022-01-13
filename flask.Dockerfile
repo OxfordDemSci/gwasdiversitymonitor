@@ -14,7 +14,12 @@ RUN pip3 install gunicorn
 
 RUN pip3 install -r requirements.txt
 
-COPY . .
+# COPY . .
+COPY app app
+COPY config.py config.py
+COPY gunicorn_config.py gunicorn_config.py
+COPY gwasdiversitymonitor.iml gwasdiversitymonitor.iml
+COPY gwasdiversitymonitor.py gwasdiversitymonitor.py
+COPY wsgi.py wsgi.py
 
-# CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=5001"]
 # CMD [ "gunicorn", "--config", "gunicorn_config.py", "wsgi:app"]
