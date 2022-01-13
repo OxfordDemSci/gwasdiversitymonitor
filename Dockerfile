@@ -10,8 +10,11 @@ RUN python3 -m venv venv
 
 RUN . venv/bin/activate
 
+RUN pip3 install gunicorn
+
 RUN pip3 install -r requirements.txt
 
 COPY . .
 
-CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=5001"]
+# CMD [ "python3", "-m" , "flask", "run", "--host=0.0.0.0", "--port=5001"]
+CMD [ "gunicorn", "--bind" , "0.0.0.0:5001", "wsgi:app"]
