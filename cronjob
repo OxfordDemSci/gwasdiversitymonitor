@@ -1,0 +1,8 @@
+# /etc/cron.d/conjob: crontab entries for the daily GWAS data collection.
+
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin/python3
+
+# m h dom mon dow user  command
+* */1 * * * root python3 /app/generate_data.py
+

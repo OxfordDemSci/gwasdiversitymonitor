@@ -1,3 +1,4 @@
+# docker compose containers for flask app, nginx reverse proxy, and cron data collector with a shared data volume.
 version: '3.1'
 
 services:
@@ -26,16 +27,16 @@ services:
       my-network:
         aliases:
           - flask-app
-#  cron:
-#    build:
-#      context: ./
-#      dockerfile: cron.Dockerfile
-#    container_name: gwas_cron
-#    command: cron
-#    volumes:
-#      - data:/app/data
-#    networks:
-#      - my-network
+  cron:
+    build:
+      context: ./
+      dockerfile: cron.Dockerfile
+    container_name: gwas_cron
+    command: cron
+    volumes:
+      - data:/app/data
+    networks:
+      - my-network
 
 networks:
   my-network:

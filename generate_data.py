@@ -1,3 +1,5 @@
+# generate data: python script that does the daily GWAS data collection
+
 import pandas as pd
 import traceback
 import json
