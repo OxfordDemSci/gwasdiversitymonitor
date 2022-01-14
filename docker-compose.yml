@@ -32,7 +32,7 @@ services:
       context: ./
       dockerfile: cron.Dockerfile
     container_name: gwas_cron
-    command: cron
+    command: cron -f
     volumes:
       - data:/app/data
     networks:
