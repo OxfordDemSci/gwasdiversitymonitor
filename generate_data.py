@@ -46,7 +46,7 @@ def create_summarystats(data_path):
         usecols = ['PUBMEDID', 'DATE', 'FIRST AUTHOR', 'STUDY ACCESSION',
                    'DISEASE/TRAIT', 'MAPPED_TRAIT', 'ASSOCIATION COUNT',
                    'JOURNAL']
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
                                sep='\t',
                                low_memory=False,
@@ -56,7 +56,7 @@ def create_summarystats(data_path):
                                error_bad_lines=False,
                                dtype=dtypes
                                )
-        Cat_Full = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Full = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Full.tsv'),
                                sep='\t',
                                engine='python',
@@ -65,13 +65,13 @@ def create_summarystats(data_path):
                                warn_bad_lines=False,
                                error_bad_lines=False,
                                dtype={'P-VALUE': object})
-        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
                                                     'synthetic',
                                                     'Cat_Anc_wBroader.tsv'),
                                        '\t', index_col=False,
                                        low_memory=False)
         temp_bubble_df = pd.read_csv(os.path.join(data_path,
-                                                  'data/toplot', 'bubble_df.csv'),
+                                                  'toplot', 'bubble_df.csv'),
                                      sep=',', index_col=False, low_memory=False)
         sumstats = {}
 
@@ -126,7 +126,7 @@ def create_summarystats(data_path):
         sumstats['large_accesion_firstauthor'] = str(biggestauth.iloc[0])
         biggestpubmed = Cat_Anc_byN.loc[Cat_Anc_byN['N'] == int(lar_acc), 'PUBMEDID']
         sumstats['large_accesion_pubmed'] = int(biggestpubmed.iloc[0])
-        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
                                                     'synthetic', 'Cat_Anc_wBroader.tsv'),
                                        sep='\t',
                                        index_col=False,
@@ -300,14 +300,14 @@ def create_summarystats(data_path):
 
         sumstats['timeupdated'] = datetime.datetime.now().\
                                   strftime("%Y-%m-%d %H:%M:%S")
-        if os.path.exists(os.path.join(data_path, 'data/unmapped',
+        if os.path.exists(os.path.join(data_path, 'unmapped',
                                        'unmapped_diseases.txt')):
-            unmapped_dis = pd.read_csv(os.path.join(data_path, 'data/unmapped',
+            unmapped_dis = pd.read_csv(os.path.join(data_path, 'unmapped',
                                        'unmapped_diseases.txt'))
             sumstats['unmapped_diseases'] = len(unmapped_dis)
         else:
             sumstats['unmapped_diseases'] = 0
-        json_path = os.path.join(data_path, 'data/summary', 'summary.json')
+        json_path = os.path.join(data_path, 'summary', 'summary.json')
         with open(json_path, 'w') as outfile:
             json.dump(sumstats, outfile)
         diversity_logger.info('Build of the summary stats: Complete')
@@ -356,25 +356,25 @@ def make_heatmap_dfs(data_path):
         Make the heatmap dfs
     """
     try:
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
                                usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT'],
                                sep='\t')
-        Cat_Map = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
                                            'raw', 'Cat_Map.tsv'),
                               sep='\t',
                               usecols = ['Disease trait', 'Parent term'])
         Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
                                left_on='DISEASE/TRAIT',
                                right_on='Disease trait')
-        Cat_StudMap.to_csv(os.path.join(data_path, 'data/catalog', 'synthetic',
+        Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                         'Disease_to_Parent_Mappings.tsv'),
                            sep='\t')
         Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION',
                                    'DISEASE/TRAIT']].drop_duplicates()
         Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
         Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path,
-                                                    'data/catalog',
+                                                    'catalog',
                                                     'synthetic',
                                                     'Cat_Anc_wBroader.tsv'),
                                        sep='\t',
@@ -385,7 +385,7 @@ def make_heatmap_dfs(data_path):
         merged = pd.merge(Cat_StudMap, Cat_Anc_wBroader,
                           how='left', on='STUDY ACCESSION')
         merged.to_csv(os.path.join(data_path,
-                                   'data/catalog',
+                                   'catalog',
                                    'synthetic',
                                    'Cat_Anc_wBroader_withParents.tsv'),
                       sep='\t')
@@ -393,7 +393,7 @@ def make_heatmap_dfs(data_path):
             diversity_logger.debug('Wuhoh! There are some empty disease terms!')
             pd.Series(merged[merged['parentterm'].
                              isnull()]['DISEASE/TRAIT'].unique()).\
-                to_csv(os.path.join(data_path, 'data/unmapped',
+                to_csv(os.path.join(data_path, 'unmapped',
                                     'unmapped_diseases.txt'),
                        index=False)
         else:
@@ -402,8 +402,8 @@ def make_heatmap_dfs(data_path):
         merged["parentterm"] = merged["parentterm"].astype(str)
         merged["DATE"] = merged["DATE"].astype(str)
         make_heatmatrix(merged, 'initial', os.path.join(data_path,
-                                                        'data/toplot'))
-        make_heatmatrix(merged, 'replication', os.path.join(data_path, 'data/toplot'))
+                                                        'toplot'))
+        make_heatmatrix(merged, 'replication', os.path.join(data_path, 'toplot'))
         diversity_logger.info('Build of the heatmap dataset: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the heatmap dataset: Failed -- {e}')
@@ -414,14 +414,14 @@ def make_choro_df(data_path):
     """
     try:
         Cat_Ancestry = pd.read_csv(os.path.join(data_path,
-                                                'data/catalog',
+                                                'catalog',
                                                 'synthetic',
                                                 'Cat_Anc_wBroader.tsv'),
                                    sep='\t')
         annual_df = pd.DataFrame(columns=['Year', 'N', 'Count'])
         Clean_CoR = make_clean_CoR(Cat_Ancestry, data_path)
         countrylookup = pd.read_csv(os.path.join(data_path,
-                                                 'data/support',
+                                                 'support',
                                                  'Country_Lookup.csv'),
                                     index_col='Country')
         for year in range(2008, final_year+1):
@@ -446,7 +446,7 @@ def make_choro_df(data_path):
             country_merged['N (%)'] = n_pc
             annual_df = annual_df.append(country_merged, sort=True)
         annual_df = annual_df.reset_index().drop(['level_0'], axis=1)
-        annual_df.to_csv(os.path.join(data_path, 'data/toplot', 'choro_df.csv'))
+        annual_df.to_csv(os.path.join(data_path, 'toplot', 'choro_df.csv'))
         diversity_logger.info('Build of the choropleth dataset: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the choropleth dataset: Failed -- {e}')
@@ -486,22 +486,22 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
                 ts_rep_count.at[year, ancestry] = len(temp_df['N'])
         ts_init_sum_pc = ((ts_init_sum.T / ts_init_sum.T.sum()).T) * 100
         ts_init_sum_pc = ts_init_sum_pc.reset_index()
-        ts_init_sum_pc.to_csv(os.path.join(data_path, 'data/toplot',
+        ts_init_sum_pc.to_csv(os.path.join(data_path, 'toplot',
                                            savename + '_initial_sum.csv'),
                                  index=False)
         ts_init_count_pc = ((ts_init_count.T / ts_init_count.T.sum()).T)*100
         ts_init_count_pc = ts_init_count_pc.reset_index()
-        ts_init_count_pc.to_csv(os.path.join(data_path, 'data/toplot',
+        ts_init_count_pc.to_csv(os.path.join(data_path, 'toplot',
                                              savename + '_initial_count.csv'),
                                    index=False)
         ts_rep_sum_pc = ((ts_rep_sum.T /ts_rep_sum.T.sum()).T)*100
         ts_rep_sum_pc = ts_rep_sum_pc.reset_index()
-        ts_rep_sum_pc.to_csv(os.path.join(data_path, 'data/toplot',
+        ts_rep_sum_pc.to_csv(os.path.join(data_path, 'toplot',
                                           savename + '_replication_sum.csv'),
                                      index=False)
         ts_rep_count_pc = ((ts_rep_count.T / ts_rep_count.T.sum()).T)*100
         ts_rep_count_pc = ts_rep_count_pc.reset_index()
-        ts_rep_count_pc.to_csv(os.path.join(data_path, 'data/toplot',
+        ts_rep_count_pc.to_csv(os.path.join(data_path, 'toplot',
                                             savename + '_replication_count.csv'),
                                        index=False)
         diversity_logger.info('Build of the ts dataset: Complete')
@@ -512,26 +512,26 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
 def make_doughnut_df(data_path):
     """ Make the doughnut chart dataframe for use in main.py"""
     try:
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
                                sep='\t',
                                usecols = ['STUDY ACCESSION',
                                           'DISEASE/TRAIT',
                                           'ASSOCIATION COUNT'])
-        Cat_Map = pd.read_csv(os.path.join(data_path, 'data/catalog', 'raw',
+        Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog', 'raw',
                                            'Cat_Map.tsv'), sep='\t',
                               usecols = ['Disease trait', 'Parent term'])
         Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
                                left_on='DISEASE/TRAIT',
                                right_on='Disease trait')
-        Cat_StudMap.to_csv(os.path.join(data_path, 'data/catalog', 'synthetic',
+        Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                         'Disease_to_Parent_Mappings.tsv'),
                            sep='\t')
         Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION',
                                    'DISEASE/TRAIT', 'ASSOCIATION COUNT']]
         Cat_StudMap = Cat_StudMap.drop_duplicates()
         Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
-        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
                                                     'synthetic',
                                                     'Cat_Anc_wBroader.tsv'),
                                        sep='\t',
@@ -638,7 +638,7 @@ def make_doughnut_df(data_path):
                     counter = counter + 1
         doughnut_df['Broader'] = doughnut_df['Broader'].str.\
             replace('Hispanic/Latin American', 'Hispanic/L.A.')
-        doughnut_df.to_csv(os.path.join(data_path, 'data/toplot', 'doughnut_df.csv'))
+        doughnut_df.to_csv(os.path.join(data_path, 'toplot', 'doughnut_df.csv'))
         diversity_logger.info('Build of the doughnut datasets: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the doughnut datasets: Failed -- {e}')
@@ -647,24 +647,24 @@ def make_doughnut_df(data_path):
 def make_bubbleplot_df(data_path):
     """ Make data for the bubbleplot """
     try:
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
                                sep='\t',
                                usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT'])
-        Cat_Map = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
                                            'raw', 'Cat_Map.tsv'),
                               sep='\t',
                               usecols = ['Disease trait', 'Parent term'])
         Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
                                left_on='DISEASE/TRAIT',
                                right_on='Disease trait')
-        Cat_StudMap.to_csv(os.path.join(data_path, 'data/catalog', 'synthetic',
+        Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                         'Disease_to_Parent_Mappings.tsv'),
                            sep='\t')
         Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION', 'DISEASE/TRAIT']]
         Cat_StudMap = Cat_StudMap.drop_duplicates()
         Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
-        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
                                                     'synthetic',
                                                     'Cat_Anc_wBroader.tsv'),
                                        sep='\t',
@@ -689,7 +689,7 @@ def make_bubbleplot_df(data_path):
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
-        merged.to_csv(os.path.join(data_path, 'data/toplot', 'bubble_df.csv'))
+        merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
         diversity_logger.info('Build of the bubble datasets: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the bubble datasets: Failed -- {e}')
@@ -698,14 +698,14 @@ def make_bubbleplot_df(data_path):
 def clean_gwas_cat(data_path):
     """ Clean the catalog and do some general preprocessing """
     try:
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
                                header=0,
                                sep='\t',
                                encoding='utf-8',
                                index_col=False)
         Cat_Stud.fillna('N/A', inplace=True)
-        Cat_Anc = pd.read_csv(os.path.join(data_path, 'data/catalog',
+        Cat_Anc = pd.read_csv(os.path.join(data_path, 'catalog',
                                            'raw', 'Cat_Anc.tsv'),
                               header=0,
                               sep='\t',
@@ -721,7 +721,7 @@ def clean_gwas_cat(data_path):
         Cat_Anc_byN = pd.merge(Cat_Anc_byN,
                                Cat_Stud[['STUDY ACCESSION', 'DATE']],
                                how='left', on='STUDY ACCESSION')
-        cleaner_broad = pd.read_csv(os.path.join(data_path, 'data/support',
+        cleaner_broad = pd.read_csv(os.path.join(data_path, 'support',
                                                  'dict_replacer_broad.tsv'),
                                     sep='\t',
                                     header=0,
@@ -740,12 +740,12 @@ def clean_gwas_cat(data_path):
                                              unique()))
             Cat_Anc[Cat_Anc['Broader'].
                     isnull()]['BROAD ANCESTRAL'].\
-                to_csv(os.path.join(data_path, 'data/unmapped', 'unmapped_broader.txt'))
+                to_csv(os.path.join(data_path, 'unmapped', 'unmapped_broader.txt'))
         else:
             diversity_logger.info('No missing Broader terms! Nice!')
         Cat_Anc = Cat_Anc[Cat_Anc['Broader'].notnull()]
         Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
-        Cat_Anc.to_csv(os.path.join(data_path, 'data/catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
+        Cat_Anc.to_csv(os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
                        sep='\t',
                        index=False)
         diversity_logger.info('Clean of the raw GWAS Catalog datasets: Complete')
@@ -759,7 +759,7 @@ def make_clean_CoR(Cat_Anc, data_path):
     """
     try:
         with open(os.path.abspath(
-                  os.path.join(data_path, 'data/catalog', 'synthetic',
+                  os.path.join(data_path, 'catalog', 'synthetic',
                                'ancestry_CoR.csv')), 'w') as fileout:
             rec_out = csv.writer(fileout, delimiter=',', lineterminator='\n')
             rec_out .writerow(['Date', 'PUBMEDID', 'N', 'Cleaned Country'])
@@ -770,7 +770,7 @@ def make_clean_CoR(Cat_Anc, data_path):
                                        str(row['N']),
                                        row['COUNTRY OF RECRUITMENT']])
         Clean_CoR = pd.read_csv(os.path.abspath(
-                                os.path.join(data_path, 'data/catalog', 'synthetic',
+                                os.path.join(data_path, 'catalog', 'synthetic',
                                              'ancestry_CoR.csv')))
         cleaner = {'U.S.': 'United States',
                    'Gambia': 'Gambia, The',
@@ -787,7 +787,7 @@ def make_clean_CoR(Cat_Anc, data_path):
             Clean_CoR['Cleaned Country'] = Clean_CoR['Cleaned Country'].str.replace(key, value)
         Clean_CoR = Clean_CoR[Clean_CoR['Cleaned Country'] != 'NR']
         Clean_CoR.to_csv(os.path.abspath(
-                         os.path.join(data_path, 'data/catalog', 'synthetic',
+                         os.path.join(data_path, 'catalog', 'synthetic',
                                       'GWAScatalogue_CleanedCountry.tsv')),
                          sep='\t',
                          index=False)
@@ -802,7 +802,7 @@ def download_cat(data_path, ebi_download):
         r = requests.get(ebi_download + 'studies_alternative')
         if r.status_code == 200:
             catstud_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'data/catalog', 'raw',
+            with open(os.path.join(data_path, 'catalog', 'raw',
                                    'Cat_Stud.tsv'), 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of {catstud_name}: Complete')
@@ -811,7 +811,7 @@ def download_cat(data_path, ebi_download):
         r = requests.get(ebi_download + 'ancestry')
         if r.status_code == 200:
             catanc_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'data/catalog', 'raw',
+            with open(os.path.join(data_path, 'catalog', 'raw',
                                    'Cat_Anc.tsv'), 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of {catanc_name}: Complete')
@@ -820,7 +820,7 @@ def download_cat(data_path, ebi_download):
         r = requests.get(ebi_download + 'full')
         if r.status_code == 200:
             catfull_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'data/catalog', 'raw',
+            with open(os.path.join(data_path, 'catalog', 'raw',
                                    'Cat_Full.tsv'), 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of {catfull_name}: Complete')
@@ -833,7 +833,7 @@ def download_cat(data_path, ebi_download):
         file = 'gwas-efo-trait-mappings.tsv'
         r = s.get(ftpsite+subdom+file)
         if r.status_code == 200:
-            with open(os.path.join(data_path, 'data/catalog', 'raw',
+            with open(os.path.join(data_path, 'catalog', 'raw',
                                    'Cat_Map.tsv'), 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of efo-trait-mappings: Complete')
@@ -846,19 +846,19 @@ def download_cat(data_path, ebi_download):
 def make_disease_list(df):
     """ Makes a unique list of diseases and traits """
     uniq_dis_trait = pd.Series(df['DiseaseOrTrait'].unique())
-    uniq_dis_trait.to_csv(os.path.join(data_path, 'data/summary', 'uniq_dis_trait.txt'),
+    uniq_dis_trait.to_csv(os.path.join(data_path, 'summary', 'uniq_dis_trait.txt'),
                           header=False,
                           index=False)
 
 
 def make_parent_list(data_path):
     """ Makes a unique list of parent terms """
-    df = pd.read_csv(os.path.join(data_path, 'data/catalog', 'synthetic',
+    df = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                   'Cat_Anc_wBroader_withParents.tsv'),
                      sep='\t')
     uniq_parent = pd.Series(df[df['parentterm'].
                                notnull()]['parentterm'].unique())
-    uniq_parent.to_csv(os.path.join(data_path, 'data/summary', 'uniq_parent.txt'),
+    uniq_parent.to_csv(os.path.join(data_path, 'summary', 'uniq_parent.txt'),
                        header=False,
                        index=False)
 
@@ -891,9 +891,9 @@ def determine_year(day):
 
 
 if __name__ == "__main__":
-    logpath = os.path.abspath(os.path.join(__file__, '', 'logging'))
+    data_path = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data'))
+    logpath = os.path.abspath(os.path.join(data_path, 'logging'))
     diversity_logger = setup_logging(logpath)
-    data_path = os.path.abspath(os.path.join(__file__, '', 'data'))
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
@@ -902,7 +902,7 @@ if __name__ == "__main__":
         clean_gwas_cat(data_path)
         make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
-        tsinput = pd.read_csv(os.path.join(data_path, 'data/catalog', 'synthetic',
+        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                            'Cat_Anc_wBroader.tsv'),  sep='\t')
         make_timeseries_df(tsinput, data_path, 'ts1')
         tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
@@ -911,8 +911,8 @@ if __name__ == "__main__":
         make_heatmap_dfs(data_path)
         make_parent_list(data_path)
         sumstats = create_summarystats(data_path)
-        zip_for_download(os.path.join(data_path, 'data/toplot'),
-                         os.path.join(data_path, 'data/todownload'))
+        zip_for_download(os.path.join(data_path, 'toplot'),
+                         os.path.join(data_path, 'todownload'))
         diversity_logger.info('generate_data.py ran successfully!')
     except Exception as e:
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
