@@ -1,3 +1,5 @@
+# generate data: python script that does the daily GWAS data collection
+
 import pandas as pd
 import traceback
 import json
@@ -891,9 +893,9 @@ def determine_year(day):
 
 
 if __name__ == "__main__":
-    logpath = os.path.abspath(os.path.join(__file__, '..', 'logging'))
+    data_path = os.path.abspath(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'data'))
+    logpath = os.path.abspath(os.path.join(data_path, 'logging'))
     diversity_logger = setup_logging(logpath)
-    data_path = os.path.abspath(os.path.join(__file__, '..', 'data'))
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
