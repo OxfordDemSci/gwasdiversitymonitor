@@ -14,6 +14,7 @@ services:
       - my-network
     depends_on:
       - flask
+    restart: unless-stopped
   flask:
     build:
       context: ./
@@ -27,6 +28,7 @@ services:
       my-network:
         aliases:
           - flask-app
+    restart: unless-stopped
   cron:
     build:
       context: ./
@@ -37,6 +39,7 @@ services:
       - data:/app/data
     networks:
       - my-network
+    restart: unless-stopped
 
 networks:
   my-network:
