@@ -719,8 +719,12 @@ def make_bubbleplot_df(data_path):
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
-        merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
-
+        merged['cssclassname'] = merged['Broader'].replace('/', '-'). \
+                                     replace('\s', '-', regex=True).str.lower() + " " + \
+                                 merged['parentterm'].replace(',\s+', ',', regex=True). \
+                                     replace('\s', '-', regex=True). \
+                                     replace(',', '').str.lower()
+        merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].replace('>', 'more than').replace('<', 'less than')
 
         diversity_logger.info('Build of the bubble datasets: Complete')
     except Exception as e:
