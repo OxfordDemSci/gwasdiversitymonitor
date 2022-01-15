@@ -9,7 +9,6 @@ WORKDIR /app
 
 COPY requirements.txt requirements.txt
 COPY generate_data.py generate_data.py
-COPY data data
 COPY cronjob /etc/cron.d/cronjob
 
 RUN chmod 0644 /etc/cron.d/cronjob && crontab /etc/cron.d/cronjob
