@@ -15,6 +15,36 @@ import math
 warnings.filterwarnings("ignore")
 
 
+def json_converter(data_path):
+    """Convert the .csvs to .jsons to bypass dataLoader
+    Keeps the same names as the outputs returned in routes.py
+    @TODO: harmonize paths (and get rid of the awful __file__ stuff).
+    """
+
+    import json
+    import os
+    from DataLoader import DataLoader
+    dl = DataLoader()
+    plot_path = os.path.join(data_path, 'toplot')
+    def json_maker(name, output):
+        with open(name, 'w') as fp:
+            json.dump(output, fp)
+
+    for key, value in {'ancestries.json': dl.getAncestriesList(),
+                       'ancestriesOrdered.json': dl.getAncestriesListOrder(),
+                       'parentTerms.json': dl.getTermsList(),
+                       'traits.json': dl.getTraitsList(),
+                       'summary.json': dl.getSummaryStatistics(),
+                       'bubbleGraph.json': dl.getBubbleGraph(),
+                       'tsPlot.json': dl.getTSPlot(),
+                       'chloroMap.json': dl.getChloroMap(),
+                       'heatMap.json': dl.getHeatMap(),
+                       'doughnutGraph.json': dl.getDoughnutGraph(dl.getAncestriesListOrder()),
+                       'summary.json': dl.getSummaryStatistics()
+                      }.items():
+        json_maker(os.path.join(plot_path, key), value)
+
+
 def setup_logging(logpath):
     """ Set up the logging """
     if os.path.exists(logpath) is False:
@@ -690,6 +720,8 @@ def make_bubbleplot_df(data_path):
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
         merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
+
+
         diversity_logger.info('Build of the bubble datasets: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the bubble datasets: Failed -- {e}')
@@ -891,9 +923,9 @@ def determine_year(day):
 
 
 if __name__ == "__main__":
-    logpath = os.path.abspath(os.path.join(__file__, '..', 'logging'))
+    logpath = os.path.join(os.getcwd(), 'app', 'logging')
     diversity_logger = setup_logging(logpath)
-    data_path = os.path.abspath(os.path.join(__file__, '..', 'data'))
+    data_path = os.path.join(os.getcwd(), 'app', 'data')
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
@@ -913,6 +945,7 @@ if __name__ == "__main__":
         sumstats = create_summarystats(data_path)
         zip_for_download(os.path.join(data_path, 'toplot'),
                          os.path.join(data_path, 'todownload'))
+        json_converter(data_path)
         diversity_logger.info('generate_data.py ran successfully!')
     except Exception as e:
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
