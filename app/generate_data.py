@@ -15,6 +15,39 @@ import math
 warnings.filterwarnings("ignore")
 
 
+def json_converter():
+    """Convert the .csvs to .jsons to bypass dataLoader
+    Keeps the same names as the outputs returned in routes.py
+    Note: have to chdir('..') because generate_data.py is ran from
+    a lower level of the filetree
+    @TODO: harmonize paths (and get rid of the awful __file__ stuff).
+    """
+
+    import json
+    import os
+    from DataLoader import DataLoader
+    os.chdir('..')
+    dl = DataLoader()
+
+    def json_maker(name, output):
+        with open('app/data/toplot/' + name + '.json', 'w') as fp:
+            json.dump(output, fp)
+
+    for key, value in {'ancestries': dl.getAncestriesList(),
+                       'ancestriesOrdered': dl.getAncestriesListOrder(),
+                       'parentTerms': dl.getTermsList(),
+                       'traits': dl.getTraitsList(),
+                       'summary': dl.getSummaryStatistics(),
+                       'bubbleGraph': dl.getBubbleGraph(),
+                       'tsPlot': dl.getTSPlot(),
+                       'chloroMap': dl.getChloroMap(),
+                       'heatMap': dl.getHeatMap(),
+                       'doughnutGraph': dl.getDoughnutGraph(dl.getAncestriesListOrder()),
+                       'summary': dl.getSummaryStatistics()
+                      }.items():
+        json_maker(key, value)
+
+
 def setup_logging(logpath):
     """ Set up the logging """
     if os.path.exists(logpath) is False:
@@ -690,6 +723,8 @@ def make_bubbleplot_df(data_path):
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
         merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
+
+
         diversity_logger.info('Build of the bubble datasets: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the bubble datasets: Failed -- {e}')
@@ -913,6 +948,7 @@ if __name__ == "__main__":
         sumstats = create_summarystats(data_path)
         zip_for_download(os.path.join(data_path, 'toplot'),
                          os.path.join(data_path, 'todownload'))
+        json_converter()
         diversity_logger.info('generate_data.py ran successfully!')
     except Exception as e:
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
