@@ -719,18 +719,18 @@ def make_bubbleplot_df(data_path):
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
-        merged['cssclassname'] = merged['Broader'].replace('/', '-'). \
+        merged['cssclassname'] = merged['Broader'].replace('/', '-', regex=False). \
                                      replace('\s', '-', regex=True).str.lower() + " " + \
                                  merged['parentterm'].replace(',\s+', ',', regex=True). \
                                      replace('\s', '-', regex=True). \
-                                     replace(',', '').str.lower()
+                                     replace(',', ' ', regex=False).str.lower()
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait']. \
-            replace('>', 'more than'). \
-            replace('<', 'less than')
+            replace('>', 'more than', regex=False). \
+            replace('<', 'less than', regex=False)
         merged['trait'] = merged['DiseaseOrTrait']. \
             replace('\s', '-', regex=True). \
-            replace('(', '-'). \
-            replace(')', '-').str.lower()
+            replace('(', '-', regex=False). \
+            replace(')', '-', regex=False).str.lower()
 
         merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
         diversity_logger.info('Build of the bubble datasets: Complete')
