@@ -719,17 +719,17 @@ def make_bubbleplot_df(data_path):
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
-        merged['cssclassname'] = merged['Broader'].replace('/', '-', regex=False). \
+        merged['cssclassname'] = merged['Broader'].str.replace('/', '-', regex=False). \
                                      replace('\s', '-', regex=True).str.lower() + " " + \
-                                 merged['parentterm'].replace(',\s+', ',', regex=True). \
-                                     replace('\s', '-', regex=True). \
+                                 merged['parentterm'].str.replace(',\s+', ',', regex=True).str. \
+                                     replace('\s', '-', regex=True).str. \
                                      replace(',', ' ', regex=False).str.lower()
-        merged['DiseaseOrTrait'] = merged['DiseaseOrTrait']. \
-            replace('>', 'more than', regex=False). \
+        merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].str. \
+            replace('>', 'more than', regex=False).str. \
             replace('<', 'less than', regex=False)
-        merged['trait'] = merged['DiseaseOrTrait']. \
-            replace('\s', '-', regex=True). \
-            replace('(', '-', regex=False). \
+        merged['trait'] = merged['DiseaseOrTrait'].str. \
+            replace('\s', '-', regex=True).str. \
+            replace('(', '-', regex=False).str. \
             replace(')', '-', regex=False).str.lower()
 
         merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
