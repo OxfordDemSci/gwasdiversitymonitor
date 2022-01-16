@@ -719,7 +719,7 @@ def make_bubbleplot_df(data_path):
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
-        merged['cssclassname'] = merged['Broader'].str.replace('/', '-', regex=False). \
+        merged['cssclassname'] = merged['Broader'].str.replace('/', '-', regex=False).str. \
                                      replace('\s', '-', regex=True).str.lower() + " " + \
                                  merged['parentterm'].str.replace(',\s+', ',', regex=True).str. \
                                      replace('\s', '-', regex=True).str. \
