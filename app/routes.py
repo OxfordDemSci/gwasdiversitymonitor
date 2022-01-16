@@ -70,3 +70,13 @@ def getCSV(filename):
         mimetype="text/csv",
         headers={"Content-disposition":
                  "attachment; filename="+filename+".csv"})
+
+
+@app.route("/json/<filename>")
+def getplotjson(filename):
+    with open(f'app/data/toplot/{filename}') as fp:
+        json = fp.read()
+
+        return Response(
+            json,
+            mimetype="application/json")
