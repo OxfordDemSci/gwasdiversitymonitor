@@ -724,8 +724,15 @@ def make_bubbleplot_df(data_path):
                                  merged['parentterm'].replace(',\s+', ',', regex=True). \
                                      replace('\s', '-', regex=True). \
                                      replace(',', '').str.lower()
-        merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].replace('>', 'more than').replace('<', 'less than')
+        merged['DiseaseOrTrait'] = merged['DiseaseOrTrait']. \
+            replace('>', 'more than'). \
+            replace('<', 'less than')
+        merged['trait'] = merged['DiseaseOrTrait']. \
+            replace('\s', '-', regex=True). \
+            replace('(', '-'). \
+            replace(')', '-').str.lower()
 
+        merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'))
         diversity_logger.info('Build of the bubble datasets: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the bubble datasets: Failed -- {e}')
