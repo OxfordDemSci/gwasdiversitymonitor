@@ -2,7 +2,6 @@ certifi==2019.9.11
 chardet==3.0.4
 Click==7.0
 Flask==1.1.1
-freeze==1.0.10
 idna==2.8
 itsdangerous==1.1.0
 Jinja2==2.11.3
