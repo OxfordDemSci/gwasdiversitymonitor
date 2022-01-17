@@ -130,10 +130,7 @@ function drawBubbles(id) {
         .data(data)
         .enter()
         .append("circle")
-        .attr("class", function (d) {
-            return d.Broader.replace(' ', '-').replace('/', '-').replace(' ', '-').replace(' ', '-').toLowerCase() + " " +
-                d.parentterm.replace(/, /g, ',').replace(/ /g, '-').replace(/,/g, ' ').toLowerCase();
-        })
+        .attr("class", function (d) { return d.cssclassname })
         .attr("onclick", "circleClick(evt);")
         .attr("onmouseover", "circleMouseOver(evt);")
         .attr("cx", function (d) { return xScale(new Date(d.DATE)); })
@@ -143,8 +140,8 @@ function drawBubbles(id) {
         .attr("author", function (d) { return d.AUTHOR })
         .attr("accession", function (d) { return d.ACCESSION })
         .attr("N", function (d) { return d.N })
-        .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait.replace('>', 'more than').replace('<', 'less than') })
-        .attr("trait", function (d) { return d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase() })
+        .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait })
+        .attr("trait", function (d) { return d.trait })
         .attr("PatternSelection","NO")
         .attr("ancestrySelection","NO");
 
@@ -536,15 +533,14 @@ function reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, t
         .transition().duration(500).ease(d3.easeLinear)
 
         .attr("class", function (d) {
-        if ((selected.length!==0) && !selected.includes(d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase())){
+        if ((selected.length!==0) && !selected.includes(d.DiseaseOrTrait)){
             disabled_switch=' disabled'
         }else if (selected.length===0){
             disabled_switch=''
         }else{
             disabled_switch=' opaque'
         }
-        return d.Broader.replace(' ', '-').replace('/', '-').replace(' ', '-').replace(' ', '-').toLowerCase() + " " +
-            d.parentterm.replace(/, /g, ',').replace(/ /g, '-').replace(/,/g, ' ').toLowerCase()+ disabled_switch;
+        return d.cssclassname + disabled_switch;
     })
         .attr("onclick", "circleClick(evt);")
         .attr("onmouseover", "circleMouseOver(evt);")
@@ -555,8 +551,8 @@ function reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, t
         .attr("author", function (d) { return d.AUTHOR })
         .attr("accession", function (d) { return d.ACCESSION })
         .attr("N", function (d) { return d.N })
-        .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait.replace('>', 'more than').replace('<', 'less than') })
-        .attr("trait", function (d) { return d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase() })
+        .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait })
+        .attr("trait", function (d) { return d.trait })
         .attr("PatternSelection","NO")
         .attr("ancestrySelection","NO");
 }
