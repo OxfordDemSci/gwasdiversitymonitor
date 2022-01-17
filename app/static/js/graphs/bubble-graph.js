@@ -534,9 +534,9 @@ function reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, t
         .transition().duration(500).ease(d3.easeLinear)
 
         .attr("class", function (d) {
-        if ((selected.length!=0) && !selected.includes(d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase())){
+        if ((selected.length!==0) && !selected.includes(d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase())){
             disabled_switch=' disabled'
-        }else if (selected.length==0){
+        }else if (selected.length===0){
             disabled_switch=''
         }else{
             disabled_switch=' opaque'
