@@ -110,11 +110,11 @@ function drawBubbles(id) {
         .call(d3.axisLeft(yScale).ticks(tickMax, "s"));
 
     // Set the zoom and Pan features: how much you can zoom, on which part, and what to do when there is a zoom
-    var zoom = d3.zoom()
-        .scaleExtent([1, 20])  // This control how much you can unzoom (x0.5) and zoom (x20)
-        .translateExtent([[0, 0], [width, height]])
-        .extent([[0, 0], [width, height]])
-        .on("zoom", zoomBubbleChart(xScale, yScale, xAxis, yAxis));
+    //var zoom = d3.zoom()
+    //    .scaleExtent([1, 20])  // This control how much you can unzoom (x0.5) and zoom (x20)
+    //    .translateExtent([[0, 0], [width, height]])
+    //    .extent([[0, 0], [width, height]])
+    //    .on("zoom", zoomBubbleChart(xScale, yScale, xAxis, yAxis));
 
     bubbleDataGroup = svg.append("g").attr("id", "bubbleData");
     bubbleDataGroup.append("rect")
@@ -124,7 +124,7 @@ function drawBubbles(id) {
             .attr("fill", "white")
             .attr("opacity", 0)
             .attr("onmouseover", "backgroundMouseOver(evt)")
-            .attr("onclick", "clearSelected()").call(zoom);
+            //.attr("onclick", "clearSelected()").call(zoom);
 
     bubbleDataGroup.selectAll("bubble")
         .data(data)
