@@ -148,307 +148,294 @@ function drawBubbles(id) {
         .attr("PatternSelection","NO")
         .attr("ancestrySelection","NO");
 
-    $(selector).find(".ancestry-filter .option").click(function() {
-        $(this).toggleClass("active"); //if active exists, then delete ; if no, add it
-        var filter = $(this).attr("dataFilter");
-        var parentSVG = $(svg_selector);
-
-        if (filter === "all") {
-            $.each(parentSVG.attr("class").split(" "), function(index, value) {
-                if(value.startsWith("ancestry-")) {
-                    parentSVG.removeClass(value);
-                    $(".ancestry-filter .option").removeClass('active');
-                }
-            });
-        } else {
-            parentSVG.removeClass("ancestry-all");
-        }
-
-        parentSVG.toggleClass("ancestry-" + filter);
-
-        var filters = parentSVG.attr("class");
-
-        reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, tickMax);//add xScale
-
-        //redraw the selected data
-        var controller = ""
-        if(parentSVG.attr("class").search("ancestry-" + filter) != -1){
-            controller = "delete";
-        }else{
-             controller = "add";
-        }
-
-        var selected=$(selector).find(".filter select[name='trait']").val()
+	bubbleGraph.find(".ancestry-filter .option").click(ancestryFilterHandler);
 
-        if(selected.length>0){
+	bubbleGraph.find(".filter select[name='parentTerms']").change(parentTermsFilterHandler);
 
-            //remove the bubbles added before
-                var selectedBefore = $(`${selector} #bubbleData circle`).not( function(index, element) {
-                if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
-                else{ return true;}
-               });
-
-
-                $(selectedBefore).remove();
-
-                var selectedBefore_pattern = $(`${selector} #bubbleData circle`).not(function(index, element) {
-                if( element.getAttribute("PatternSelection").search("NO") == -1 ){ return false;}
-                else{ return true;}
-               });
-
-                $(selectedBefore_pattern).remove();
-
-               //var total=$(`${selector} #bubbleData circle`)
-
-
-
-
-            var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
-                if(selected.includes(element.getAttribute("trait"))&& (controller == "delete") && (element.getAttribute("class").search(filter) == -1)){
-
-                    return false;}
-                 else if (selected.includes(element.getAttribute("trait")) && (controller == "add") && (element.getAttribute("class").search("disabled") == -1)){
-                   return false;}
-                else{ return true;}
-
-            });
-
-
-            for(i = 0; i < selectedBubbles.length; i++) {
-                var classAttr = $(selectedBubbles[i]).attr('class');
-                /*
-                if (classAttr.search("opaque") == -1){
-                    classAttr= classAttr +" opaque";
-                    window.alert("opaque added")
-                    }
-                    */
-                classAttr = [...new Set(classAttr.split(" "))].join(" ");
-
-                var cxAttr = $(selectedBubbles[i]).attr('cx');
-                //var cyAttr = $(selectedBubbles[i]).attr('cy');
-                //var rAttr = $(selectedBubbles[i]).attr('r');
-                var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
-                var authorAttr = $(selectedBubbles[i]).attr('author');
-                var accessionAttr = $(selectedBubbles[i]).attr('accession');
-                var nAttr = $(selectedBubbles[i]).attr('N');
-                var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
-                var traitAttr = $(selectedBubbles[i]).attr('trait');
-                var cyAttr = yScale(nAttr);
-                var rAttr = sizeScale(nAttr);
-                var patternAttr=$(selectedBubbles[i]).attr('PatternSelection');
-
-                bubbleDataGroup.append("circle")
-                    .attr("class", classAttr)
-                    .attr("onclick", "circleClick(evt);")
-                    .attr("onmouseover", "circleMouseOver(evt);")
-                    .attr("cx", cxAttr)
-                    //.attr("cy", function (nAttr) { return yScale(nAttr); })
-                    //.attr("r", function(nAttr){ return sizeScale(nAttr) })
-                    .attr("cy", cyAttr)
-                    .attr("r", rAttr)
-                    .attr("pubmedid", pubmedidAttr)
-                    .attr("author", authorAttr)
-                    .attr("accession", accessionAttr)
-                    .attr("N", nAttr)
-                    .attr("DiseaseOrTrait", diseaseOrTraitAttr)
-                    .attr("trait", traitAttr)
-                    .attr("PatternSelection",patternAttr)
-                    .attr("ancestrySelection","ANCESTRY");
-                //$(selectedBubbles[i]).remove();
-
-            }
-
-        }
-
-
-    });
-
-    $(selector).find(".filter select[name='parentTerms']").change(function() {
-        var selected_ = $(this).find('option:selected');
-        var parentSVG = $(svg_selector);
-
-        $.each(parentSVG.attr("class").split(" "), function(index, value) {
-            if(value.indexOf("term-") !== -1) {
-                parentSVG.removeClass(value);
-            }
-        });
-
-        parentSVG.addClass("term-" + selected_.attr('value'));
-
-        var filters = parentSVG.attr("class");
-
-        reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, tickMax); //Add xScale
-
-        //redraw the selected data
-
-        var selected=$(selector).find(".filter select[name='trait']").val()
-
-
-        if(selected.length>0 || (filters.search("all")!= -1)){
-
-            //remove the bubbles added before
-                var selectedBefore_ancestry = $(`${selector} #bubbleData circle`).not(function(index, element) {
-                if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
-                else{ return true;}
-               });
-
-                $(selectedBefore_ancestry).remove();
-
-                var selectedBefore = $(`${selector} #bubbleData circle`).not(function(index, element) {
-                if( element.getAttribute("PatternSelection").search("NO") == -1 ){ return false;}
-                else{ return true;}
-               });
-
-                $(selectedBefore).remove();
-
-            var all_controller="";
-                if ( (selected.length>0) && filters.search("all")!= -1){
-                    all_controller="yes";
-                }
-
-            var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
-                if( selected.includes(element.getAttribute("trait")) && (element.getAttribute("class").search(selected_.attr('value')) !== -1)){
-                    return false;}
-                else if( (all_controller=="yes") && (element.getAttribute("class").search("disabled") == -1) ){
-                    return false;}
-                else{ return true;}
-
-            });
-
-
-            for(i = 0; i < selectedBubbles.length; i++) {
-                var classAttr = $(selectedBubbles[i]).attr('class');
-
-                if (classAttr.search("opaque") == -1){
-                    classAttr= classAttr +" opaque";
-
-                    }
-                classAttr = [...new Set(classAttr.split(" "))].join(" ");
-
-                var cxAttr = $(selectedBubbles[i]).attr('cx');
-                var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
-                var authorAttr = $(selectedBubbles[i]).attr('author');
-                var accessionAttr = $(selectedBubbles[i]).attr('accession');
-                var nAttr = $(selectedBubbles[i]).attr('N');
-                var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
-                var traitAttr = $(selectedBubbles[i]).attr('trait');
-                var cyAttr = yScale(nAttr);
-                var rAttr = sizeScale(nAttr);
-                var ancestryAttr=$(selectedBubbles[i]).attr('ancestrySelection');
-
-                bubbleDataGroup.append("circle")
-                    .attr("class", classAttr)
-                    .attr("onclick", "circleClick(evt);")
-                    .attr("onmouseover", "circleMouseOver(evt);")
-                    .attr("cx", cxAttr)
-                    .attr("cy", cyAttr)
-                    .attr("r", rAttr)
-                    .attr("pubmedid", pubmedidAttr)
-                    .attr("author", authorAttr)
-                    .attr("accession", accessionAttr)
-                    .attr("N", nAttr)
-                    .attr("DiseaseOrTrait", diseaseOrTraitAttr)
-                    .attr("trait", traitAttr)
-                    .attr("PatternSelection","Pattern")
-                    .attr("ancestrySelection",ancestryAttr);
-
-            }
-
-        }
-
-
-
-    });
-
-
-    $(selector).find(".filter select[name='trait']").change(function() {
-
-        clearSelected();
-        var selectedBefore = $(`${selector} #bubbleData circle`).not( function(index, element) {
-                if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
-                else{ return true;}
-               });
-
-        $(selectedBefore).remove();
-
-        var selectedBefore_pattern = $(`${selector} #bubbleData circle`).not(function(index, element) {
-                if( element.getAttribute("PatternSelection").search("NO") == -1 ){ return false;}
-                else{ return true;}
-               });
-
-         $(selectedBefore_pattern).remove();
-
-        var selected = $(this).val();
-
-        if(selected.length == 0) {
-            $(`${svg_selector} #bubbleData circle`).removeClass("disabled opaque");
-        } else {
-            $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
-                return selected.includes(element.getAttribute("trait"))
-            }).addClass("disabled");
-
-            var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
-                return !selected.includes(element.getAttribute("trait"))
-            });
-
-            selectedBubbles.removeClass("disabled");
-
-
-            for(i = 0; i < selectedBubbles.length; i++) {
-                var classAttr = $(selectedBubbles[i]).attr('class');
-                var cxAttr = $(selectedBubbles[i]).attr('cx');
-                var cyAttr = $(selectedBubbles[i]).attr('cy');
-                var rAttr = $(selectedBubbles[i]).attr('r');
-                var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
-                var authorAttr = $(selectedBubbles[i]).attr('author');
-                var accessionAttr = $(selectedBubbles[i]).attr('accession');
-                var nAttr = $(selectedBubbles[i]).attr('N');
-                var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
-                var traitAttr = $(selectedBubbles[i]).attr('trait');
-                var patternAttr=$(selectedBubbles[i]).attr("PatternSelection");
-                var ancestryAttr=$(selectedBubbles[i]).attr("ancestrySelection");
-                $(selectedBubbles[i]).remove();
-                bubbleDataGroup.append("circle")
-                    .attr("class", classAttr + " opaque")
-                    .attr("onclick", "circleClick(evt);")
-                    .attr("onmouseover", "circleMouseOver(evt);")
-                    .attr("cx", cxAttr)
-                    .attr("cy", cyAttr)
-                    .attr("r", rAttr)
-                    .attr("pubmedid", pubmedidAttr)
-                    .attr("author", authorAttr)
-                    .attr("accession", accessionAttr)
-                    .attr("N", nAttr)
-                    .attr("DiseaseOrTrait", diseaseOrTraitAttr)
-                    .attr("trait", traitAttr)
-                    .attr("PatternSelection",patternAttr)
-                    .attr("ancestrySelection",ancestryAttr);
-
-            }
-
-        }
-
-    });
-
-
-    // When click on filter stage
-    $('#cb2').change(function() {
-        $('.ancestry-filter .btn').removeClass('active');
-    })
-
-    d3.select('#bubble-graph-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
-
-    var svgs = bubbleGraph.find('svg');
-    if (svgs.length > 1) {
-        bubbleGraph.find(".icon-zone .icon-download-image").unbind();
-    }
-
-    // Select
-    $("select[name='trait']").select2({
-        multiple: true,
-        minimumInputLength: 3,
-        placeholder: "Search for one or more traits",
-    });
+	document.getElementById("trait-filter").addEventListener("change", traitFilterHandler)
+
+	// When click on filter stage
+	$('#cb2').change(function() {
+		$('.ancestry-filter .btn').removeClass('active');
+	})
+
+	d3.select('#bubble-graph-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
+
+	var svgs = bubbleGraph.find('svg');
+	if (svgs.length > 1) {
+		bubbleGraph.find(".icon-zone .icon-download-image").unbind();
+	}
+
+	// Select
+	$("select[name='trait']").select2({
+		multiple: true,
+		minimumInputLength: 3,
+		placeholder: "Search for one or more traits",
+	});
+}
+
+function ancestryFilterHandler(e) {
+	$(this).toggleClass("active"); //if active exists, then delete ; if no, add it
+	var filter = $(this).attr("dataFilter");
+
+	if (filter === "all") {
+		$.each(parentSVG.attr("class").split(" "), function(index, value) {
+			if(value.startsWith("ancestry-")) {
+				parentSVG.removeClass(value);
+				$(".ancestry-filter .option").removeClass('active');
+			}
+		});
+	} else {
+		parentSVG.removeClass("ancestry-all");
+	}
+
+	parentSVG.toggleClass("ancestry-" + filter);
+
+	var filters = parentSVG.attr("class");
+
+	reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, tickMax);//add xScale
+
+	//redraw the selected data
+	var controller = ""
+	if(parentSVG.attr("class").search("ancestry-" + filter) !== -1){
+		controller = "delete";
+	}else{
+		controller = "add";
+	}
+
+	var selected=$(selector).find(".filter select[name='trait']").val()
+
+	if(selected.length>0){
+
+		//remove the bubbles added before
+		var selectedBefore = $(`${selector} #bubbleData circle`).not( function(index, element) {
+			if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
+			else{ return true;}
+		});
+
+
+		$(selectedBefore).remove();
+
+		var selectedBefore_pattern = $(`${selector} #bubbleData circle`).not(function(index, element) {
+			if( element.getAttribute("PatternSelection").search("NO") === -1 ){ return false;}
+			else{ return true;}
+		});
+
+		$(selectedBefore_pattern).remove();
+
+		//var total=$(`${selector} #bubbleData circle`)
+
+		var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
+			if(selected.includes(element.getAttribute("trait"))&& (controller === "delete") && (element.getAttribute("class").search(filter) === -1)){
+
+				return false;}
+			else if (selected.includes(element.getAttribute("trait")) && (controller === "add") && (element.getAttribute("class").search("disabled") === -1)){
+				return false;}
+			else{ return true;}
+
+		});
+
+
+		for(i = 0; i < selectedBubbles.length; i++) {
+			var classAttr = $(selectedBubbles[i]).attr('class');
+			/*
+			if (classAttr.search("opaque") == -1){
+				classAttr= classAttr +" opaque";
+				window.alert("opaque added")
+				}
+				*/
+			classAttr = [...new Set(classAttr.split(" "))].join(" ");
+
+			var cxAttr = $(selectedBubbles[i]).attr('cx');
+			//var cyAttr = $(selectedBubbles[i]).attr('cy');
+			//var rAttr = $(selectedBubbles[i]).attr('r');
+			var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
+			var authorAttr = $(selectedBubbles[i]).attr('author');
+			var accessionAttr = $(selectedBubbles[i]).attr('accession');
+			var nAttr = $(selectedBubbles[i]).attr('N');
+			var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
+			var traitAttr = $(selectedBubbles[i]).attr('trait');
+			var cyAttr = yScale(nAttr);
+			var rAttr = sizeScale(nAttr);
+			var patternAttr=$(selectedBubbles[i]).attr('PatternSelection');
+
+			bubbleDataGroup.append("circle")
+				.attr("class", classAttr)
+				.attr("onclick", "circleClick(evt);")
+				.attr("onmouseover", "circleMouseOver(evt);")
+				.attr("cx", cxAttr)
+				//.attr("cy", function (nAttr) { return yScale(nAttr); })
+				//.attr("r", function(nAttr){ return sizeScale(nAttr) })
+				.attr("cy", cyAttr)
+				.attr("r", rAttr)
+				.attr("pubmedid", pubmedidAttr)
+				.attr("author", authorAttr)
+				.attr("accession", accessionAttr)
+				.attr("N", nAttr)
+				.attr("DiseaseOrTrait", diseaseOrTraitAttr)
+				.attr("trait", traitAttr)
+				.attr("PatternSelection",patternAttr)
+				.attr("ancestrySelection","ANCESTRY");
+			//$(selectedBubbles[i]).remove();
+		}
+	}
+}
+
+function parentTermsFilterHandler(e) {
+	var selected_ = $(this).find('option:selected');
+
+	$.each(parentSVG.attr("class").split(" "), function(index, value) {
+		if(value.indexOf("term-") !== -1) {
+			parentSVG.removeClass(value);
+		}
+	});
+
+	parentSVG.addClass("term-" + selected_.attr('value'));
+
+	var filters = parentSVG.attr("class");
+
+	reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, tickMax); //Add xScale
+
+	//redraw the selected data
+
+	var selected=$(selector).find(".filter select[name='trait']").val()
+
+
+	if(selected.length>0 || (filters.search("all")!== -1)){
+
+		//remove the bubbles added before
+		var selectedBefore_ancestry = $(`${selector} #bubbleData circle`).not(function(index, element) {
+			if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
+			else{ return true;}
+		});
+
+		$(selectedBefore_ancestry).remove();
+
+		var selectedBefore = $(`${selector} #bubbleData circle`).not(function(index, element) {
+			if( element.getAttribute("PatternSelection").search("NO") === -1 ){ return false;}
+			else{ return true;}
+		});
+
+		$(selectedBefore).remove();
+
+		var all_controller="";
+		if ( (selected.length>0) && filters.search("all")!== -1){
+			all_controller="yes";
+		}
+
+		var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
+			if( selected.includes(element.getAttribute("trait")) && (element.getAttribute("class").search(selected_.attr('value')) !== -1)){
+				return false;}
+			else if( (all_controller==="yes") && (element.getAttribute("class").search("disabled") === -1) ){
+				return false;}
+			else{ return true;}
+
+		});
+
+
+		for(i = 0; i < selectedBubbles.length; i++) {
+			var classAttr = $(selectedBubbles[i]).attr('class');
+
+			if (classAttr.search("opaque") === -1){
+				classAttr= classAttr +" opaque";
+
+			}
+			classAttr = [...new Set(classAttr.split(" "))].join(" ");
+
+			var cxAttr = $(selectedBubbles[i]).attr('cx');
+			var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
+			var authorAttr = $(selectedBubbles[i]).attr('author');
+			var accessionAttr = $(selectedBubbles[i]).attr('accession');
+			var nAttr = $(selectedBubbles[i]).attr('N');
+			var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
+			var traitAttr = $(selectedBubbles[i]).attr('trait');
+			var cyAttr = yScale(nAttr);
+			var rAttr = sizeScale(nAttr);
+			var ancestryAttr=$(selectedBubbles[i]).attr('ancestrySelection');
+
+			bubbleDataGroup.append("circle")
+				.attr("class", classAttr)
+				.attr("onclick", "circleClick(evt);")
+				.attr("onmouseover", "circleMouseOver(evt);")
+				.attr("cx", cxAttr)
+				.attr("cy", cyAttr)
+				.attr("r", rAttr)
+				.attr("pubmedid", pubmedidAttr)
+				.attr("author", authorAttr)
+				.attr("accession", accessionAttr)
+				.attr("N", nAttr)
+				.attr("DiseaseOrTrait", diseaseOrTraitAttr)
+				.attr("trait", traitAttr)
+				.attr("PatternSelection","Pattern")
+				.attr("ancestrySelection",ancestryAttr);
+		}
+	}
+}
+
+function traitFilterHandler(e) {
+
+	clearSelected();
+	var selectedBefore = $(`${selector} #bubbleData circle`).not( function(index, element) {
+		if( element.getAttribute("ancestrySelection").search("ANCESTRY") !== -1 ){ return false;}
+		else{ return true;}
+	});
+
+	$(selectedBefore).remove();
+
+	var selectedBefore_pattern = $(`${selector} #bubbleData circle`).not(function(index, element) {
+		if( element.getAttribute("PatternSelection").search("NO") === -1 ){ return false;}
+		else{ return true;}
+	});
+
+	$(selectedBefore_pattern).remove();
+
+	var selected = $(this).val();
+
+	if(selected.length === 0) {
+		$(`${svg_selector} #bubbleData circle`).removeClass("disabled opaque");
+	} else {
+		$(`${svg_selector} #bubbleData circle`).not(function(index, element) {
+			return selected.includes(element.getAttribute("trait"))
+		}).addClass("disabled");
+
+		var selectedBubbles = $(`${svg_selector} #bubbleData circle`).not(function(index, element) {
+			return !selected.includes(element.getAttribute("trait"))
+		});
+
+		selectedBubbles.removeClass("disabled");
+
+
+		for(i = 0; i < selectedBubbles.length; i++) {
+			var classAttr = $(selectedBubbles[i]).attr('class');
+			var cxAttr = $(selectedBubbles[i]).attr('cx');
+			var cyAttr = $(selectedBubbles[i]).attr('cy');
+			var rAttr = $(selectedBubbles[i]).attr('r');
+			var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
+			var authorAttr = $(selectedBubbles[i]).attr('author');
+			var accessionAttr = $(selectedBubbles[i]).attr('accession');
+			var nAttr = $(selectedBubbles[i]).attr('N');
+			var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
+			var traitAttr = $(selectedBubbles[i]).attr('trait');
+			var patternAttr=$(selectedBubbles[i]).attr("PatternSelection");
+			var ancestryAttr=$(selectedBubbles[i]).attr("ancestrySelection");
+			$(selectedBubbles[i]).remove();
+			bubbleDataGroup.append("circle")
+				.attr("class", classAttr + " opaque")
+				.attr("onclick", "circleClick(evt);")
+				.attr("onmouseover", "circleMouseOver(evt);")
+				.attr("cx", cxAttr)
+				.attr("cy", cyAttr)
+				.attr("r", rAttr)
+				.attr("pubmedid", pubmedidAttr)
+				.attr("author", authorAttr)
+				.attr("accession", accessionAttr)
+				.attr("N", nAttr)
+				.attr("DiseaseOrTrait", diseaseOrTraitAttr)
+				.attr("trait", traitAttr)
+				.attr("PatternSelection",patternAttr)
+				.attr("ancestrySelection",ancestryAttr);
+		}
+	}
 }
 
 function zoomBubbleChart(xScale, yScale, xAxis, yAxis) {
