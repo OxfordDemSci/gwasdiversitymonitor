@@ -1,45 +1,80 @@
-function drawBubbleGraph(selector, data, replication) {
-    if(replication) {
-        data = data.bubblegraph_replication;
-    } else {
-        data = data.bubblegraph_initial;
-    }
-    data = Object.keys(data).map(function(_) { return data[_]; });
+let bubbleD;
+let data;
 
-    var bubbleGraph = $(selector);
-    var tickMax = 8;
+function drawBubbleGraph(selector, bdata) {
+	bubbleD = bdata;
+	data = bubbleD['bubblegraph_initial'];
+	data = Object.keys(data).map(function(_) { return data[_]; });
+	drawBubbles(selector);
+}
 
-    if($(window).width() < 480) {
-        var graphHeight = 300;
-    } else {
-        var graphHeight = 360;
-    }
+let bubbleGraph;
+let parentSVG;
+let svg_id = 'bubbleSVG'
+let svg_selector;
+let selector;
+let bubbleDataGroup;
+let svg;
+let width;
+let height;
+let xScale;
+let yScale;
+let sizeScale;
+let tickMax = 8;
 
-    var margin = {top: 40, right: 30, bottom: 30, left: 40},
-        width = bubbleGraph.find('.left').width() - margin.left - margin.right,
-        height = graphHeight - margin.top - margin.bottom;
+function switchBubbleGraph(replication) {
+	if (replication) {
+		data = bubbleD['bubblegraph_replication'];
+	} else {
+		data = bubbleD['bubblegraph_initial'];
+	}
+	data = Object.keys(data).map(function(_) { return data[_]; });
 
-    sanitiseSVG(selector);
-    let svg_id = 'bubbleSVG'
-    let svg_selector = `#${svg_id}`
+	sanitiseSVG(selector);
+	drawBubbles(selector);
+}
 
-    var mainSvg = d3.select(selector)
-        .append("svg")
-        .attr("id", svg_id)
-        .attr("class", "term-all")
-        .attr("height", height + margin.top + margin.bottom);
+function drawBubbleBackground(id) {
+	selector = id;
+	bubbleGraph = $(selector);
+	/* TODO this should probably be set in the css so that it can interact with other styles properly and be set by the
+	    css designer */
+	let margin = {top: 40, right: 30, bottom: 30, left: 40}
+	let graphHeight;
 
-    mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '950');
+	if ($(window).width() < 480) {
+		graphHeight = 300;
+	} else {
+		graphHeight = 360;
+	}
 
-    var svg = mainSvg.append("g")
-        .attr("class", "svg-container")
-        .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+	width = bubbleGraph.find('.left').width() - margin.left - margin.right
+	height = graphHeight - margin.top - margin.bottom
+
+	svg_selector = `#${svg_id}`
+
+	let mainSvg = d3.select(selector)
+		.append("svg")
+		.attr("id", svg_id)
+		.attr("class", "term-all")
+		.attr("height", height + margin.top + margin.bottom);
+
+	parentSVG = $(svg_selector);
+
+	mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '950');
+
+	svg = mainSvg.append("g")
+		.attr("class", "svg-container")
+		.attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+}
+
+function drawBubbles(id) {
 
     // Add X axis
     var minYear = getYear(data)['minYear'];
     var maxYear = getYear(data)['maxYear'];
 
-    const xScale = d3.scaleTime()
+	xScale = d3.scaleTime()
         .domain([minYear, maxYear])
         .range([0, width]);
 
@@ -51,11 +86,11 @@ function drawBubbleGraph(selector, data, replication) {
     var max = getDataMax(data);
 
     // Add Y axis
-    const yScale = d3.scaleLinear()
+    yScale = d3.scaleLinear()
         .domain([0, max])
         .range([height, 0]);
 
-    var sizeScale = d3.scalePow()
+    sizeScale = d3.scalePow()
         .exponent(2)
         .domain([0, max])
         .range([5, 40]);
@@ -81,7 +116,7 @@ function drawBubbleGraph(selector, data, replication) {
         .extent([[0, 0], [width, height]])
         .on("zoom", zoomBubbleChart(xScale, yScale, xAxis, yAxis));
 
-    var bubbleDataGroup = svg.append("g").attr("id", "bubbleData");
+    bubbleDataGroup = svg.append("g").attr("id", "bubbleData");
     bubbleDataGroup.append("rect")
             .attr("class", "background")
             .attr("width", "100%")
@@ -610,7 +645,7 @@ function getDataMax(data, filters) {
 function sanitiseSVG(selector) {
     $(selector).find(".filter select[name='trait']").val(null).trigger('change');
 
-    $(selector + " svg").remove();
+	svg.node().replaceChildren();
     clearSelected();
     $(selector).find(".filter .option").unbind();
     $(selector).find(".filter .option").removeClass("active");

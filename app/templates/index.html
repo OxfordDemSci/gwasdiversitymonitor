@@ -66,6 +66,7 @@
 
         $(document).ready(function() {
 			setDescription();
+			drawBubbleBackground("#bubbleGraph");
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				timeseriesData = data;
@@ -120,7 +121,7 @@
                 var box = $('.only-metric');
             } else {
                 var box = $('.only-stage');
-                drawBubbleGraph("#bubbleGraph", bubbleData, switchStage.checked);
+                switchBubbleGraph(switchStage.checked);
             }
             highlight(both);
             highlight(box);
