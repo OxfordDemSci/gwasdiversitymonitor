@@ -154,19 +154,21 @@ function drawBubbles(id) {
 
 	document.getElementById("trait-filter").addEventListener("change", traitFilterHandler)
 
-	// When click on filter stage
+    // TODO When clicking on filter stage the active css class is removed from all ancestry buttons, but redraw should do this
 	$('#cb2').change(function() {
 		$('.ancestry-filter .btn').removeClass('active');
 	})
 
 	d3.select('#bubble-graph-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
 
+	//TODO this deletes a second svg that sanitise svg creates
 	var svgs = bubbleGraph.find('svg');
 	if (svgs.length > 1) {
 		bubbleGraph.find(".icon-zone .icon-download-image").unbind();
 	}
 
-	// Select
+	//TODO select2 is a jquery component with excessive overhead remove later and replace with a simpler component
+    // Select2 config
 	$("select[name='trait']").select2({
 		multiple: true,
 		minimumInputLength: 3,
