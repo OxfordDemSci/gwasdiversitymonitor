@@ -934,7 +934,7 @@ def determine_year(day):
     return day.year if math.ceil(day.month/3.) > 2 else day.year-1
 
 
-if __name__ == "__main__":
+def main():
     logpath = os.path.join(os.getcwd(), 'app', 'logging')
     diversity_logger = setup_logging(logpath)
     logfile = diversity_logger.handlers[0].baseFilename
@@ -965,3 +965,6 @@ if __name__ == "__main__":
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
         sys.stderr.write(f'generate_data.py failed, see the log for details: {logfile}\n')
     logging.shutdown()
+
+if __name__ == "__main__":
+    main()
