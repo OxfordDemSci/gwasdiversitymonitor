@@ -9,6 +9,7 @@ import requests_ftp
 import os
 import csv
 import shutil
+import sys
 import warnings
 import zipfile
 import math
@@ -933,9 +934,11 @@ def determine_year(day):
     return day.year if math.ceil(day.month/3.) > 2 else day.year-1
 
 
-if __name__ == "__main__":
+def main():
     logpath = os.path.join(os.getcwd(), 'app', 'logging')
     diversity_logger = setup_logging(logpath)
+    logfile = diversity_logger.handlers[0].baseFilename
+    sys.stderr.write(f'Generating data. See logfile for details: {logfile}\n')
     data_path = os.path.join(os.getcwd(), 'app', 'data')
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
@@ -960,4 +963,8 @@ if __name__ == "__main__":
         diversity_logger.info('generate_data.py ran successfully!')
     except Exception as e:
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
+        sys.stderr.write(f'generate_data.py failed, see the log for details: {logfile}\n')
     logging.shutdown()
+
+if __name__ == "__main__":
+    main()
