@@ -133,6 +133,7 @@ dmypy.json
 
 # Generated Files
 *.csv
+*.tsv
 *.zip
 *.json
 *.css.map
