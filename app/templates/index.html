@@ -57,13 +57,40 @@
     <script src="{{ url_for('static', filename='js/graphs/heat-map.js') }}"></script>
     <script src="{{ url_for('static', filename='js/graphs/doughnut-graph.js') }}"></script>
     <script type="text/javascript">
+		let timeseriesData;
+		let heatData;
+		let ancestriesData;
+		let mapData;
+		let doughnutData;
+		let bubbleData;
+
         $(document).ready(function() {
-            drawTimeSeries({{ tsPlot|tojson }}, '#timeSeries');
-            drawWorldMapChart({{ chloroMap|tojson }});
-            drawBubbleGraph("#bubbleGraph", {{ bubbleGraph|tojson }});
-            drawHeatMap({{ heatMap|tojson }}, false, false, {{ ancestriesOrdered|tojson }});
-            drawDoughnutGraph("#doughnutGraph", {{ doughnutGraph|tojson }}, false, false);
-            setDescription();
+			setDescription();
+
+			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
+				timeseriesData = data;
+				drawTimeSeries(timeseriesData, '#timeSeries');
+			});
+			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
+				heatData = data;
+				d3.json("{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}", (error, adata) => {
+					ancestriesData = adata;
+					drawHeatMap(heatData, false, false, ancestriesData);
+				})
+			});
+			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
+				mapData = data;
+				drawWorldMapChart(mapData);
+			});
+			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
+				doughnutData = data;
+				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
+			});
+
+			d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
+				bubbleData = data;
+				drawBubbleGraph("#bubbleGraph", bubbleData);
+			});
         });
 
         function highlight(box) {
@@ -78,10 +105,10 @@
             let switchStage = document.getElementById('cb2');
 
             // Redraw with Studies
-            drawWorldMapChart({{ chloroMap|tojson }}, switchMetric.checked);
-            drawTimeSeries({{ tsPlot|tojson }}, '#timeSeries', switchMetric.checked, switchStage.checked);
-            drawHeatMap({{ heatMap|tojson }}, switchMetric.checked, switchStage.checked, {{ ancestriesOrdered|tojson }});
-            drawDoughnutGraph("#doughnutGraph", {{ doughnutGraph|tojson }}, switchMetric.checked, switchStage.checked);
+            drawWorldMapChart(mapData, switchMetric.checked);
+            drawTimeSeries(timeseriesData, '#timeSeries', switchMetric.checked, switchStage.checked);
+            drawHeatMap(heatData, switchMetric.checked, switchStage.checked, ancestriesData);
+            drawDoughnutGraph("#doughnutGraph", doughnutData, switchMetric.checked, switchStage.checked);
 
             // Change titles
             filtersTitle(switchMetric.checked, switchStage.checked);
@@ -93,7 +120,7 @@
                 var box = $('.only-metric');
             } else {
                 var box = $('.only-stage');
-                drawBubbleGraph("#bubbleGraph", {{ bubbleGraph|tojson }}, switchStage.checked);
+                drawBubbleGraph("#bubbleGraph", bubbleData, switchStage.checked);
             }
             highlight(both);
             highlight(box);
