@@ -2,12 +2,13 @@
 version: '3.1'
 
 services:
+
   nginx:
-    image: nginx:latest
     container_name: gwas_nginx
+    image: nginx:latest
     volumes:
       - ./:/var/www
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf
     ports:
       - 81:80
     networks:
@@ -15,28 +16,30 @@ services:
     depends_on:
       - flask
     restart: unless-stopped
+
   flask:
+    container_name: gwas_flask
     build:
       context: ./
-      dockerfile: flask.Dockerfile
-    container_name: gwas_flask
+      dockerfile: deploy/flask.Dockerfile
     command: gunicorn --config gunicorn_config.py wsgi:app
     volumes:
       - ./:/var/www
-      - data:/app/app/data:ro
+      - ./data:/app/data:ro
     networks:
       my-network:
         aliases:
           - flask-app
     restart: unless-stopped
+
   cron:
+    container_name: gwas_cron
     build:
       context: ./
-      dockerfile: cron.Dockerfile
-    container_name: gwas_cron
+      dockerfile: deploy/cron.Dockerfile
     command: cron -f
     volumes:
-      - data:/app/data
+      - ./data:/app/data
     networks:
       - my-network
     restart: unless-stopped
@@ -44,10 +47,3 @@ services:
 networks:
   my-network:
 
-volumes:
-  data:
-    driver: local
-    driver_opts:
-      o: bind
-      type: none
-      device: /home/doug/git/OxfordDemSci/gwasdiversitymonitor/data

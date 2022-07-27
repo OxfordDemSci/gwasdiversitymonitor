@@ -15,6 +15,8 @@ import sys
 import warnings
 import zipfile
 import math
+from app.DataLoader import DataLoader
+
 warnings.filterwarnings("ignore")
 
 
@@ -24,9 +26,6 @@ def json_converter(data_path):
     @TODO: harmonize paths (and get rid of the awful __file__ stuff).
     """
 
-    import json
-    import os
-    from DataLoader import DataLoader
     dl = DataLoader()
     plot_path = os.path.join(data_path, 'toplot')
     def json_maker(name, output):
@@ -37,7 +36,6 @@ def json_converter(data_path):
                        'ancestriesOrdered.json': dl.getAncestriesListOrder(),
                        'parentTerms.json': dl.getTermsList(),
                        'traits.json': dl.getTraitsList(),
-                       'summary.json': dl.getSummaryStatistics(),
                        'bubbleGraph.json': dl.getBubbleGraph(),
                        'tsPlot.json': dl.getTSPlot(),
                        'chloroMap.json': dl.getChloroMap(),
@@ -941,7 +939,7 @@ if __name__ == "__main__":
     diversity_logger = setup_logging(logpath)
     logfile = diversity_logger.handlers[0].baseFilename
     sys.stderr.write(f'Generating data. See logfile for details: {logfile}\n')
-    data_path = os.path.join(os.getcwd(), 'app', 'data')
+    data_path = os.path.join(os.getcwd(), 'data')
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
