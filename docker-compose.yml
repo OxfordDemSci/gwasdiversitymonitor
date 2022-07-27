@@ -25,7 +25,7 @@ services:
     command: gunicorn --config gunicorn_config.py wsgi:app
     volumes:
       - ./:/var/www
-      - ./data:/app/data:ro
+      - ./data:/app/data
     networks:
       my-network:
         aliases:
@@ -37,7 +37,7 @@ services:
     build:
       context: ./
       dockerfile: deploy/cron.Dockerfile
-    command: cron -f
+    command: ["python3", "generate_data.py", "&&", "cron", "-f"]
     volumes:
       - ./data:/app/data
     networks:

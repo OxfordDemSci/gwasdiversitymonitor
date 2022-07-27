@@ -933,13 +933,40 @@ def determine_year(day):
     """ Determines year, day is a datetime.date obj"""
     return day.year if math.ceil(day.month/3.) > 2 else day.year-1
 
+def check_data(data_path):
+
+    static_files = ['catalog/raw/Anc.tsv',
+                   'catalog/raw/Full.tsv',
+                   'catalog/raw/Map.tsv',
+                   'catalog/raw/Stud.tsv',
+                   'catalog/synthetic/Anc_wB.tsv',
+                   'catalog/synthetic/Anc_wB_withParents.tsv',
+                   'catalog/synthetic/Disease_Mappings.tsv',
+                   'summary/uniq_broader.txt',
+                   'support/Country_Lookup.csv',
+                   'support/dict_replacer_broad.tsv']
+
+    data_okay = os.path.exists(data_path)
+
+    for i in range(len(static_files)):
+        if not data_okay:
+            break
+        data_okay = os.path.exists(os.path.join(data_path, static_files[i]))
+
+    return data_okay
 
 if __name__ == "__main__":
     logpath = os.path.join(os.getcwd(), 'app', 'logging')
     diversity_logger = setup_logging(logpath)
     logfile = diversity_logger.handlers[0].baseFilename
     sys.stderr.write(f'Generating data. See logfile for details: {logfile}\n')
+
     data_path = os.path.join(os.getcwd(), 'data')
+    sys.stderr.write(f'Data path: {data_path}\n')
+    diversity_logger.info('Data path: ' + str(data_path))
+    if not check_data(data_path):
+        zipfile.ZipFile('data_static.zip').extractall(data_path)
+
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))

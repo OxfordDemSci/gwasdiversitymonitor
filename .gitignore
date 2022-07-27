@@ -133,8 +133,8 @@ dmypy.json
 .pyre/
 
 # Generated Files
-*.csv
-*.tsv
-*.zip
-*.json
-*.css.map
+# *.csv
+# *.tsv
+# *.zip
+# *.json
+# *.css.map

@@ -5,25 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="e56019e0-4588-4589-882c-57aee0a05a35" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/inspectionProfiles/Project_Default.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/DataLoader.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/DataLoader.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/data/support/dict_replacer_broad.tsv" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/routes.py" beforeDir="false" afterPath="$PROJECT_DIR$/app/routes.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/static/css/app.scss.css" beforeDir="false" afterPath="$PROJECT_DIR$/app/static/css/app.scss.css" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/app/static/css/app.scss.css.map" beforeDir="false" afterPath="$PROJECT_DIR$/app/static/css/app.scss.css.map" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cron.Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/cron.Dockerfile" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/cronjob" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/cronjob" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/data.zip" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" afterPath="$PROJECT_DIR$/.gitignore" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/deploy/cron.Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/cron.Dockerfile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/docker-compose.yml" beforeDir="false" afterPath="$PROJECT_DIR$/docker-compose.yml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/flask.Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/flask.Dockerfile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/generate_data.py" beforeDir="false" afterPath="$PROJECT_DIR$/generate_data.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gunicorn_config.py" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/gunicorn_config.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/gwasdiversitymonitor.py" beforeDir="false" afterPath="$PROJECT_DIR$/gwasdiversitymonitor.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/nginx.conf" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/nginx.conf" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/server.wsgi" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/wsgi.py" beforeDir="false" afterPath="$PROJECT_DIR$/deploy/wsgi.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -32,6 +18,15 @@
   </component>
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="HighlightingSettingsPerFile">
+    <setting file="file://$PROJECT_DIR$/app/DataLoader.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/deploy/cron.Dockerfile" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/deploy/cronjob" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/deploy/flask.Dockerfile" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/deploy/wsgi.py" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/docker-compose.yml" root0="FORCE_HIGHLIGHTING" />
+    <setting file="file://$PROJECT_DIR$/generate_data.py" root0="FORCE_HIGHLIGHTING" />
   </component>
   <component name="MarkdownSettingsMigration">
     <option name="stateVersion" value="1" />
@@ -70,7 +65,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1658924811636</updated>
-      <workItem from="1658924816717" duration="4564000" />
+      <workItem from="1658924816717" duration="17620000" />
     </task>
     <servers />
   </component>
