@@ -1,17 +1,18 @@
-Neurological disorder
-Metabolic disorder
 Other disease
-Cardiovascular disease
-Lipid or lipoprotein measurement
-Digestive system disorder
-Cardiovascular measurement
-Biological process
-Other measurement
-Immune system disorder
-Cancer
 Other trait
-Inflammatory measurement
+Other measurement
+Biological process
+Immune system disorder
+Cardiovascular disease
+Neurological disorder
+Digestive system disorder
 Response to drug
+Cardiovascular measurement
+Metabolic disorder
+Cancer
+NR
+Inflammatory measurement
+Liver enzyme measurement
+Lipid or lipoprotein measurement
 Hematological measurement
 Body measurement
-Liver enzyme measurement

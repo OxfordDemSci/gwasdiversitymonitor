@@ -89,7 +89,9 @@
 
 			d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
 				bubbleData = data;
+                console.log('Json BubbleChart', data);
 				drawBubbleGraph("#bubbleGraph", bubbleData);
+                console.log('Finish?');
 			});
         });
 

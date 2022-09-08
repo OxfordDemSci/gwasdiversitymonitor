@@ -12,10 +12,11 @@
 
         <span>OR</span>
 
-        {% with name='trait', items=traits.items(), type='multiple' %}
+<!-- trait.items() -->
+        {% with name='trait', items=[], type='multiple' %}
             {% include 'components/select.html' %}
         {% endwith %}
-
+        
     </div>
 </div>
 
