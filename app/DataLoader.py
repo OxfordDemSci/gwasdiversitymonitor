@@ -241,3 +241,11 @@ class DataLoader:
                         i += 1
                 line_count += 1
         return tsPlot
+
+    def filterTraits(self, search_trait):
+        traits = self.getTraitsList()
+        filtered_traits = []
+        for count, (trait_key, trait_value) in enumerate(traits.items()):
+            if search_trait in trait_key or search_trait in trait_value:
+                filtered_traits.append({"id": count, "text": trait_key})
+        return filtered_traits

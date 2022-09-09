@@ -1,7 +1,7 @@
 from flask import render_template
 from flask import request
 from flask import Response
-from flask import send_file
+from flask import send_file, jsonify
 from app import app
 from app import DataLoader
 
@@ -80,3 +80,11 @@ def getplotjson(filename):
         return Response(
             json,
             mimetype="application/json")
+
+
+@app.route("/api/traits/<search_trait>", methods=['GET'])
+def getFilterTraits(search_trait):
+    if search_trait is None:
+        search_trait = ''
+    dataLoader = DataLoader.DataLoader()
+    return jsonify(results=dataLoader.filterTraits(search_trait))
