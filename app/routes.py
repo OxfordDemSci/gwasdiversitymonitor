@@ -82,9 +82,10 @@ def getplotjson(filename):
             mimetype="application/json")
 
 
-@app.route("/api/traits", methods=['GET'])
-def getFilterTraits(search_trait):
-    if search_trait is None:
-        search_trait = ''
+@app.route("/api/traits/", methods=['GET'])
+def getFilterTraits():
+    search = request.args.get("search")
+    if search is None:
+        search = ''
     dataLoader = DataLoader.DataLoader()
-    return jsonify(results=dataLoader.filterTraits(search_trait))
+    return jsonify(results=dataLoader.filterTraits(search))
