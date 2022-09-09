@@ -82,7 +82,7 @@ def getplotjson(filename):
             mimetype="application/json")
 
 
-@app.route("/api/traits/", methods=['GET'])
+@app.route("/api/traits", methods=['GET'])
 def getFilterTraits():
     search = request.args.get("search")
     if search is None:
