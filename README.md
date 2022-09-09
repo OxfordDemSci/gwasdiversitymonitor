@@ -38,6 +38,34 @@ _Static_: This subfolder contains all of the assets for the application. CSS/Sas
 
 Each graph js file contains a function, which is then called from the global template, to instantiate the graph. The global filters recall these functions to redraw the graphs with the new filter state. "internal" filters, eg. year and parent term for each tile, are handled by event handlers inside each graph file.
 
+### Docker Deployment
+
+To launch the app using the Docker deployment, you must first install [Docker Compose](https://docs.docker.com/compose/install/).
+
+The Docker deployment for this application uses three containers that are defined in `docker-compose.yml`:  
+1. **gwas_nginx:** An nginx web server
+2. **gwas_flask:** The Flask web application running behind a gunicorn WSGI server (see `./deploy/flask.Dockerfile`)
+3. **gwas_cron:** A cron scheduler to generate new data daily (see `./deploy/cron.Dockerfile`)
+
+To launch the Docker containers from the command line: 
+```angular2html
+cd .../gwasdiversitymonitor
+docker-compose up -d --build
+```
+
+You can check the status of active docker containers using:
+```angular2html
+docker ps
+docker stats
+```
+
+While the containers are running, you can view the app from your web browser by navigating to [http://localhost:81](http://localhost:81).
+
+To stop the containers, use:
+```angular2html
+docker-compose down
+```
+
 ### Versioning
 
 This dashboard is currently at Version 1.0.0 (with an article conditionally accepted Nature Genetics). Please note: although the library logs data updates, it could be that additional dictionary based classifications are required with regards to the ```/data/support/dict_replacer_broad.tsv``` file. Please raise an issue in this repo to alert us of any necessary entries, or any suggestions which you may have in general, although we will monitor this over time.

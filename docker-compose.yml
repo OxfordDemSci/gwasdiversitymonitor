@@ -1,0 +1,49 @@
+# docker compose containers for flask app, nginx reverse proxy, and cron data collector with a shared data volume.
+version: '3.1'
+
+services:
+
+  nginx:
+    container_name: gwas_nginx
+    image: nginx:latest
+    volumes:
+      - ./:/var/www
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf
+    ports:
+      - 81:80
+    networks:
+      - my-network
+    depends_on:
+      - flask
+    restart: unless-stopped
+
+  flask:
+    container_name: gwas_flask
+    build:
+      context: ./
+      dockerfile: deploy/flask.Dockerfile
+    command: gunicorn --config gunicorn_config.py wsgi:app
+    volumes:
+      - ./:/var/www
+      - ./data:/app/data
+    networks:
+      my-network:
+        aliases:
+          - flask-app
+    restart: unless-stopped
+
+  cron:
+    container_name: gwas_cron
+    build:
+      context: ./
+      dockerfile: deploy/cron.Dockerfile
+    command: ["python3", "generate_data.py", "&&", "cron", "-f"]
+    volumes:
+      - ./data:/app/data
+    networks:
+      - my-network
+    restart: unless-stopped
+
+networks:
+  my-network:
+

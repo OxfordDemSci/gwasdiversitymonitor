@@ -62,7 +62,7 @@ def getCSV(filename):
     if filename == "heatmap" or filename == "timeseries" or filename == "gwasdiversitymonitor_download":
         return send_file('data/todownload/'+filename+'.zip')
 
-    with open('app/data/toplot/'+filename+'.csv') as fp:
+    with open('data/toplot/'+filename+'.csv') as fp:
         csv = fp.read()
 
     return Response(
@@ -74,7 +74,7 @@ def getCSV(filename):
 
 @app.route("/json/<filename>")
 def getplotjson(filename):
-    with open(f'app/data/toplot/{filename}') as fp:
+    with open(f'data/toplot/{filename}') as fp:
         json = fp.read()
 
         return Response(

@@ -4,7 +4,7 @@ import time
 class DataLoader:
     def getAncestriesList(self):
         data = []
-        with open('app/data/summary/uniq_broader.txt') as file:
+        with open('data/summary/uniq_broader.txt') as file:
             data = file.read().splitlines()
         ancestries = {}
         for ancestry in data:
@@ -12,7 +12,7 @@ class DataLoader:
         return ancestries
     def getAncestriesListOrder(self):
         data = []
-        with open('app/data/summary/uniq_broader.txt') as file:
+        with open('data/summary/uniq_broader.txt') as file:
             data = file.read().splitlines()
         ancestries = {}
         i = 1
@@ -22,7 +22,7 @@ class DataLoader:
         return ancestries
     def getTermsList(self):
         data = []
-        with open('app/data/summary/uniq_parent.txt') as file:
+        with open('data/summary/uniq_parent.txt') as file:
             data = file.read().splitlines()
         terms = {}
         for term in data:
@@ -30,7 +30,7 @@ class DataLoader:
         return terms
     def getTraitsList(self):
         data = []
-        with open('app/data/summary/uniq_dis_trait.txt') as file:
+        with open('data/summary/uniq_dis_trait.txt') as file:
             data = file.read().splitlines()
         traits = {}
         for trait in data:
@@ -38,7 +38,7 @@ class DataLoader:
         return traits
     def getSummaryStatistics(self):
         summary = {}
-        with open('app/data/summary/summary.json') as json_file:
+        with open('data/summary/summary.json') as json_file:
             data = json.load(json_file)
             for value in data:
                 summary[value] = data[value]
@@ -49,7 +49,7 @@ class DataLoader:
         dataInitial = {}
         dataReplication = {}
 
-        with open('app/data/toplot/bubble_df.csv') as csv_file:
+        with open('data/toplot/bubble_df.csv') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
 
             line_count = 0
@@ -83,7 +83,7 @@ class DataLoader:
         dataReplicationStudies = {}
         dataReplicationParticipants = {}
         dataAssociations = {}
-        with open('app/data/toplot/doughnut_df.csv') as csv_file:
+        with open('data/toplot/doughnut_df.csv') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             line_count = 0
             for row in csv_reader:
@@ -142,7 +142,7 @@ class DataLoader:
     def getHeatMapData(self, filename):
         data = {}
 
-        with open('app/data/toplot/'+filename) as csv_file:
+        with open('data/toplot/'+filename) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
 
             line_count = 0
@@ -179,7 +179,7 @@ class DataLoader:
     def getChloroMap(self):
         data = {}
 
-        with open('app/data/toplot/choro_df.csv') as csv_file:
+        with open('data/toplot/choro_df.csv') as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
 
             line_count = 0
@@ -221,7 +221,7 @@ class DataLoader:
 
     def getTSPlotData(self, filename):
         tsPlot = dict()
-        with open('app/data/toplot/'+filename) as csv_file:
+        with open('data/toplot/'+filename) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             line_count = 0
             for row in csv_reader:
