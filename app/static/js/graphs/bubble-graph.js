@@ -417,7 +417,7 @@ function drawBubbleGraph(selector, data, replication) {
         minimumInputLength: 3,
         placeholder: "Search for one or more traits",
         ajax: {
-            url: '/api/endpoint',
+            url: '/api/traits',
             data: function (params) {
             var query = {
                 search: params.term,
