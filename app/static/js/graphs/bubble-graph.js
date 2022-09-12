@@ -35,9 +35,6 @@ function drawBubbleGraph(selector, data, replication) {
         .attr("class", "svg-container")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-        let start = Date.now();
-        console.error('start:' + start);
-
     // Add X axis
     var minYear = getYear(data)['minYear'];
     var maxYear = getYear(data)['maxYear'];
