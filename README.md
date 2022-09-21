@@ -19,7 +19,7 @@ As a pre-requisite to running this locally, you will need a working Python 3 ins
 
 ### Running the Code
 
-This server is operating system independent (through the ``os`` module) and should work on Windows, Linux and macOS all the same. To run: clone this directory, ``cd`` into the directory, and serve the project by simply calling the gwasdiversitymonitor.py file. "python gwasdiversitymonitor.py". This will serve the project to port 5000 on your localhost (via Flask).
+This server is operating system independent (through the ``os`` module) and should work on Windows, Linux and macOS all the same. To run: clone this directory, ``cd`` into the directory, download the data with "python app/generate_data.py", and serve the project by simply calling the gwasdiversitymonitor.py file. "python gwasdiversitymonitor.py". This will serve the project to port 5000 on your localhost (via Flask).
 
 To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualsnv/) with `./virtualenv/bin/python gwasdiversitymonitor.py`.
 
@@ -37,6 +37,34 @@ _Data_: pulls, wrangles and creates all data used in this project.
 _Static_: This subfolder contains all of the assets for the application. CSS/Sass, fonts, images and js will all be found here. The one we care most about is the js. There is a script.js file which contains some global functions and then a file for each graph.
 
 Each graph js file contains a function, which is then called from the global template, to instantiate the graph. The global filters recall these functions to redraw the graphs with the new filter state. "internal" filters, eg. year and parent term for each tile, are handled by event handlers inside each graph file.
+
+### Docker Deployment
+
+To launch the app using the Docker deployment, you must first install [Docker Compose](https://docs.docker.com/compose/install/).
+
+The Docker deployment for this application uses three containers that are defined in `docker-compose.yml`:  
+1. **gwas_nginx:** An nginx web server
+2. **gwas_flask:** The Flask web application running behind a gunicorn WSGI server (see `./deploy/flask.Dockerfile`)
+3. **gwas_cron:** A cron scheduler to generate new data daily (see `./deploy/cron.Dockerfile`)
+
+To launch the Docker containers from the command line: 
+```angular2html
+cd .../gwasdiversitymonitor
+docker-compose up -d --build
+```
+
+You can check the status of active docker containers using:
+```angular2html
+docker ps
+docker stats
+```
+
+While the containers are running, you can view the app from your web browser by navigating to [http://localhost:81](http://localhost:81).
+
+To stop the containers, use:
+```angular2html
+docker-compose down
+```
 
 ### Versioning
 

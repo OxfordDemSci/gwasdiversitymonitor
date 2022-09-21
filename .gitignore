@@ -1,3 +1,4 @@
+data
 /config.py
 *.log
 
@@ -130,3 +131,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Generated Files
+# *.csv
+# *.tsv
+# *.zip
+# *.json
+# *.css.map
