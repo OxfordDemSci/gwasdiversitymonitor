@@ -1,7 +1,7 @@
 from flask import render_template
 from flask import request
 from flask import Response
-from flask import send_file
+from flask import send_file, jsonify
 from app import app
 from app import DataLoader
 
@@ -62,7 +62,7 @@ def getCSV(filename):
     if filename == "heatmap" or filename == "timeseries" or filename == "gwasdiversitymonitor_download":
         return send_file('data/todownload/'+filename+'.zip')
 
-    with open('app/data/toplot/'+filename+'.csv') as fp:
+    with open('data/toplot/'+filename+'.csv') as fp:
         csv = fp.read()
 
     return Response(
@@ -74,9 +74,18 @@ def getCSV(filename):
 
 @app.route("/json/<filename>")
 def getplotjson(filename):
-    with open(f'app/data/toplot/{filename}') as fp:
+    with open(f'data/toplot/{filename}') as fp:
         json = fp.read()
 
         return Response(
             json,
             mimetype="application/json")
+
+
+@app.route("/api/traits", methods=['GET'])
+def getFilterTraits():
+    search = request.args.get("search")
+    if search is None:
+        search = ''
+    dataLoader = DataLoader.DataLoader()
+    return jsonify(results=dataLoader.filterTraits(search))

@@ -413,6 +413,17 @@ function drawBubbleGraph(selector, data, replication) {
         multiple: true,
         minimumInputLength: 3,
         placeholder: "Search for one or more traits",
+        ajax: {
+            url: '/api/traits',
+            data: function (params) {
+            var query = {
+                search: params.term,
+            }
+
+            // Query parameters will be ?search=[term]
+            return query;
+            }
+        }
     });
 }
 
