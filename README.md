@@ -59,7 +59,7 @@ docker ps
 docker stats
 ```
 
-While the containers are running, you can view the app from your web browser by navigating to [http://localhost:81](http://localhost:81).
+While the containers are running, you can view the app from your web browser by navigating to [http://localhost:80](http://localhost:80).
 
 To stop the containers, use:
 ```angular2html
