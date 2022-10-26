@@ -430,6 +430,7 @@ def make_heatmap_dfs(data_path):
         else:
             diversity_logger.info('No missing disease terms! Nice!')
         merged = merged[merged["parentterm"].notnull()]
+        merged = merged[merged["parentterm"]!='NR']
         merged["parentterm"] = merged["parentterm"].astype(str)
         merged["DATE"] = merged["DATE"].astype(str)
         make_heatmatrix(merged, 'initial', os.path.join(data_path,
@@ -992,4 +993,3 @@ if __name__ == "__main__":
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
         sys.stderr.write(f'generate_data.py failed, see the log for details: {logfile}\n')
     logging.shutdown()
-
