@@ -32,17 +32,17 @@ services:
           - flask-app
     restart: unless-stopped
 
-  cron:
-    container_name: gwas_cron
+  data:
+    container_name: gwas_data
     build:
       context: ./
-      dockerfile: deploy/cron.Dockerfile
-    command: ["python3", "generate_data.py", "&&", "cron", "-f"]
+      dockerfile: deploy/data.Dockerfile
+    command: ["python3", "generate_data.py"]
     volumes:
       - ./data:/app/data
     networks:
       - my-network
-    restart: unless-stopped
+    restart: on-failure
 
 networks:
   my-network:
