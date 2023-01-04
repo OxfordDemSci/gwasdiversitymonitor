@@ -19,7 +19,10 @@ def get_agency_list(data_path):
 
 
 def watermark(path, data_path):
-    watermark_path = os.path.join(data_path, 'support', 'logo_white_rect.png.pdf')
+    watermark_path = os.path.join('app',
+                                  'static',
+                                  'images',
+                                  'lcds_watermark.pdf')
     Doc = open(path+'.pdf', 'rb')
     pdfReader = PyPDF2.PdfReader(Doc)
     pdfWatermark = PyPDF2.PdfReader(open(watermark_path, 'rb'))
