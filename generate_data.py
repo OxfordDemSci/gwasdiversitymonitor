@@ -2,7 +2,6 @@
 import pandas as pd
 import os
 import numpy as np
-from tqdm import tqdm
 import json
 import logging
 import datetime
@@ -20,6 +19,7 @@ import time
 from app.DataLoader import DataLoader
 from joblib import Parallel, delayed, cpu_count
 from Bio import Entrez
+from generate_reports import generate_reports
 warnings.filterwarnings("ignore")
 
 
@@ -589,7 +589,7 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
         ts_rep_count_pc = ts_rep_count_pc.reset_index().rename({'index': 'Year'}, axis=1)
         merge_ts_rep_sum.append(ts_rep_count_pc)
 
-        for agency in tqdm(agencies):
+        for agency in agencies:
             ts_init_sum = pd.DataFrame(index=range(2007, final_year + 1), columns=[])
             ts_rep_sum = pd.DataFrame(index=range(2007, final_year + 1), columns=[])
             ts_init_count = pd.DataFrame(index=range(2007, final_year + 1), columns=[])
@@ -1282,40 +1282,45 @@ def clean_agency(agency, funder_cleaner):
     return agency
 
 def clean_funder_data(data_path):
-    file = open(os.path.join(data_path, 'support', 'funder_cleaner.csv'), 'r')
-    funder_cleaner = json.load(file)
-    agencies = pd.read_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'),
-                           sep='\t', usecols=['Agencies', 'Counter'])
-    for row in range(0, len(agencies)):
-        agency = clean_agency(agencies.loc[row, 'Agencies'], funder_cleaner)
-        agencies.loc[row, 'Agencies'] = agency
-    agencies = agencies.groupby(['Agencies']).sum(['Counter'])
-    under_50 = agencies[agencies['Counter']<50]['Counter'].sum()
-    agencies = agencies[agencies['Counter']>=50]
-    agencies.loc['Under 50 Studies', 'Counter'] = under_50
-    agencies = agencies.sort_values(by='Counter', ascending=False)
-    clean_agencies_list = agencies.index.to_list()
-    agencies.to_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'), sep='\t')
-    paper_grants = read_paper_grants()
-    for row, column in paper_grants.iterrows():
-        agency_holder = ''
-        agency_string = paper_grants.loc[row, 'Agency']
-        #TODO: why does a row have an empty/unaccounted for funder fields?
-        try:
-            for agency in agency_string.split(';'):
-                agency = clean_agency(agency, funder_cleaner)
-                if (agency not in clean_agencies_list) and (agency!= 'Missing Agency'):
-                    agency = 'Under 50 Studies'
-                agency_holder = agency_holder + agency + ';'
-        except AttributeError:
-            pass
-        agency_holder = agency_holder[:-1]
-        paper_grants.loc[row, 'Agency'] = agency_holder
-    clean_agencies_list.insert(0, 'All Studies')
-    with open(os.path.join(data_path, 'pubmed', 'agency_list.txt'), 'w') as f:
-        write = csv.writer(f)
-        write.writerow(clean_agencies_list)
-    agencies.to_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'), sep='\t')
+    try:
+        file = open(os.path.join(data_path, 'support', 'funder_cleaner.txt'), 'r')
+        funder_cleaner = json.load(file)
+        agencies = pd.read_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'),
+                               sep='\t', usecols=['Agencies', 'Counter'])
+        for row in range(0, len(agencies)):
+            agency = clean_agency(agencies.loc[row, 'Agencies'], funder_cleaner)
+            agencies.loc[row, 'Agencies'] = agency
+        agencies = agencies.groupby(['Agencies']).sum(['Counter'])
+        under_50 = agencies[agencies['Counter']<50]['Counter'].sum()
+        agencies = agencies[agencies['Counter']>=50]
+        agencies.loc['Under 50 Studies', 'Counter'] = under_50
+        agencies = agencies.sort_values(by='Counter', ascending=False)
+        clean_agencies_list = agencies.index.to_list()
+        agencies.to_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'), sep='\t')
+        paper_grants = read_paper_grants()
+        for row, column in paper_grants.iterrows():
+            agency_holder = ''
+            agency_string = paper_grants.loc[row, 'Agency']
+            #TODO: why does a row have an empty/unaccounted for funder fields?
+            try:
+                for agency in agency_string.split(';'):
+                    agency = clean_agency(agency, funder_cleaner)
+                    if (agency not in clean_agencies_list) and (agency!= 'Missing Agency'):
+                        agency = 'Under 50 Studies'
+                    agency_holder = agency_holder + agency + ';'
+            except AttributeError:
+                pass
+            agency_holder = agency_holder[:-1]
+            paper_grants.loc[row, 'Agency'] = agency_holder
+        clean_agencies_list.insert(0, 'All Studies')
+        with open(os.path.join(data_path, 'pubmed', 'agency_list.txt'), 'w') as f:
+            write = csv.writer(f)
+            write.writerow(clean_agencies_list)
+        agencies.to_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'), sep='\t')
+        diversity_logger.info('Cleaning and merging the funders: Complete')
+    except Exception as e:
+        diversity_logger.debug(f'Cleaning and merging the funders: Failed -- {e}')
+
 
 if __name__ == "__main__":
     logpath = os.path.join(os.getcwd(), 'app', 'logging')
@@ -1331,26 +1336,28 @@ if __name__ == "__main__":
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
+    reports_path = os.path.join(os.getcwd(), 'reports')
     try:
-        download_cat(data_path, ebi_download)
-        clean_gwas_cat(data_path)
-        generate_funder_data(data_path)
-        clean_funder_data(data_path)
-        make_bubbleplot_df(data_path)
-        make_doughnut_df(data_path)
-        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
-        make_timeseries_df(tsinput, data_path, 'ts1')
-        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
-        make_timeseries_df(tsinput, data_path, 'ts2')
-        make_choro_df(data_path)
-        make_heatmap_dfs(data_path)
-        make_parent_list(data_path)
-        sumstats = create_summarystats(data_path)
-        zip_for_download(os.path.join(data_path, 'toplot'),
-                         os.path.join(data_path, 'todownload'))
-        json_converter(data_path)
-        diversity_logger.info('generate_data.py ran successfully!')
+#        download_cat(data_path, ebi_download)
+#        clean_gwas_cat(data_path)
+#        generate_funder_data(data_path)
+#        clean_funder_data(data_path)
+        generate_reports(data_path, reports_path)
+#        make_bubbleplot_df(data_path)
+#        make_doughnut_df(data_path)
+#        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+#                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
+#        make_timeseries_df(tsinput, data_path, 'ts1')
+#        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
+#        make_timeseries_df(tsinput, data_path, 'ts2')
+#        make_choro_df(data_path)
+#        make_heatmap_dfs(data_path)
+#        make_parent_list(data_path)
+#        sumstats = create_summarystats(data_path)
+#        zip_for_download(os.path.join(data_path, 'toplot'),
+#                         os.path.join(data_path, 'todownload'))
+#        json_converter(data_path)
+#        diversity_logger.info('generate_data.py ran successfully!')
     except Exception as e:
         print(traceback.format_exc())
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
