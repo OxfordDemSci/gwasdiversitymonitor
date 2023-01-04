@@ -1338,26 +1338,26 @@ if __name__ == "__main__":
     diversity_logger.info('final year is being set to: ' + str(final_year))
     reports_path = os.path.join(os.getcwd(), 'reports')
     try:
-#        download_cat(data_path, ebi_download)
-#        clean_gwas_cat(data_path)
-#        generate_funder_data(data_path)
-#        clean_funder_data(data_path)
+        download_cat(data_path, ebi_download)
+        clean_gwas_cat(data_path)
+        generate_funder_data(data_path)
+        clean_funder_data(data_path)
         generate_reports(data_path, reports_path)
-#        make_bubbleplot_df(data_path)
-#        make_doughnut_df(data_path)
-#        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-#                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
-#        make_timeseries_df(tsinput, data_path, 'ts1')
-#        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
-#        make_timeseries_df(tsinput, data_path, 'ts2')
-#        make_choro_df(data_path)
-#        make_heatmap_dfs(data_path)
-#        make_parent_list(data_path)
-#        sumstats = create_summarystats(data_path)
-#        zip_for_download(os.path.join(data_path, 'toplot'),
-#                         os.path.join(data_path, 'todownload'))
-#        json_converter(data_path)
-#        diversity_logger.info('generate_data.py ran successfully!')
+        make_bubbleplot_df(data_path)
+        make_doughnut_df(data_path)
+        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
+        make_timeseries_df(tsinput, data_path, 'ts1')
+        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
+        make_timeseries_df(tsinput, data_path, 'ts2')
+        make_choro_df(data_path)
+        make_heatmap_dfs(data_path)
+        make_parent_list(data_path)
+        sumstats = create_summarystats(data_path)
+        zip_for_download(os.path.join(data_path, 'toplot'),
+                         os.path.join(data_path, 'todownload'))
+        json_converter(data_path)
+        diversity_logger.info('generate_data.py ran successfully!')
     except Exception as e:
         print(traceback.format_exc())
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
