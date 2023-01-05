@@ -1,0 +1,11 @@
+<div class="header-select">
+    <span>{{ title }}</span>
+
+    <div class="gwas-select-container {% if type=='single' %} gwas-select-container-single {% else %} gwas-select-container-multiple {% endif %}">
+        <select name="{{ name }}" id="{{ name }}-filter" class="gwas-filter" onchange="redrawGraph(this)">
+            {% for key, value in items %}
+            <option value="{{ value }}" name="{{ key }}">{{ key }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>

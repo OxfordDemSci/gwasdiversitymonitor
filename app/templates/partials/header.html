@@ -10,20 +10,39 @@
             </a>
         </div>
 
-        <div class="right col-sm-10 col-md-9 ">
-            <a href="{{ url_for('additional') }}" class="btn add-info">Additional Information</a>
+        <div class="right col-sm-10 col-md-9">
+            <div class="header-filters__left">
+                <!-- <a href="#" class="btn btn-header">
+                    Report
+                    <i class="icon-download-data"></i>
+                </a> -->
+            </div>
+            <div class="header-filters__right">
+                {% with title='Metric', name='metric', items=[('By Participants', 'by-participants'), ('By Studies', 'by-studies')], type='single' %}
+                {% include 'components/header-select.html' %}
+                {% endwith %}
 
-            {% if switches %}
+                {% with title='Stage', name='stage', items=[('Discovery', 'discovery'), ('Replication', 'replication')], type='single' %}
+                {% include 'components/header-select.html' %}
+                {% endwith %}
+
+                <!-- {% if switches %}
                 {% with name='Metric', id='cb1', value='Participants' %}
                 {% include 'components/switch.html' %}
-            {% endwith %}
-
-            {% with name='Stage', id='cb2', value='Discovery' %}
+                {% endwith %}
+                
+                {% with name='Stage', id='cb2', value='Discovery' %}
                 {% include 'components/switch.html' %}
                 {% endwith %}
-            {% endif %}
+                {% endif %} -->
 
-            <a href="{{ url_for('getCSV', filename='gwasdiversitymonitor_download') }}" class="download icon-download-data"></a>
+                <a href="{{ url_for('getCSV', filename='gwasdiversitymonitor_download') }}" class="btn btn-header">
+                    CSV
+                    <i class="icon-download-data"></i>
+                </a>
+                
+                <a href="{{ url_for('additional') }}" class="btn btn-header add-info">Additional Information</a>
+            </div>
 
             <div class="menu-burger" id="burger-menu">
                 <span></span>
@@ -31,7 +50,6 @@
                 <span></span>
             </div>
         </div>
-
     </div>
     <div class="menu-nav" id="nav-menu">
         {% include 'components/logo-footer.html' %}
@@ -41,7 +59,7 @@
             </li>
         </ul>
 
-        {% with class='col-sm-6' %}
+        {% with class='col-sm-12' %}
             {% include 'partials/menu.html' %}
         {% endwith %}
     </div>

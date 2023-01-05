@@ -2565,7 +2565,10 @@
   margin: 0;
   padding: 0;
   color: #4a4a4a;
-  box-sizing: border-box; }
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: none !important; }
 
 a {
   text-decoration: none;
@@ -2670,6 +2673,15 @@ button, .btn {
   transition: all 0.25s ease; }
   .btn:hover {
     background: #97abed; }
+  .btn.btn-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px; }
+    .btn.btn-header i {
+      color: white;
+      margin-left: 10px;
+      font-size: 15px; }
 
 .gwas-switch {
   display: none; }
@@ -2794,6 +2806,59 @@ button, .btn {
     #header .container .add-info {
       display: none; }
 
+.header-filters__left {
+  display: none; }
+  @media screen and (min-width: 992px) {
+    .header-filters__left {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding-right: 21px; }
+      .header-filters__left::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 1px;
+        height: 100%;
+        background: #374282; } }
+.header-filters__right {
+  display: none; }
+  @media screen and (min-width: 992px) {
+    .header-filters__right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding-left: 16px; } }
+.header-select {
+  display: flex;
+  align-items: center;
+  gap: 11px; }
+  .header-select span {
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 15px;
+    text-transform: uppercase;
+    color: white; }
+  .header-select .gwas-select-container {
+    width: 100%;
+    max-width: 121px;
+    border: none; }
+    .header-select .gwas-select-container::before {
+      border-color: #1E1E1E transparent transparent transparent;
+      right: 10px;
+      z-index: 1;
+      top: 50%;
+      transform: translateY(-2.5px);
+      pointer-events: none; }
+    .header-select .gwas-select-container select {
+      padding: 10px 30px 10px 10px;
+      background: white;
+      font-size: 16px;
+      font-weight: 400;
+      color: #1E1E1E; }
+
 @media screen and (max-width: 480px) {
   #header.with-switches .container .right {
     width: 70%; }
@@ -2832,7 +2897,12 @@ button, .btn {
       display: -webkit-flex;
       display: -moz-flex;
       display: -ms-flexbox;
-      display: flex; }
+      display: flex;
+      -webkit-box-pack: end;
+      -ms-flex-pack: end;
+      -webkit-justify-content: flex-end;
+      -moz-justify-content: flex-end;
+      justify-content: flex-end; }
     #header .container .download,
     #header .container .add-info {
       display: block; }
@@ -4439,7 +4509,7 @@ select {
     right: 0;
     opacity: 1; }
 
-@media screen and (min-width: 768px) {
+@media screen and (min-width: 992px) {
   .menu-burger, .menu-nav {
     display: none; } }
 

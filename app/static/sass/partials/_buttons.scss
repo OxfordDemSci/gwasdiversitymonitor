@@ -50,6 +50,19 @@ button {
   &:hover {
     background: $hover-btn;
   }
+
+  &.btn-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px;
+
+    i {
+      color: white;
+      margin-left: 10px;
+      font-size: 15px;
+    }
+  }
 }
 
 .gwas-switch {

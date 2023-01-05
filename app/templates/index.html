@@ -101,17 +101,24 @@
         }
 
         function redrawGraph(el) {
-            let switchMetric = document.getElementById('cb1');
-            let switchStage = document.getElementById('cb2');
+            let metricFilter = document.getElementById('metric-filter');
+            let stageFilter = document.getElementById('stage-filter');
+
+            // true = by-studies
+            // false = by-participants
+            isMetricByStudies = (metricFilter.value === 'by-studies') ? true : false;
+            // true = 'replication'
+            // false = 'discovery'
+            isStageReplication = (stageFilter.value === 'replication') ? true : false;
 
             // Redraw with Studies
-            drawWorldMapChart(mapData, switchMetric.checked);
-            drawTimeSeries(timeseriesData, '#timeSeries', switchMetric.checked, switchStage.checked);
-            drawHeatMap(heatData, switchMetric.checked, switchStage.checked, ancestriesData);
-            drawDoughnutGraph("#doughnutGraph", doughnutData, switchMetric.checked, switchStage.checked);
+            drawWorldMapChart(mapData, isMetricByStudies);
+            drawTimeSeries(timeseriesData, '#timeSeries', isMetricByStudies, isStageReplication);
+            drawHeatMap(heatData, isMetricByStudies, isStageReplication, ancestriesData);
+            drawDoughnutGraph("#doughnutGraph", doughnutData, isMetricByStudies, isStageReplication);
 
             // Change titles
-            filtersTitle(switchMetric.checked, switchStage.checked);
+            filtersTitle(isMetricByStudies, isStageReplication);
             setDescription();
 
             // Highlight boxes
@@ -120,7 +127,7 @@
                 var box = $('.only-metric');
             } else {
                 var box = $('.only-stage');
-                drawBubbleGraph("#bubbleGraph", bubbleData, switchStage.checked);
+                drawBubbleGraph("#bubbleGraph", bubbleData, isStageReplication);
             }
             highlight(both);
             highlight(box);
