@@ -67,6 +67,8 @@
         $(document).ready(function() {
 			setDescription();
 
+            initFundersSelect();
+
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				timeseriesData = data;
 				drawTimeSeries(timeseriesData, '#timeSeries');
@@ -177,6 +179,8 @@
             .then(response_json => {
                 mydata = response_json.data;
             })
+
+            $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
         }
     </script>
 {% endblock %}
