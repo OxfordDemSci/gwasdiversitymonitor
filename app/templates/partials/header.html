@@ -12,7 +12,9 @@
 
         <div class="right col-sm-10 col-md-9">
             <div class="header-filters__left">
+                {% with title='Funders', name='funders', id='funders-select' %}
                 {% include 'components/tree-select.html' %}
+                {% endwith %}
                 <!-- <a href="#" class="btn btn-header">
                     Report
                     <i class="icon-download-data"></i>

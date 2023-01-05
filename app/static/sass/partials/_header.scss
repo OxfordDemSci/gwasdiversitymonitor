@@ -139,6 +139,32 @@
       font-weight: 400;
       color: #1E1E1E;
     }
+
+    .select2-container {
+      width: 100%;
+    }
+
+    .select2-selection {
+      border-radius: 0px;
+      border: none;
+    }
+
+    .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+      padding: 0 10px;
+      min-height: 41px;
+      display: flex;
+      flex-direction: row;
+      overflow: auto;
+
+      li {
+        display: flex;
+        align-self: center;
+      }
+    }
+
+    .select2-container--default .select2-search--inline .select2-search__field {
+      margin-top: 0;
+    }
   }
 }
 

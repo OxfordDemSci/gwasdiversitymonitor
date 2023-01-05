@@ -173,36 +173,14 @@
         }
 
         function initFundersSelect() {
-            var mydata = [
-                {id:1, text:"USA", inc:[
-                    {text:"west", inc:[
-                        {id:111, text:"California", inc:[
-                            {id:1111, text:"Los Angeles", inc:[
-                            {id:11111, text:"Hollywood"}
-                            ]},
-                            {id:1112, text:"San Diego"}
-                        ]},
-                        {id:112, text:"Oregon"}
-                    ]}
-                ]},
-                {id:2, text:"India"},
-                {id:3, text:"中国"}
-            ];
-            
-            // TODO Fetch data for dropdown + remove static test data above
+            let mydata;
+            fetch('api/funders')
+            .then(response => response.json())
+            .then(response_json => {
+                mydata = response_json.data;
+            })
 
-            // Select2-to-tree init
             $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
-
-            // Select2-to-tree Open event
-            $('#funders-select').on('select2:open', () => {
-                $('.select2-dropdown').addClass('funders-dropdown');
-            });
-
-            // Select2-to-tree Change event
-            $('#funders-select').on('select2:change', (e) => {
-                // Get selected values and call backend endpoint
-            });
         }
     </script>
 {% endblock %}
