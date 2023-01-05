@@ -2567,8 +2567,7 @@
   color: #4a4a4a;
   box-sizing: border-box;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  transition: none !important; }
+  -moz-osx-font-smoothing: grayscale; }
 
 a {
   text-decoration: none;
