@@ -26,16 +26,6 @@
                 {% include 'components/header-select.html' %}
                 {% endwith %}
 
-                <!-- {% if switches %}
-                {% with name='Metric', id='cb1', value='Participants' %}
-                {% include 'components/switch.html' %}
-                {% endwith %}
-
-                {% with name='Stage', id='cb2', value='Discovery' %}
-                {% include 'components/switch.html' %}
-                {% endwith %}
-                {% endif %} -->
-
                 <a href="{{ url_for('getCSV', filename='gwasdiversitymonitor_download') }}" class="btn btn-header">
                     CSV
                     <i class="icon-download-data"></i>
