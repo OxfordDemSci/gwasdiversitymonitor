@@ -2878,7 +2878,9 @@ button, .btn {
       padding: 0 10px;
       min-height: 41px;
       display: flex;
-      flex-direction: row; }
+      flex-direction: row;
+      overflow: auto;
+      font-size: 16px; }
       .header-select .gwas-select-container .select2-container--default .select2-selection--multiple .select2-selection__rendered li {
         display: flex;
         align-self: center; }
