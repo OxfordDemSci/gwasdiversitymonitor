@@ -92,7 +92,7 @@
 
 .header-filters__right {
   display: none;
-  
+
   @include breakpoint(medium) {
     display: flex;
     align-items: center;
