@@ -123,10 +123,6 @@
     max-width: 121px;
     border: none;
 
-    &--lg {
-      max-width: 242px;
-    }
-
     &::before {
       border-color: #1E1E1E transparent transparent transparent;
       right: 10px;
@@ -142,51 +138,6 @@
       font-size: 16px;
       font-weight: 400;
       color: #1E1E1E;
-    }
-
-    .select2-container {
-      width: 100%;
-    }
-
-    .select2-selection {
-      border-radius: 0px;
-      border: none;
-    }
-
-    .select2-container--default .select2-selection--multiple .select2-selection__rendered {
-      padding: 0 10px;
-      min-height: 41px;
-      display: flex;
-      flex-direction: row;
-      overflow: auto;
-      font-size: 16px;
-
-      li {
-        display: flex;
-        align-self: center;
-        margin-top: 0;
-
-        &.select2-selection__choice {
-          background-color: $light-primary;
-          color: $white;
-          text-transform: none;
-          padding: 3px 6px;
-          font-weight: 400;
-          border: none;
-
-          .select2-selection__choice__remove {
-            font-size: 24px;
-            font-weight: 400;
-            color: $white;
-            margin-right: 4px;
-          }
-        }
-
-      }
-    }
-
-    .select2-container--default .select2-search--inline .select2-search__field {
-      margin-top: 0;
     }
   }
 }

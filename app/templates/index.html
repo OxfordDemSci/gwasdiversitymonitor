@@ -119,23 +119,11 @@
             // false = 'discovery'
             isStageReplication = (stageFilter.value === 'replication') ? true : false;
 
-            let selectedFunderOptions = $('#funders-select').select2('data').map(node => node.text);
-
             // Redraw with Studies
-            // Map
-            filterMapDataByFunders(selectedFunderOptions, isMetricByStudies);
-
-            // Timeseries
-            filterTimeseriesByFunders(selectedFunderOptions);
-
-            // Heatmap
-            filterHeatDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
-
-            // Doughnut graph
-            filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication)
-
-            // Summary chart
-            updateSummaryGraphByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
+            drawWorldMapChart(mapData, isMetricByStudies);
+            drawTimeSeries(timeseriesData, '#timeSeries', isMetricByStudies, isStageReplication);
+            drawHeatMap(heatData, isMetricByStudies, isStageReplication, ancestriesData);
+            drawDoughnutGraph("#doughnutGraph", doughnutData, isMetricByStudies, isStageReplication);
 
             // Change titles
             filtersTitle(isMetricByStudies, isStageReplication);
@@ -147,7 +135,7 @@
                 var box = $('.only-metric');
             } else {
                 var box = $('.only-stage');
-                filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
+                drawBubbleGraph("#bubbleGraph", bubbleData, isStageReplication);
             }
             highlight(both);
             highlight(box);
@@ -299,16 +287,16 @@
             let mapDataByFunders;
             let mapDataArray = Object.entries(mapData);
             let structuredFilteredData = {};
-            
+
             if (selectedFunderOptions && selectedFunderOptions.length > 0) {
                 mapDataArray.forEach(year => {
                     let filteredData = Object.values(year[1]).filter(node => {
                         return selectedFunderOptions.find(funder => funder === node.funder);
                     });
-    
+
                     structuredFilteredData[year[0]] = filteredData;
                 });
-    
+
                 drawWorldMapChart(structuredFilteredData, isMetricByStudies);
             } else {
                 drawWorldMapChart(mapData, isMetricByStudies);
@@ -404,14 +392,14 @@
         function getBubbleDataByFunders(data, funders) {
             let keys = Object.keys(data);
             let results = [];
-            
+
             if (funders.find(funder => funder === 'All Funders')) {
                 return data;
             } else {
                 keys.forEach(key => {
                     results[key] = Object.entries(data[key]).map(e => e[1]).filter(obj => funders.find(funder => obj.funder.indexOf(funder) !== -1));
                 });
-    
+
                 return results;
             }
         }

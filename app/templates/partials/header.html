@@ -12,9 +12,6 @@
 
         <div class="right col-sm-10 col-md-9">
             <div class="header-filters__left">
-                {% with title='Funders', name='funders', id='funders-select' %}
-                {% include 'components/tree-select.html' %}
-                {% endwith %}
                 <!-- <a href="#" class="btn btn-header">
                     Report
                     <i class="icon-download-data"></i>
@@ -29,11 +26,20 @@
                 {% include 'components/header-select.html' %}
                 {% endwith %}
 
+                <!-- {% if switches %}
+                {% with name='Metric', id='cb1', value='Participants' %}
+                {% include 'components/switch.html' %}
+                {% endwith %}
+
+                {% with name='Stage', id='cb2', value='Discovery' %}
+                {% include 'components/switch.html' %}
+                {% endwith %}
+                {% endif %} -->
+
                 <a href="{{ url_for('getCSV', filename='gwasdiversitymonitor_download') }}" class="btn btn-header">
                     CSV
                     <i class="icon-download-data"></i>
                 </a>
-
                 <a href="{{ url_for('additional') }}" class="btn btn-header add-info">Additional Information</a>
             </div>
 
