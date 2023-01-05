@@ -2928,10 +2928,6 @@ button, .btn {
   #header .container .right {
     width: 45%; } }
 
-@media screen and (min-width: 1200px) {
-  #header .container .add-info {
-    margin-left: 5px; } }
-
 .logo-footer {
   width: fit-content;
   color: #212c8f;

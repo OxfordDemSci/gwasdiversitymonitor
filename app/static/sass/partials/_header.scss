@@ -265,15 +265,3 @@
     }
   }
 }
-
-@include breakpoint(large) {
-  #header {
-
-    .container {
-
-      .add-info {
-        margin-left: 5px;
-      }
-    }
-  }
-}
