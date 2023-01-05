@@ -13,6 +13,9 @@
   padding: 0;
   color: $gwas-content-black;
   box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: none !important;
 }
 
 a {
