@@ -180,9 +180,17 @@
                 mydata = response_json.data;
             })
 
+            // Select2-to-tree init
             $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
+
+            // Select2-to-tree Open event
             $('#funders-select').on('select2:open', () => {
                 $('.select2-dropdown').addClass('funders-dropdown');
+            });
+
+            // Select2-to-tree Change event
+            $('#funders-select').on('select2:change', (e) => {
+                // Get selected values and call backend endpoint
             });
         }
     </script>
