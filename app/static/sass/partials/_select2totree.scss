@@ -7,7 +7,7 @@
 }
 
 .s2-to-tree .select2-results__option.l1 {
-	padding-left: 0.6em;
+	padding: 0 10px 0 16px;
 	font-size: 1em;
 }
 .s2-to-tree .select2-results__option.l2 {
@@ -133,10 +133,11 @@
 .s2-to-tree.select2-container .select2-results__option--highlighted[aria-selected] > span.item-label {
 	background-color: transparent;
 	color: white;
-	margin: 0;
 }
-.s2-to-tree.select2-container li.select2-results__option[aria-selected="true"] > span.item-label {
-	background-color: #ddd;
+
+.s2-to-tree.select2-container .select2-results__option > span.item-label {
+	margin: 0;
+	white-space: nowrap;
 }
 
 .s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected],
@@ -147,6 +148,10 @@
 	padding: 0 10px 0 16px;
 }
 
+.s2-to-tree.select2-container li.select2-results__option[aria-selected="true"] {
+	background-color: rgba($light-primary, 0.15);
+}
+
 .s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected].l2,
 .s2-to-tree.select2-container li.select2-results__option[aria-selected="true"].l2 {
 	padding-left: 1.4em;
@@ -155,6 +160,31 @@
 .s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected].l3,
 .s2-to-tree.select2-container li.select2-results__option[aria-selected="true"].l3 {
 	padding-left: 2.2em;
+}
+
+.s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected].l4,
+.s2-to-tree.select2-container li.select2-results__option[aria-selected="true"].l4 {
+	padding-left: 3.0em;
+}
+
+.s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected].l5,
+.s2-to-tree.select2-container li.select2-results__option[aria-selected="true"].l5 {
+	padding-left: 3.8em;
+}
+
+.s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected].l6,
+.s2-to-tree.select2-container li.select2-results__option[aria-selected="true"].l6 {
+	padding-left: 4.5em;
+}
+
+.s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected].l7,
+.s2-to-tree.select2-container li.select2-results__option[aria-selected="true"].l7 {
+	padding-left: 5.3em;
+}
+
+.s2-to-tree.select2-container li.select2-results__option--highlighted[aria-selected].l8,
+.s2-to-tree.select2-container li.select2-results__option[aria-selected="true"].l8 {
+	padding-left: 6.0em;
 }
 
 .s2-to-tree li.select2-results__option.l1 {

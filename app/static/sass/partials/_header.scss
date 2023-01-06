@@ -160,6 +160,24 @@
       li {
         display: flex;
         align-self: center;
+        margin-top: 0;
+
+        &.select2-selection__choice {
+          background-color: $light-primary;
+          color: $white;
+          text-transform: none;
+          padding: 3px 6px;
+          font-weight: 400;
+          border: none;
+
+          .select2-selection__choice__remove {
+            font-size: 24px;
+            font-weight: 400;
+            color: $white;
+            margin-right: 4px;
+          }
+        }
+
       }
     }
 
