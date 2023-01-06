@@ -55,10 +55,14 @@
     }
 
     &,
-    .left,
-    .right {
+    .left {
       @include flexbox;
       @include justify-content(space-between);
+    }
+
+    .right {
+      @include flexbox;
+      @include justify-content(flex-end);
     }
 
     .download,
