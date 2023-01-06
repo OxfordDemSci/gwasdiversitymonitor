@@ -89,10 +89,10 @@
 				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
 			});
 
-			d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
-				bubbleData = data;
-				drawBubbleGraph("#bubbleGraph", bubbleData);
-			});
+			// d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
+			// 	bubbleData = data;
+			// 	drawBubbleGraph("#bubbleGraph", bubbleData);
+			// });
         });
 
         function highlight(box) {
@@ -190,6 +190,9 @@
             ];
 
             $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
+            $('#funders-select').on('select2:open', () => {
+                $('.select2-dropdown').addClass('funders-dropdown');
+            });
         }
     </script>
 {% endblock %}
