@@ -181,6 +181,9 @@
             })
 
             $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
+            $('#funders-select').on('select2:open', () => {
+                $('.select2-dropdown').addClass('funders-dropdown');
+            });
         }
     </script>
 {% endblock %}
