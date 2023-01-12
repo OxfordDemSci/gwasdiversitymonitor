@@ -138,7 +138,6 @@ dmypy.json
 # *.zip
 # *.json
 # *.css.map
-/reports/
 /reports/All Studies/report.pdf
 /reports/Medical Research Council (UK)/report.pdf
 /reports/NCI NIH HHS/report.pdf

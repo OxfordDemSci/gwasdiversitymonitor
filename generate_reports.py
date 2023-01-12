@@ -145,6 +145,6 @@ def build_figures(agency_list, data_path, reports_path):
 
 def generate_reports(data_path, reports_path):
     agency_list = get_agency_list(data_path)
-    build_paths(reports_path, agency_list)
     build_figures(agency_list, data_path, reports_path)
+    build_paths(reports_path, agency_list)
     execute_tex(reports_path, data_path, agency_list)
