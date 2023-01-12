@@ -111,17 +111,22 @@ def getFilterFunders():
             sorted_group_dict[grouping] = sorted(grouping_dict[grouping])
 
         for group_index, grouping in enumerate(sorted_group_dict.keys(), start=1):
-            funders_list.append({"id": group_index, "text": f"{grouping}", "inc": []})
+            text = grouping
+            # Avoids duplicate element ids
+            if group_index < 11:
+                current_group = {"id": group_index, "text": text}
+            else:
+                current_group = {"id": (group_index * 10), "text": text}
+            current_group["inc"] = []
+            funders_list.append(current_group)
             # Current group will be the last element of the list as it was just appended
-            current_group = funders_list[len(funders_list)-1]
             for funder_index, funder in enumerate(sorted_group_dict[grouping], start=1):
                 # "id" is used to determine tree hierachy in funder dropdown
-                element_tree_id = (group_index * 10) + funder_index
+                if group_index < 11:
+                    element_tree_id = (group_index * 10) + funder_index
+                else:
+                    element_tree_id = (group_index * 100) + funder_index
                 current_group["inc"].append({"id": element_tree_id, "text": f"{funder}"})
 
-    # Store generated file to access for future retrieval
-    # json_object = json.dumps({"data": funders_list})
-    # with open("funders_cleaner_formatted.json", "w") as file:
-    #     file.write(json_object)
-
-    return ({"data": funders_list})
+    json_object = json.dumps({"data": funders_list}, sort_keys=False)
+    return (json_object)

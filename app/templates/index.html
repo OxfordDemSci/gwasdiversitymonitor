@@ -162,5 +162,14 @@
 
             return val;
         }
+
+        function initFundersSelect() {
+            let mydata;
+            fetch('api/funders')
+            .then(response => response.json())
+            .then(response_json => {
+                mydata = response_json.data;
+            })
+        }
     </script>
 {% endblock %}
