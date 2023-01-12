@@ -130,7 +130,6 @@ def execute_tex(reports_path, data_path, agency_list):
             doc.generate_pdf(path, clean_tex=False, clean=True, compiler='pdflatex')
             watermark(path, data_path)
 
-
 def build_figures(agency_list, data_path, reports_path):
     for agency in agency_list:
         gs = GridSpec(2, 2)
@@ -141,7 +140,6 @@ def build_figures(agency_list, data_path, reports_path):
         plt.tight_layout()
         figpath = os.path.join(reports_path, agency, 'figure.pdf')
         plt.savefig(figpath)
-
 
 def generate_reports(data_path, reports_path):
     agency_list = get_agency_list(data_path)
