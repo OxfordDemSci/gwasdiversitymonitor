@@ -34,7 +34,6 @@ def index():
     ancestriesOrdered = dataLoader.getAncestriesListOrder()
     parentTerms = dataLoader.getTermsList()
     traits = dataLoader.getTraitsList()
-
     summary = dataLoader.getSummaryStatistics()
     bubbleGraph = dataLoader.getBubbleGraph()
     tsPlot = dataLoader.getTSPlot()
