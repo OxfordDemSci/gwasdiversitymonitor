@@ -1283,7 +1283,7 @@ def clean_agency(agency, funder_cleaner):
 
 def clean_funder_data(data_path):
     try:
-        file = open(os.path.join(data_path, 'support', 'funder_cleaner.txt'), 'r')
+        file = open(os.path.join(data_path, 'support', 'funder_cleaner.json'), 'r')
         funder_cleaner = json.load(file)
         agencies = pd.read_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'),
                                sep='\t', usecols=['Agencies', 'Counter'])
@@ -1362,4 +1362,8 @@ if __name__ == "__main__":
         print(traceback.format_exc())
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
         sys.stderr.write(f'generate_data.py failed, see the log for details: {logfile}\n')
+<<<<<<< Updated upstream
     logging.shutdown()
+=======
+    logging.shutdown()
+>>>>>>> Stashed changes

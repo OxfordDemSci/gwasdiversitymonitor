@@ -122,12 +122,12 @@ def execute_tex(reports_path, data_path, agency_list):
         doc = Document(geometry_options=geometry_options)
         if agency != 'All Funders':
             fill_document(doc, agency)
-            doc.generate_pdf(path, clean_tex=False, clean=True, compiler='pdflatex')
+            doc.generate_pdf(path, clean_tex=False, clean=True)
             watermark(path, data_path)
-            if agency == 'NHLBI NIH HHS': break
+            #if agency == 'NHLBI NIH HHS': break
         elif agency == 'All Funders':
             fill_document(doc, agency)
-            doc.generate_pdf(path, clean_tex=False, clean=True, compiler='pdflatex')
+            doc.generate_pdf(path, clean_tex=False, clean=True)
             watermark(path, data_path)
 
 def build_figures(agency_list, data_path, reports_path):
@@ -141,8 +141,9 @@ def build_figures(agency_list, data_path, reports_path):
         figpath = os.path.join(reports_path, agency, 'figure.pdf')
         plt.savefig(figpath)
 
+
 def generate_reports(data_path, reports_path):
     agency_list = get_agency_list(data_path)
-    build_figures(agency_list, data_path, reports_path)
     build_paths(reports_path, agency_list)
+    build_figures(agency_list, data_path, reports_path)
     execute_tex(reports_path, data_path, agency_list)
