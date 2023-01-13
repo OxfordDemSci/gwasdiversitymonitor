@@ -107,12 +107,12 @@ def fill_document(doc, agency):
 
 
 # @TODO uncomment this before pushing
-#def build_paths(reports_path, agency_list):
-#    if os.path.exists(reports_path):
-#        shutil.rmtree(reports_path)
-#    os.mkdir(reports_path)
-#    for agency in agency_list:
-#        os.mkdir(os.path.join(reports_path, agency))
+def build_paths(reports_path, agency_list):
+    if os.path.exists(reports_path):
+        shutil.rmtree(reports_path)
+    os.mkdir(reports_path)
+    for agency in agency_list:
+        os.mkdir(os.path.join(reports_path, agency))
 
 
 def execute_tex(reports_path, data_path, agency_list):
@@ -144,5 +144,5 @@ def build_figures(agency_list, data_path, reports_path):
 def generate_reports(data_path, reports_path):
     agency_list = get_agency_list(data_path)
     build_figures(agency_list, data_path, reports_path)
-#    build_paths(reports_path, agency_list)
+    build_paths(reports_path, agency_list)
     execute_tex(reports_path, data_path, agency_list)
