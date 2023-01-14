@@ -1,3 +1,4 @@
+import os
 import json
 
 from flask import render_template
@@ -61,9 +62,9 @@ def additional():
 def getCSV(filename):
 
     if filename == "heatmap" or filename == "timeseries" or filename == "gwasdiversitymonitor_download":
-        return send_file('data/todownload/'+filename+'.zip')
+        return send_file(os.path.join('..', 'data', 'todownload', filename + '.zip'))
 
-    with open('data/toplot/'+filename+'.csv') as fp:
+    with open(os.path.join('..', 'data', 'toplot', filename + '.csv')) as fp:
         csv = fp.read()
 
     return Response(
