@@ -1362,8 +1362,4 @@ if __name__ == "__main__":
         print(traceback.format_exc())
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
         sys.stderr.write(f'generate_data.py failed, see the log for details: {logfile}\n')
-<<<<<<< Updated upstream
     logging.shutdown()
-=======
-    logging.shutdown()
->>>>>>> Stashed changes
