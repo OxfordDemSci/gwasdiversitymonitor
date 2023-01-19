@@ -97,7 +97,7 @@ def getFilterTraits():
 def getFilterFunders():
     funders_list = []
     # Converted the funders_cleaner.txt to json for easier traversal
-    with open("funders_cleaner.json") as file:
+    with open(f'app/funder_cleaner.json') as file:
         data = json.load(file)
         # Sorting the data in the backend before sending returning response
         sorted_grouping_list = sorted([grouping for grouping in set(data.values())])
