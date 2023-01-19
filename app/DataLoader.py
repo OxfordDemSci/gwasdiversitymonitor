@@ -1,6 +1,7 @@
 import csv
 import json
 import time
+
 class DataLoader:
     def getAncestriesList(self):
         data = []
@@ -57,18 +58,18 @@ class DataLoader:
             for row in csv_reader:
                 if line_count == 0:
                     keys = row
-                    keys.remove("")
+                    #keys.remove("") this removes empty index column, which is no longer present
                 else:
-                    if(row[6] == "replication"):
+                    if(row[5] == "replication"):
                         dataReplication[j] = {}
                         i = 0
-                        for value in row[1:]:
+                        for value in row[0:]:
                             dataReplication[j][keys[i]] = value
                             i += 1
-                    elif(row[6] == "initial"):
+                    elif(row[5] == "initial"):
                         dataInitial[j] = {}
                         i = 0
-                        for value in row[1:]:
+                        for value in row[0:]:
                             dataInitial[j][keys[i]] = value
                             i += 1
                 line_count += 1
@@ -77,6 +78,7 @@ class DataLoader:
             'bubblegraph_initial': dataInitial,
             'bubblegraph_replication': dataReplication,
         }
+
     def getDoughnutGraph(self, ancestryOrder):
         dataDiscoveryStudies = {}
         dataDiscoveryParticipants = {}
@@ -88,41 +90,39 @@ class DataLoader:
             line_count = 0
             for row in csv_reader:
                 if line_count > 0:
-                    year = row[3]
+                    year = row[2]
                     if year not in dataDiscoveryStudies:
                         dataDiscoveryStudies[year] = dict()
                         dataDiscoveryParticipants[year] = dict()
                         dataReplicationStudies[year] = dict()
                         dataReplicationParticipants[year] = dict()
-                        dataAssociations[year] = dict()
-                    term = row[2]
+                    term = row[1]
                     if term not in dataDiscoveryStudies[year]:
                         dataDiscoveryStudies[year][term] = dict()
                         dataDiscoveryParticipants[year][term] = dict()
                         dataReplicationStudies[year][term] = dict()
                         dataReplicationParticipants[year][term] = dict()
-                        dataAssociations[year][term] = dict()
-                    ancestry = row[1]
+                    ancestry = row[0]
                     ancestryKey = list(ancestryOrder.keys())[list(ancestryOrder.values()).index(ancestry)]
                     dataDiscoveryStudies[year][term][ancestryKey] = {
-                        "ancestry": row[1],
-                        "value": row[5]
+                        "ancestry": row[0],
+                        "value": row[5],
+                        "funder": row[3]
                     }
                     dataDiscoveryParticipants[year][term][ancestryKey] = {
-                        "ancestry": row[1],
-                        "value": row[4]
+                        "ancestry": row[0],
+                        "value": row[4],
+                        "funder": row[3]
                     }
                     dataReplicationStudies[year][term][ancestryKey] = {
-                        "ancestry": row[1],
-                        "value": row[7]
+                        "ancestry": row[0],
+                        "value": row[7],
+                        "funder": row[3]
                     }
                     dataReplicationParticipants[year][term][ancestryKey] = {
-                        "ancestry": row[1],
-                        "value": row[6]
-                    }
-                    dataAssociations[year][term][ancestryKey] = {
-                        "ancestry": row[1],
-                        "value": row[8]
+                        "ancestry": row[0],
+                        "value": row[6],
+                        "funder": row[3]
                     }
                 line_count += 1
         return {
@@ -154,26 +154,25 @@ class DataLoader:
                     keys.remove("")
                     keys.remove("Year")
                 else:
-
-                    if row[len(row) - 1] != year:
-                        year = row[len(row) - 1]
+                    if row[len(row) - 2] != year:
+                        year = int(float(row[len(row) - 2]))
                         i = 0
 
                     if year not in data:
                         data[year] = dict()
 
                     j = 0
-                    for value in row[1:len(row) - 1]:
+                    for value in row[1:len(row) - 2]:
                         data[year][i] = {
                             "ancestry" : row[0],
                             "term" : keys[j],
                             "value" : value,
+                            "funder": row[len(row) - 2]
                         }
                         j += 1
                         i += 1
 
                 line_count += 1
-
         return data
 
     def getChloroMap(self):
@@ -197,11 +196,12 @@ class DataLoader:
 
                     data[year][i] = {
                         'country' : row[8],
-                        'population' : row[1],
-                        'studies' : row[3],
-                        'studiesPercentage' : row[4],
+                        'population' : row[0],
+                        'studies' : row[2],
+                        'studiesPercentage' : row[3],
                         'participants' : row[5],
                         'participantsPercentage' : row[6],
+                        'funder': row[4]
                     }
                     i += 1
                 line_count += 1
@@ -227,7 +227,7 @@ class DataLoader:
             for row in csv_reader:
                 if line_count == 0:
                     keys = row
-                    keys.remove("index")
+                    keys.remove("Year")
                     for key in keys:
                         tsPlot[key] = dict()
                 else:

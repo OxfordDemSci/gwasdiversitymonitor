@@ -1,3 +1,6 @@
+import os
+import json
+
 from flask import render_template
 from flask import request
 from flask import Response
@@ -32,7 +35,6 @@ def index():
     ancestriesOrdered = dataLoader.getAncestriesListOrder()
     parentTerms = dataLoader.getTermsList()
     traits = dataLoader.getTraitsList()
-    
     summary = dataLoader.getSummaryStatistics()
     bubbleGraph = dataLoader.getBubbleGraph()
     tsPlot = dataLoader.getTSPlot()
@@ -60,9 +62,9 @@ def additional():
 def getCSV(filename):
 
     if filename == "heatmap" or filename == "timeseries" or filename == "gwasdiversitymonitor_download":
-        return send_file('data/todownload/'+filename+'.zip')
+        return send_file(os.path.join('..', 'data', 'todownload', filename + '.zip'))
 
-    with open('data/toplot/'+filename+'.csv') as fp:
+    with open(os.path.join('..', 'data', 'toplot', filename + '.csv')) as fp:
         csv = fp.read()
 
     return Response(
@@ -89,3 +91,42 @@ def getFilterTraits():
         search = ''
     dataLoader = DataLoader.DataLoader()
     return jsonify(results=dataLoader.filterTraits(search))
+
+
+@app.route("/api/funders")
+def getFilterFunders():
+    funders_list = []
+    # Converted the funders_cleaner.txt to json for easier traversal
+    with open("funders_cleaner.json") as file:
+        data = json.load(file)
+        # Sorting the data in the backend before sending returning response
+        sorted_grouping_list = sorted([grouping for grouping in set(data.values())])
+        grouping_dict = {grouping: [] for grouping in sorted_grouping_list}
+
+        for funder, grouping in data.items():
+            grouping_dict[grouping].append(funder)
+
+        sorted_group_dict = {}
+        for grouping in grouping_dict.keys():
+            sorted_group_dict[grouping] = sorted(grouping_dict[grouping])
+
+        for group_index, grouping in enumerate(sorted_group_dict.keys(), start=1):
+            text = grouping
+            # Avoids duplicate element ids
+            if group_index < 11:
+                current_group = {"id": group_index, "text": text}
+            else:
+                current_group = {"id": (group_index * 10), "text": text}
+            current_group["inc"] = []
+            funders_list.append(current_group)
+            # Current group will be the last element of the list as it was just appended
+            for funder_index, funder in enumerate(sorted_group_dict[grouping], start=1):
+                # "id" is used to determine tree hierachy in funder dropdown
+                if group_index < 11:
+                    element_tree_id = (group_index * 10) + funder_index
+                else:
+                    element_tree_id = (group_index * 100) + funder_index
+                current_group["inc"].append({"id": element_tree_id, "text": f"{funder}"})
+
+    json_object = json.dumps({"data": funders_list}, sort_keys=False)
+    return (json_object)

@@ -173,6 +173,7 @@
         }
 
         function initFundersSelect() {
+<<<<<<< HEAD
             var mydata = [
                 {id:1, text:"USA", inc:[
                     {text:"west", inc:[
@@ -190,6 +191,14 @@
             ];
             
             // TODO Fetch data for dropdown + remove static test data above
+=======
+            let mydata;
+            fetch('api/funders')
+            .then(response => response.json())
+            .then(response_json => {
+                mydata = response_json.data;
+            })
+>>>>>>> 149f147673238d1c42276b13f4e65a9e6c10f97a
 
             // Select2-to-tree init
             $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
