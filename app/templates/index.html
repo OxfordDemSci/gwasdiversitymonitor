@@ -71,6 +71,7 @@
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				timeseriesData = data;
+                console.log('timeseriesData', timeseriesData);
 				drawTimeSeries(timeseriesData, '#timeSeries');
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
@@ -79,14 +80,18 @@
 					ancestriesData = adata;
 					drawHeatMap(heatData, false, false, ancestriesData);
 				})
+
+                console.log('heatData', heatData);
 			});
 			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
 				mapData = data;
 				drawWorldMapChart(mapData);
+                console.log('mapData', mapData);
 			});
 			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
 				doughnutData = data;
-				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
+                console.log('doughnutData', doughnutData);
+				// drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
 			});
 
 			// d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
@@ -178,19 +183,22 @@
             .then(response => response.json())
             .then(response_json => {
                 mydata = response_json.data;
+
+                // Select2-to-tree init
+                $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
             })
 
-            // Select2-to-tree init
-            $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
 
             // Select2-to-tree Open event
             $('#funders-select').on('select2:open', () => {
                 $('.select2-dropdown').addClass('funders-dropdown');
+                console.log('select2totree open');
             });
 
             // Select2-to-tree Change event
-            $('#funders-select').on('select2:change', (e) => {
+            $('#funders-select').on('select2:select', (e) => {
                 // Get selected values and call backend endpoint
+                console.log('select2totree select', $('#funders-select').select2('data'));
             });
         }
     </script>
