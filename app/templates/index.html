@@ -71,7 +71,6 @@
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				timeseriesData = data;
-                console.log('timeseriesData', timeseriesData);
 				drawTimeSeries(timeseriesData, '#timeSeries');
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
@@ -80,8 +79,6 @@
 					ancestriesData = adata;
 					drawHeatMap(heatData, false, false, ancestriesData);
 				})
-
-                console.log('heatData', heatData);
 			});
 			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
 				mapData = data;
@@ -90,7 +87,6 @@
 			});
 			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
 				doughnutData = data;
-                console.log('doughnutData', doughnutData);
 				// drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
 			});
 
@@ -183,7 +179,6 @@
             .then(response => response.json())
             .then(response_json => {
                 mydata = response_json.data;
-
                 // Select2-to-tree init
                 $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
             })
@@ -192,14 +187,54 @@
             // Select2-to-tree Open event
             $('#funders-select').on('select2:open', () => {
                 $('.select2-dropdown').addClass('funders-dropdown');
-                console.log('select2totree open');
             });
 
             // Select2-to-tree Change event
             $('#funders-select').on('select2:select', (e) => {
                 // Get selected values and call backend endpoint
-                console.log('select2totree select', $('#funders-select').select2('data'));
+                let selectedFunderOptions = $('#funders-select').select2('data').map(node => node.text);
+
+                // Map Data filter by funders
+                filterMapDataByFunders(selectedFunderOptions);
             });
+
+            $('#funders-select').on('select2:unselect', () => {
+                // Get selected values and call backend endpoint
+                let selectedFunderOptions = $('#funders-select').select2('data').map(node => node.text);
+
+                // Map Data filter by funders
+                if (selectedFunderOptions.length === 0) {
+                    drawWorldMapChart(mapData);
+                } else {
+                    filterMapDataByFunders(selectedFunderOptions);
+                }
+
+                // TODO Heatmap filter by funders
+
+                // TODO Timeseries filter by funders
+
+                // TODO Doughnut Graph filter by funders
+
+                // TODO Bubble Graph filter by funders
+
+                // TODO Summary filter by funders
+            });
+        }
+
+        function filterMapDataByFunders(selectedFunderOptions) {
+            let mapDataByFunders;
+            let mapDataArray = Object.entries(mapData);
+            let structuredFilteredData = {};
+
+            mapDataArray.forEach(year => {
+                let filteredData = Object.values(year[1]).filter(node => {
+                    return selectedFunderOptions.find(funder => funder === node.funder);
+                });
+
+                structuredFilteredData[year[0]] = filteredData;
+            });
+
+            drawWorldMapChart(structuredFilteredData);
         }
     </script>
 {% endblock %}
