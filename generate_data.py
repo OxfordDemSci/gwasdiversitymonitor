@@ -1,4 +1,5 @@
 # generate data: python script that does the daily GWAS data collection
+import unicodedata2 as unicodedata
 import pandas as pd
 import os
 import numpy as np
@@ -48,6 +49,7 @@ def json_converter(data_path):
             json_maker(os.path.join(plot_path, key), value)
         diversity_logger.info('Build of the json_converter: Complete')
     except Exception as e:
+        print(traceback.format_exc())
         diversity_logger.debug(f'Build of the json_converter: Failed -- {e}')
 
 
@@ -695,22 +697,25 @@ def make_doughnut_year(year):
 
     merged = merged[merged['Broader'].notnull() &
                     merged['parentterm'].notnull()]
-    merged = merged[['N', 'STAGE', 'DATE', 'Broader', 'parentterm', 'Agency']]
+    merged = merged[['N', 'STAGE', 'DATE', 'Broader',
+                     'parentterm', 'Agency', 'ASSOCIATION COUNT']]
     counter = 0
     agencies = pd.read_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'),
                            sep='\t', usecols=['Agencies'])
     agencies = agencies['Agencies'].to_list()
     cols = ['Broader', 'parentterm', 'Year', 'Funder', 'InitialN',
-            'InitialCount', 'ReplicationN', 'ReplicationCount']
+            'InitialCount', 'ReplicationN', 'ReplicationCount',
+            'InitialAssociationSum']
     doughnut_df = pd.DataFrame(index=[], columns=cols)
     init_year = merged[(merged['STAGE'] == 'initial') &
                        (merged['DATE'].str.contains(str(year)))]
     rep_year = merged[(merged['STAGE'] == 'replication') &
                       (merged['DATE'].str.contains(str(year)))]
-    init_year = rep_year[['N', 'Broader', 'parentterm', 'Agency']]
+    init_year = init_year[['N', 'Broader', 'parentterm', 'Agency', 'ASSOCIATION COUNT']]
     rep_year = rep_year[['N', 'Broader', 'parentterm', 'Agency']]
     rep_yearN = rep_year['N'].sum()
     init_yearN = init_year['N'].sum()
+    init_yearAss = init_year['ASSOCIATION COUNT'].sum()
     rep_yearC = len(rep_year)
     init_yearC = len(init_year)
     for ancestry in merged['Broader'].unique().tolist():
@@ -722,8 +727,9 @@ def make_doughnut_year(year):
         rep_year_anc = rep_year_anc[['N', 'parentterm', 'Agency']]
         rep_year_ancN = rep_year_anc['N'].sum()
         init_year_anc = init_year[init_year['Broader'] == ancestry]
-        init_year_anc = init_year_anc[['N', 'parentterm', 'Agency']]
+        init_year_anc = init_year_anc[['N', 'parentterm', 'Agency', 'ASSOCIATION COUNT']]
         init_year_ancN = init_year_anc['N'].sum()
+        init_year_anc_Ass = init_year_anc['ASSOCIATION COUNT'].sum()
         if (rep_yearN !=0) & (rep_year_ancN != 0):
             doughnut_df.at[counter, 'ReplicationN'] = round((rep_year_ancN /
                                                              rep_yearN) * 100, 2)
@@ -738,6 +744,14 @@ def make_doughnut_year(year):
             doughnut_df.at[counter, 'InitialN'] = 0
         else:
             doughnut_df.at[counter, 'InitialN'] = np.nan
+        if init_yearAss !=0:
+            doughnut_df.at[counter,
+            'InitialAssociationSum'] = round((init_year_anc_Ass /
+                                              init_yearAss) * 100, 2)
+        elif (init_yearAss != 0) & (init_year_ancAss == 0):
+            doughnut_df.at[counter, 'InitialAssociationSum'] = 0
+        else:
+            doughnut_df.at[counter, 'InitialAssociationSum'] = np.nan
         init_year_ancC = len(init_year_anc)
         rep_year_ancC = len(rep_year_anc)
         if (rep_yearC !=0) & (rep_year_ancC!=0):
@@ -766,10 +780,12 @@ def make_doughnut_year(year):
             rep_year_par = rep_year[rep_year['parentterm'] == parent].copy()
             rep_year_parN = rep_year_par['N'].sum()
             init_year_anc_par = init_year_anc[init_year_anc['parentterm'] == parent].copy()
-            init_year_anc_par = init_year_anc_par[['N', 'Agency']]
+            init_year_anc_par = init_year_anc_par[['N', 'Agency', 'ASSOCIATION COUNT']]
             init_year_anc_parN = init_year_anc_par['N'].sum()
+            init_year_anc_parAss = init_year_anc_par['ASSOCIATION COUNT'].sum()
             init_year_par = init_year[init_year['parentterm'] == parent].copy()
             init_year_parN = init_year_par['N'].sum()
+            init_year_parAss = init_year_par['ASSOCIATION COUNT'].sum()
             if (rep_year_parN != 0) & (rep_year_anc_parN != 0):
                 doughnut_df.at[counter, 'ReplicationN'] = round((rep_year_anc_parN /
                                                                  rep_year_parN) * 100, 2)
@@ -777,6 +793,7 @@ def make_doughnut_year(year):
                 doughnut_df.at[counter, 'ReplicationN'] = 0
             else:
                 doughnut_df.at[counter, 'ReplicationN'] = np.nan
+
             if (init_year_parN != 0) & (init_year_anc_parN != 0):
                 doughnut_df.at[counter, 'InitialN'] = round((init_year_anc_parN /
                                                              init_year_parN) * 100, 2)
@@ -784,11 +801,19 @@ def make_doughnut_year(year):
                 doughnut_df.at[counter, 'InitialN'] = 0
             else:
                 doughnut_df.at[counter, 'InitialN'] = np.nan
+
+            if (init_year_parAss != 0) & (init_year_anc_parAss != 0):
+                doughnut_df.at[counter, 'InitialAssociationSum'] = round((init_year_anc_parAss /
+                                                                          init_year_parAss) * 100, 2)
+            elif (init_year_parAss != 0) & (init_year_anc_parAss == 0):
+                doughnut_df.at[counter, 'InitialAssociationSum'] = 0
+            else:
+                doughnut_df.at[counter, 'InitialAssociationSum'] = np.nan
+
             rep_year_anc_parC = len(rep_year_anc_par)
             rep_year_parC = len(rep_year_par)
             init_year_anc_parC = len(init_year_anc_par)
             init_year_parC = len(init_year_par)
-
 
             if (rep_year_parC != 0) & (rep_year_anc_parC != 0):
                 doughnut_df.at[counter, 'ReplicationCount'] = round((rep_year_anc_parC /
@@ -804,7 +829,6 @@ def make_doughnut_year(year):
                 doughnut_df.at[counter, 'InitialCount'] = 0
             else:
                 doughnut_df.at[counter, 'InitialCount'] = np.nan
-
 
             counter += 1
             for agency in agencies:
@@ -829,7 +853,7 @@ def make_doughnut_year(year):
                     doughnut_df.at[counter, 'ReplicationN'] = np.nan
                 if (rep_year_par_ageC != 0) & (rep_year_anc_par_ageC !=0):
                     doughnut_df.at[counter, 'ReplicationCount'] = round((rep_year_anc_par_ageC /
-                                                                     rep_year_par_ageC) * 100, 2)
+                                                                         rep_year_par_ageC) * 100, 2)
                 elif (rep_year_par_ageC != 0) & (rep_year_anc_par_ageC == 0):
                     doughnut_df.at[counter, 'ReplicationCount'] = 0
                 else:
@@ -837,8 +861,10 @@ def make_doughnut_year(year):
 
                 init_year_anc_par_age = init_year_anc_par[init_year_anc_par['Agency'].str.contains(agency, regex=False)]
                 init_year_anc_par_ageN = init_year_anc_par_age['N'].sum()
+                init_year_anc_par_ageAss = init_year_anc_par_age['ASSOCIATION COUNT'].sum()
                 init_year_par_age = init_year_par[init_year_par['Agency'].str.contains(agency, regex=False)]
                 init_year_par_ageN = init_year_par_age['N'].sum()
+                init_year_par_ageAss = init_year_par_age['ASSOCIATION COUNT'].sum()
                 init_year_anc_par_ageC = len(init_year_anc_par_age)
                 init_year_par_ageC = len(init_year_par_age)
 
@@ -850,6 +876,14 @@ def make_doughnut_year(year):
                 else:
                     doughnut_df.at[counter, 'InitialN'] = np.nan
 
+                if (init_year_par_ageAss != 0) & (init_year_anc_par_ageAss !=0):
+                    doughnut_df.at[counter, 'InitialAssociationSum'] = round((init_year_anc_par_ageAss /
+                                                                             init_year_par_ageAss) * 100, 2)
+                elif (init_year_par_ageN != 0) & (init_year_anc_par_ageN == 0):
+                    doughnut_df.at[counter, 'InitialAssociationSum'] = 0
+                else:
+                    doughnut_df.at[counter, 'InitialAssociationSum'] = np.nan
+
                 if (init_year_par_ageC != 0) & (init_year_anc_par_ageC !=0):
                     doughnut_df.at[counter, 'InitialCount'] = round((init_year_anc_par_ageC /
                                                                      init_year_par_ageC) * 100, 2)
@@ -857,7 +891,6 @@ def make_doughnut_year(year):
                     doughnut_df.at[counter, 'InitialCount'] = 0
                 else:
                     doughnut_df.at[counter, 'InitialCount'] = np.nan
-
                 counter = counter + 1
     return doughnut_df
 
@@ -876,6 +909,7 @@ def make_doughnut_df(data_path):
         doughnut_df.to_csv(os.path.join(data_path, 'toplot', 'doughnut_df.csv'), index=False)
         diversity_logger.info('Build of the doughnut datasets: Complete')
     except Exception as e:
+        print(traceback.format_exc())
         diversity_logger.debug(f'Build of the doughnut datasets: Failed -- {e}')
 
 
@@ -1255,7 +1289,6 @@ def check_paths(data_path):
         os.mkdir(os.path.join(data_path, 'catalog', 'synthetic'))
 
 def strip_accents(text):
-    import unicodedata2 as unicodedata
     try:
         text = unicode(text, 'utf-8')
     except NameError:
@@ -1342,7 +1375,7 @@ if __name__ == "__main__":
         clean_gwas_cat(data_path)
         generate_funder_data(data_path)
         clean_funder_data(data_path)
-        generate_reports(data_path, reports_path)
+        generate_reports(data_path, reports_path, diversity_logger)
         make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
         tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',

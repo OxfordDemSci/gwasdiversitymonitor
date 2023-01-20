@@ -1,4 +1,5 @@
 import os
+import traceback
 import PyPDF2
 import shutil
 import matplotlib.pyplot as plt
@@ -142,8 +143,13 @@ def build_figures(agency_list, data_path, reports_path):
         plt.savefig(figpath)
 
 
-def generate_reports(data_path, reports_path):
-    agency_list = get_agency_list(data_path)
-    build_paths(reports_path, agency_list)
-    build_figures(agency_list, data_path, reports_path)
-    execute_tex(reports_path, data_path, agency_list)
+def generate_reports(data_path, reports_path, diversity_logger):
+    try:
+        agency_list = get_agency_list(data_path)
+        build_paths(reports_path, agency_list)
+        build_figures(agency_list, data_path, reports_path)
+        execute_tex(reports_path, data_path, agency_list)
+        diversity_logger.info('Build of the reports: Complete')
+    except Exception as e:
+        print(traceback.format_exc())
+        diversity_logger.debug('Build of the reports: Failed with exception: ', e)

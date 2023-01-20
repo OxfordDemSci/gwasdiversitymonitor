@@ -96,12 +96,14 @@ class DataLoader:
                         dataDiscoveryParticipants[year] = dict()
                         dataReplicationStudies[year] = dict()
                         dataReplicationParticipants[year] = dict()
+                        dataAssociations[year] = dict()
                     term = row[1]
                     if term not in dataDiscoveryStudies[year]:
                         dataDiscoveryStudies[year][term] = dict()
                         dataDiscoveryParticipants[year][term] = dict()
                         dataReplicationStudies[year][term] = dict()
                         dataReplicationParticipants[year][term] = dict()
+                        dataAssociations[year][term] = dict()
                     ancestry = row[0]
                     ancestryKey = list(ancestryOrder.keys())[list(ancestryOrder.values()).index(ancestry)]
                     dataDiscoveryStudies[year][term][ancestryKey] = {
@@ -122,6 +124,11 @@ class DataLoader:
                     dataReplicationParticipants[year][term][ancestryKey] = {
                         "ancestry": row[0],
                         "value": row[6],
+                        "funder": row[3]
+                    }
+                    dataAssociations[year][term][ancestryKey] = {
+                        "ancestry": row[1],
+                        "value": row[8],
                         "funder": row[3]
                     }
                 line_count += 1
