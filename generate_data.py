@@ -16,7 +16,6 @@ import traceback
 import warnings
 import zipfile
 import math
-import time
 from app.DataLoader import DataLoader
 from joblib import Parallel, delayed, cpu_count
 from Bio import Entrez
