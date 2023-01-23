@@ -1370,11 +1370,11 @@ if __name__ == "__main__":
     diversity_logger.info('final year is being set to: ' + str(final_year))
     reports_path = os.path.join(os.getcwd(), 'reports')
     try:
-        download_cat(data_path, ebi_download)
-        clean_gwas_cat(data_path)
-        generate_funder_data(data_path)
-        clean_funder_data(data_path)
-        generate_reports(data_path, reports_path, diversity_logger)
+        #download_cat(data_path, ebi_download)
+        #clean_gwas_cat(data_path)
+        #generate_funder_data(data_path)
+        #clean_funder_data(data_path)
+        #generate_reports(data_path, reports_path, diversity_logger)
         make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
         tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',

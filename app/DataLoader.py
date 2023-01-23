@@ -174,7 +174,7 @@ class DataLoader:
                             "ancestry" : row[0],
                             "term" : keys[j],
                             "value" : value,
-                            "funder": row[len(row) - 2]
+                            "funder": row[len(row) - 1]
                         }
                         j += 1
                         i += 1
@@ -235,6 +235,7 @@ class DataLoader:
                 if line_count == 0:
                     keys = row
                     keys.remove("Year")
+                    keys.remove("Funder")
                     for key in keys:
                         tsPlot[key] = dict()
                 else:
@@ -243,7 +244,8 @@ class DataLoader:
                     for key in keys:
                         tsPlot[key][line_count-1] = {
                             'year' : year,
-                            'value' : row[i]
+                            'value' : row[i],
+                            'funder': row[-1]
                         }
                         i += 1
                 line_count += 1
