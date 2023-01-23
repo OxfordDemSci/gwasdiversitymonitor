@@ -719,7 +719,7 @@ def make_doughnut_year(year):
     init_yearC = len(init_year)
     for ancestry in merged['Broader'].unique().tolist():
         doughnut_df.at[counter, 'Broader'] = ancestry
-        doughnut_df.at[counter, 'parentterm'] = 'All Funders'
+        doughnut_df.at[counter, 'parentterm'] = 'All Parent Terms'
         doughnut_df.at[counter, 'Year'] = year
         doughnut_df.at[counter, 'Funder'] = 'All Funders'
         rep_year_anc = rep_year[rep_year['Broader'] == ancestry]
@@ -959,6 +959,7 @@ def make_bubbleplot_df(data_path):
             replace(')', '-', regex=False).str.lower()
         paper_grants = read_paper_grants(['PUBMEDID', 'Agency'])
         merged = pd.merge(merged, paper_grants, how='left', left_on='PUBMEDID', right_on="PUBMEDID")
+        merged = merged.rename({'Agency': 'funder'}, axis=1)
         merged.to_csv(os.path.join(data_path, 'toplot', 'bubble_df.csv'), index=False)
         diversity_logger.info('Build of the bubble datasets: Complete')
     except Exception as e:
