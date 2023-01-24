@@ -96,12 +96,14 @@ class DataLoader:
                         dataDiscoveryParticipants[year] = dict()
                         dataReplicationStudies[year] = dict()
                         dataReplicationParticipants[year] = dict()
+                        dataAssociations[year] = dict()
                     term = row[1]
                     if term not in dataDiscoveryStudies[year]:
                         dataDiscoveryStudies[year][term] = dict()
                         dataDiscoveryParticipants[year][term] = dict()
                         dataReplicationStudies[year][term] = dict()
                         dataReplicationParticipants[year][term] = dict()
+                        dataAssociations[year][term] = dict()
                     ancestry = row[0]
                     ancestryKey = list(ancestryOrder.keys())[list(ancestryOrder.values()).index(ancestry)]
                     dataDiscoveryStudies[year][term][ancestryKey] = {
@@ -122,6 +124,11 @@ class DataLoader:
                     dataReplicationParticipants[year][term][ancestryKey] = {
                         "ancestry": row[0],
                         "value": row[6],
+                        "funder": row[3]
+                    }
+                    dataAssociations[year][term][ancestryKey] = {
+                        "ancestry": row[1],
+                        "value": row[8],
                         "funder": row[3]
                     }
                 line_count += 1
@@ -167,7 +174,7 @@ class DataLoader:
                             "ancestry" : row[0],
                             "term" : keys[j],
                             "value" : value,
-                            "funder": row[len(row) - 2]
+                            "funder": row[len(row) - 1]
                         }
                         j += 1
                         i += 1
@@ -228,6 +235,7 @@ class DataLoader:
                 if line_count == 0:
                     keys = row
                     keys.remove("Year")
+                    keys.remove("Funder")
                     for key in keys:
                         tsPlot[key] = dict()
                 else:
@@ -236,7 +244,8 @@ class DataLoader:
                     for key in keys:
                         tsPlot[key][line_count-1] = {
                             'year' : year,
-                            'value' : row[i]
+                            'value' : row[i],
+                            'funder': row[-1]
                         }
                         i += 1
                 line_count += 1
