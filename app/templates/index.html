@@ -71,7 +71,11 @@
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				timeseriesData = data;
-				drawTimeSeries(timeseriesData, '#timeSeries');
+                // console.log('timeseries data', timeseriesData);
+                let timeseriesDataKeys = Object.keys(timeseriesData);
+                let allFundersTimeseriesData = getAllFundersTimeseriesData(timeseriesData, timeseriesDataKeys);
+                
+				drawTimeSeries(allFundersTimeseriesData, '#timeSeries');
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
 				heatData = data;
@@ -79,6 +83,7 @@
 					ancestriesData = adata;
 					drawHeatMap(heatData, false, false, ancestriesData);
 				})
+                console.log('heatmap data', heatData);
 			});
 			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
 				mapData = data;
@@ -235,6 +240,19 @@
             });
 
             drawWorldMapChart(structuredFilteredData);
+        }
+
+        function getAllFundersTimeseriesData(data, keys) {
+            let results = [];
+
+            keys.forEach(key => {
+                results[key] = {};
+                Object.keys(data[key]).forEach(ethnicity => {
+                    results[key][ethnicity] = Object.entries(data[key][ethnicity]).map(e => e[1]).filter(obj => obj.funder === 'All Funders');
+                })
+            });
+
+            return results;
         }
     </script>
 {% endblock %}
