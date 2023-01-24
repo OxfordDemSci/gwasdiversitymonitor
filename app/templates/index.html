@@ -73,8 +73,7 @@
 				timeseriesData = data;
                 // console.log('timeseries data', timeseriesData);
                 let timeseriesDataKeys = Object.keys(timeseriesData);
-                let allFundersTimeseriesData = getAllFundersTimeseriesData(timeseriesData, timeseriesDataKeys);
-                
+                let allFundersTimeseriesData = getAllFundersTimeseriesData(timeseriesData, timeseriesDataKeys, ['All Funders']);
 				drawTimeSeries(allFundersTimeseriesData, '#timeSeries');
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
@@ -83,12 +82,11 @@
 					ancestriesData = adata;
 					drawHeatMap(heatData, false, false, ancestriesData);
 				})
-                console.log('heatmap data', heatData);
+                // console.log('heatmap data', heatData);
 			});
 			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
 				mapData = data;
 				drawWorldMapChart(mapData);
-                console.log('mapData', mapData);
 			});
 			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
 				doughnutData = data;
@@ -201,6 +199,9 @@
 
                 // Map Data filter by funders
                 filterMapDataByFunders(selectedFunderOptions);
+
+                // Timeseries filter by funders
+                filterTimeseriesByFunders(selectedFunderOptions);
             });
 
             $('#funders-select').on('select2:unselect', () => {
@@ -216,7 +217,12 @@
 
                 // TODO Heatmap filter by funders
 
-                // TODO Timeseries filter by funders
+                // Timeseries filter by funders
+                if (selectedFunderOptions.length === 0) {
+                    drawTimeSeries(getAllFundersTimeseriesData(timeseriesData, Object.keys(timeseriesData), ['All Funders']), '#timeSeries');
+                } else {
+                    filterTimeseriesByFunders(selectedFunderOptions);
+                }
 
                 // TODO Doughnut Graph filter by funders
 
@@ -242,17 +248,21 @@
             drawWorldMapChart(structuredFilteredData);
         }
 
-        function getAllFundersTimeseriesData(data, keys) {
+        function getAllFundersTimeseriesData(data, keys, funders) {
             let results = [];
 
             keys.forEach(key => {
                 results[key] = {};
                 Object.keys(data[key]).forEach(ethnicity => {
-                    results[key][ethnicity] = Object.entries(data[key][ethnicity]).map(e => e[1]).filter(obj => obj.funder === 'All Funders');
+                    results[key][ethnicity] = Object.entries(data[key][ethnicity]).map(e => e[1]).filter(obj => funders.find(funder => obj.funder === funder));
                 })
             });
 
             return results;
+        }
+
+        function filterTimeseriesByFunders(selectedFunderOptions) {
+            drawTimeSeries(getAllFundersTimeseriesData(timeseriesData, Object.keys(timeseriesData), selectedFunderOptions), '#timeSeries');
         }
     </script>
 {% endblock %}
