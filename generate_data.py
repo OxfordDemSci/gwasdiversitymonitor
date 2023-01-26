@@ -276,12 +276,12 @@ def make_heatmatrix(merged, stage, col_list, index_list, funder=None):
     """
     Make the heatmatrix!
     """
-    if funder!=None:
-        # @TODO: Why are there nulls here? Due to no disease terms?
-        merged = merged[merged['Agency'].notnull()]
+    merged = merged[merged['Agency'].notnull()]
+    if funder!='All Funders':
+    # @TODO: Why are there nulls here? Due to no disease terms?
         merged = merged[merged['Agency'].str.contains(funder, regex=False)]
-    else:
-        diversity_logger.debug(f'Potential null funders in make_heatmatrix()')
+#    else:
+#        diversity_logger.debug(f'Potential null funders in make_heatmatrix()')
     count_df = pd.DataFrame(columns=col_list)
     sum_df = pd.DataFrame(columns=col_list)
     merged = merged[merged['STAGE'] == stage]
@@ -303,14 +303,14 @@ def make_heatmatrix(merged, stage, col_list, index_list, funder=None):
             temp_sum_df = ((temp_sum_df /
                             temp_sum_df.sum().sum()) * 100).round(2)
             temp_sum_df['Year'] = year
-            if funder != None:
+            if funder != 'All Funders':
                 temp_sum_df['Funder'] = funder
             sum_df = pd.concat([sum_df, temp_sum_df], sort=False)
         if temp_count_df.sum().sum() > 0:
             temp_count_df = ((temp_count_df /
                               temp_count_df.sum().sum()) * 100).round(2)
             temp_count_df['Year'] = year
-            if funder != None:
+            if funder != 'All Funders':
                 temp_count_df['Funder'] = funder
             else:
                 temp_count_df['Funder'] = 'All Funders'
@@ -437,7 +437,7 @@ def make_heatmap_dfs(data_path):
                 temp_count_df['Year'] = year
                 temp_count_df['Funder'] = 'All Funders'
                 rep_count = pd.concat([init_count, temp_count_df], sort=False)
-
+        agencies.append('All Funders')
         res = Parallel(n_jobs=-1)(delayed(make_heatmatrix)(merged, 'initial', col_list, index_list, agency) for agency in agencies)
         init_sum_list = [item[0] for item in res]
         init_count_list = [item[1] for item in res]
@@ -1371,11 +1371,11 @@ if __name__ == "__main__":
     diversity_logger.info('final year is being set to: ' + str(final_year))
     reports_path = os.path.join(os.getcwd(), 'reports')
     try:
-        download_cat(data_path, ebi_download)
-        clean_gwas_cat(data_path)
-        generate_funder_data(data_path)
-        clean_funder_data(data_path)
-        generate_reports(data_path, reports_path, diversity_logger)
+#        download_cat(data_path, ebi_download)
+#        clean_gwas_cat(data_path)
+#        generate_funder_data(data_path)
+#        clean_funder_data(data_path)
+#        generate_reports(data_path, reports_path, diversity_logger)
         make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
         tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',

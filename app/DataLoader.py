@@ -133,11 +133,11 @@ class DataLoader:
                     }
                 line_count += 1
         return {
-            'doughnut_discovery_studies' : dataDiscoveryStudies,
-            'doughnut_discovery_participants' : dataDiscoveryParticipants,
-            'doughnut_replication_studies' : dataReplicationStudies,
-            'doughnut_replication_participants' : dataReplicationParticipants,
-            'doughnut_associations' : dataAssociations
+            'doughnut_discovery_studies': dataDiscoveryStudies,
+            'doughnut_discovery_participants': dataDiscoveryParticipants,
+            'doughnut_replication_studies': dataReplicationStudies,
+            'doughnut_replication_participants': dataReplicationParticipants,
+            'doughnut_associations': dataAssociations
         }
     def getHeatMap(self):
         return {
@@ -157,6 +157,7 @@ class DataLoader:
             year = 0
             for row in csv_reader:
                 if line_count == 0:
+
                     keys = row
                     keys.remove("")
                     keys.remove("Year")
