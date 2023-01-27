@@ -1,6 +1,6 @@
 import csv
+import numpy as np
 import json
-import time
 
 class DataLoader:
     def getAncestriesList(self):
@@ -127,7 +127,7 @@ class DataLoader:
                         "funder": row[3]
                     }
                     dataAssociations[year][term][ancestryKey] = {
-                        "ancestry": row[1],
+                        "ancestry": row[0],
                         "value": row[8],
                         "funder": row[3]
                     }
@@ -157,29 +157,27 @@ class DataLoader:
             year = 0
             for row in csv_reader:
                 if line_count == 0:
-
                     keys = row
                     keys.remove("")
                     keys.remove("Year")
+                    keys.remove("Funder")
                 else:
-                    if row[len(row) - 2] != year:
+                    if int(float(row[len(row) - 2])) != int(float(year)):
                         year = int(float(row[len(row) - 2]))
-                        i = 0
-
+#                        i = 0
                     if year not in data:
                         data[year] = dict()
 
                     j = 0
                     for value in row[1:len(row) - 2]:
                         data[year][i] = {
-                            "ancestry" : row[0],
-                            "term" : keys[j],
-                            "value" : value,
+                            "ancestry": row[0],
+                            "term": keys[j],
+                            "value": np.round(float(value), 2),
                             "funder": row[len(row) - 1]
                         }
                         j += 1
                         i += 1
-
                 line_count += 1
         return data
 

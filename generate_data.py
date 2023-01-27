@@ -312,8 +312,6 @@ def make_heatmatrix(merged, stage, col_list, index_list, funder=None):
             temp_count_df['Year'] = year
             if funder != 'All Funders':
                 temp_count_df['Funder'] = funder
-            else:
-                temp_count_df['Funder'] = 'All Funders'
             count_df = pd.concat([count_df, temp_count_df], sort=False)
     return sum_df, count_df
 
@@ -325,12 +323,12 @@ def make_heatmap_dfs(data_path):
     try:
         Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
-                               usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT'],
+                               usecols=['STUDY ACCESSION', 'DISEASE/TRAIT'],
                                sep='\t')
         Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
                                            'raw', 'Cat_Map.tsv'),
                               sep='\t',
-                              usecols = ['Disease trait', 'Parent term'])
+                              usecols=['Disease trait', 'Parent term'])
         Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
                                left_on='DISEASE/TRAIT',
                                right_on='Disease trait')
@@ -437,7 +435,7 @@ def make_heatmap_dfs(data_path):
                 temp_count_df['Year'] = year
                 temp_count_df['Funder'] = 'All Funders'
                 rep_count = pd.concat([init_count, temp_count_df], sort=False)
-        agencies.append('All Funders')
+#        agencies.append('All Funders')
         res = Parallel(n_jobs=-1)(delayed(make_heatmatrix)(merged, 'initial', col_list, index_list, agency) for agency in agencies)
         init_sum_list = [item[0] for item in res]
         init_count_list = [item[1] for item in res]
@@ -1345,7 +1343,9 @@ def clean_funder_data(data_path):
                 pass
             agency_holder = agency_holder[:-1]
             paper_grants.loc[row, 'Agency'] = agency_holder
-        clean_agencies_list.insert(0, 'All Studies')
+        clean_agencies_list.insert(0, 'All Funders')
+        clean_agencies_list.remove('Unclear')
+        clean_agencies_list.remove('Under 50 Studies')
         with open(os.path.join(data_path, 'pubmed', 'agency_list.txt'), 'w') as f:
             write = csv.writer(f)
             write.writerow(clean_agencies_list)
