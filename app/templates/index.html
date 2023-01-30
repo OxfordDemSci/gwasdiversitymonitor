@@ -71,18 +71,17 @@
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				timeseriesData = data;
-                // console.log('timeseries data', timeseriesData);
                 let timeseriesDataKeys = Object.keys(timeseriesData);
                 let allFundersTimeseriesData = getAllFundersTimeseriesData(timeseriesData, timeseriesDataKeys, ['All Funders']);
 				drawTimeSeries(allFundersTimeseriesData, '#timeSeries');
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
 				heatData = data;
+                console.log('heatmap data', heatData);
 				d3.json("{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}", (error, adata) => {
 					ancestriesData = adata;
 					drawHeatMap(heatData, false, false, ancestriesData);
 				})
-                // console.log('heatmap data', heatData);
 			});
 			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
 				mapData = data;
@@ -117,10 +116,19 @@
             // false = 'discovery'
             isStageReplication = (stageFilter.value === 'replication') ? true : false;
 
+            let selectedFunderOptions = $('#funders-select').select2('data').map(node => node.text);
+
             // Redraw with Studies
-            drawWorldMapChart(mapData, isMetricByStudies);
-            drawTimeSeries(timeseriesData, '#timeSeries', isMetricByStudies, isStageReplication);
+            // Map
+            filterMapDataByFunders(selectedFunderOptions, isMetricByStudies);
+
+            // Timeseries
+            filterTimeseriesByFunders(selectedFunderOptions);
+
+            // Heatmap
             drawHeatMap(heatData, isMetricByStudies, isStageReplication, ancestriesData);
+
+            // Doughnut graph
             drawDoughnutGraph("#doughnutGraph", doughnutData, isMetricByStudies, isStageReplication);
 
             // Change titles
@@ -197,29 +205,66 @@
                 // Get selected values and call backend endpoint
                 let selectedFunderOptions = $('#funders-select').select2('data').map(node => node.text);
 
+                // Get dropdowns (ex switches) boolean value
+                let metricFilter = document.getElementById('metric-filter');
+                let stageFilter = document.getElementById('stage-filter');
+
+                // true = by-studies
+                // false = by-participants
+                let isMetricByStudies = (metricFilter.value === 'by-studies') ? true : false;
+                // true = 'replication'
+                // false = 'discovery'
+                let isStageReplication = (stageFilter.value === 'replication') ? true : false;
+
+
                 // Map Data filter by funders
-                filterMapDataByFunders(selectedFunderOptions);
+                filterMapDataByFunders(selectedFunderOptions, isMetricByStudies);
 
                 // Timeseries filter by funders
                 filterTimeseriesByFunders(selectedFunderOptions);
+
+                // Heatmap filter by funders
+                filterHeatDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
+
+                // TODO Doughnut Graph filter by funders
+
+                // TODO Bubble Graph filter by funders
+
+                // TODO Summary filter by funders
             });
 
             $('#funders-select').on('select2:unselect', () => {
                 // Get selected values and call backend endpoint
                 let selectedFunderOptions = $('#funders-select').select2('data').map(node => node.text);
 
+                // Get dropdowns (ex switches) boolean value
+                let metricFilter = document.getElementById('metric-filter');
+                let stageFilter = document.getElementById('stage-filter');
+
+                // true = by-studies
+                // false = by-participants
+                let isMetricByStudies = (metricFilter.value === 'by-studies') ? true : false;
+                // true = 'replication'
+                // false = 'discovery'
+                let isStageReplication = (stageFilter.value === 'replication') ? true : false;
+
                 // Map Data filter by funders
                 if (selectedFunderOptions.length === 0) {
-                    drawWorldMapChart(mapData);
+                    drawWorldMapChart(mapData, isMetricByStudies);
                 } else {
                     filterMapDataByFunders(selectedFunderOptions);
                 }
 
-                // TODO Heatmap filter by funders
+                // Heatmap filter by funders
+                if (selectedFunderOptions.length === 0) {
+                    drawHeatMap(heatData, isMetricByStudies, isStageReplication, ancestriesData);
+                } else {
+                    filterHeatDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
+                }
 
                 // Timeseries filter by funders
                 if (selectedFunderOptions.length === 0) {
-                    drawTimeSeries(getAllFundersTimeseriesData(timeseriesData, Object.keys(timeseriesData), ['All Funders']), '#timeSeries');
+                    drawTimeSeries(getAllFundersTimeseriesData(timeseriesData, Object.keys(timeseriesData), ['All Funders']), '#timeSeries', isMetricByStudies, isStageReplication);
                 } else {
                     filterTimeseriesByFunders(selectedFunderOptions);
                 }
@@ -232,20 +277,24 @@
             });
         }
 
-        function filterMapDataByFunders(selectedFunderOptions) {
+        function filterMapDataByFunders(selectedFunderOptions , isMetricByStudies) {
             let mapDataByFunders;
             let mapDataArray = Object.entries(mapData);
             let structuredFilteredData = {};
-
-            mapDataArray.forEach(year => {
-                let filteredData = Object.values(year[1]).filter(node => {
-                    return selectedFunderOptions.find(funder => funder === node.funder);
+            
+            if (selectedFunderOptions && selectedFunderOptions.length > 0) {
+                mapDataArray.forEach(year => {
+                    let filteredData = Object.values(year[1]).filter(node => {
+                        return selectedFunderOptions.find(funder => funder === node.funder);
+                    });
+    
+                    structuredFilteredData[year[0]] = filteredData;
                 });
-
-                structuredFilteredData[year[0]] = filteredData;
-            });
-
-            drawWorldMapChart(structuredFilteredData);
+    
+                drawWorldMapChart(structuredFilteredData, isMetricByStudies);
+            } else {
+                drawWorldMapChart(mapData, isMetricByStudies);
+            }
         }
 
         function getAllFundersTimeseriesData(data, keys, funders) {
@@ -262,7 +311,43 @@
         }
 
         function filterTimeseriesByFunders(selectedFunderOptions) {
-            drawTimeSeries(getAllFundersTimeseriesData(timeseriesData, Object.keys(timeseriesData), selectedFunderOptions), '#timeSeries');
+            // Get dropdowns (ex switches) boolean value
+            let metricFilter = document.getElementById('metric-filter');
+            let stageFilter = document.getElementById('stage-filter');
+
+            // true = by-studies
+            // false = by-participants
+            let isMetricByStudies = (metricFilter.value === 'by-studies') ? true : false;
+            // true = 'replication'
+            // false = 'discovery'
+            let isStageReplication = (stageFilter.value === 'replication') ? true : false;
+
+            if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+                selectedFunderOptions = ['All Funders'];
+            }
+
+            drawTimeSeries(getAllFundersTimeseriesData(timeseriesData, Object.keys(timeseriesData), selectedFunderOptions), '#timeSeries', isMetricByStudies, isStageReplication);
+        }
+
+        function filterHeatDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication) {
+            if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+                selectedFunderOptions = ['All Funders'];
+            }
+
+            drawHeatMap(getHeatDataByFunders(heatData, Object.keys(heatData), selectedFunderOptions), isMetricByStudies, isStageReplication, ancestriesData);
+        }
+
+        function getHeatDataByFunders(data, keys, funders) {
+            let results = [];
+
+            keys.forEach(key => {
+                results[key] = {};
+                Object.keys(data[key]).forEach(year => {
+                    results[key][year] = Object.entries(data[key][year]).map(e => e[1]).filter(obj => funders.find(funder => obj.funder === funder));
+                });
+            });
+
+            return results;
         }
     </script>
 {% endblock %}
