@@ -125,10 +125,10 @@
             filterTimeseriesByFunders(selectedFunderOptions);
 
             // Heatmap
-            drawHeatMap(heatData, isMetricByStudies, isStageReplication, ancestriesData);
+            filterHeatDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
 
             // Doughnut graph
-            drawDoughnutGraph("#doughnutGraph", doughnutData, isMetricByStudies, isStageReplication);
+            filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication)
 
             // Change titles
             filtersTitle(isMetricByStudies, isStageReplication);
@@ -215,7 +215,6 @@
                 // false = 'discovery'
                 let isStageReplication = (stageFilter.value === 'replication') ? true : false;
 
-
                 // Map Data filter by funders
                 filterMapDataByFunders(selectedFunderOptions, isMetricByStudies);
 
@@ -225,7 +224,8 @@
                 // Heatmap filter by funders
                 filterHeatDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
 
-                // TODO Doughnut Graph filter by funders
+                // Doughnut Graph filter by funders
+                filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
 
                 // TODO Bubble Graph filter by funders
 
@@ -268,7 +268,12 @@
                     filterTimeseriesByFunders(selectedFunderOptions);
                 }
 
-                // TODO Doughnut Graph filter by funders
+                // Doughnut Graph filter by funders
+                if (selectedFunderOptions.length == 0) {
+                    drawDoughnutGraph("#doughnutGraph", doughnutData, isMetricByStudies, isStageReplication);
+                } else {
+                    filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
+                }
 
                 // TODO Bubble Graph filter by funders
 
@@ -343,6 +348,31 @@
                 results[key] = {};
                 Object.keys(data[key]).forEach(year => {
                     results[key][year] = Object.entries(data[key][year]).map(e => e[1]).filter(obj => funders.find(funder => obj.funder === funder));
+                });
+            });
+
+            return results;
+        }
+
+        function filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication) {
+            if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+                selectedFunderOptions = ['All Funders'];
+            }
+
+            drawDoughnutGraph('#doughnutGraph', getDoughnutDataByFunders(doughnutData, selectedFunderOptions), isMetricByStudies, isStageReplication);
+        }
+
+        function getDoughnutDataByFunders(data, funders) {
+            let keys = Object.keys(data);
+            let results = [];
+
+            keys.forEach(key => {
+                results[key] = {};
+                Object.keys(data[key]).forEach(year => {
+                    results[key][year] = {};
+                    Object.keys(data[key][year]).forEach(term => {
+                        results[key][year][term] = Object.entries(data[key][year][term]).map(e => e[1]).filter(obj => funders.find(funder => obj.funder === funder));
+                    });
                 });
             });
 

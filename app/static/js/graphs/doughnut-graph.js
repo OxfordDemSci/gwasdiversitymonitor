@@ -508,8 +508,6 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
     function drawDoughnutPerYearPerAncestry(dataByType, currentYear, parentTerm) {
         let val = dataByType[currentYear][parentTerm];
-        console.log('parentTerm', parentTerm);
-        console.log('d', dataByType[currentYear][parentTerm]);
 
         noDataSpan = document.querySelector('.doughnut-graph-no-data');
         noDataSpan.innerText = '';
