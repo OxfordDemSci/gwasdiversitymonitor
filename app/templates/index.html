@@ -77,7 +77,6 @@
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
 				heatData = data;
-                console.log('heatmap data', heatData);
 				d3.json("{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}", (error, adata) => {
 					ancestriesData = adata;
 					drawHeatMap(heatData, false, false, ancestriesData);
@@ -89,7 +88,7 @@
 			});
 			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
 				doughnutData = data;
-				// drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
+				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
 			});
 
 			// d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
