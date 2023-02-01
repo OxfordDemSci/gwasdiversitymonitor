@@ -72,8 +72,7 @@
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				timeseriesData = data;
                 let timeseriesDataKeys = Object.keys(timeseriesData);
-                let allFundersTimeseriesData = getAllFundersTimeseriesData(timeseriesData, timeseriesDataKeys, ['All Funders']);
-				drawTimeSeries(allFundersTimeseriesData, '#timeSeries');
+				drawTimeSeries(getAllFundersTimeseriesData(timeseriesData, timeseriesDataKeys, ['All Funders']), '#timeSeries');
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
 				heatData = data;
@@ -91,10 +90,15 @@
 				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
 			});
 
-			// d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
-			// 	bubbleData = data;
-			// 	drawBubbleGraph("#bubbleGraph", bubbleData);
-			// });
+			d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
+				bubbleData = data;
+				drawBubbleGraph("#bubbleGraph", getBubbleDataByFunders(bubbleData, ['All Funders']), false);
+			});
+
+            // d3.json("{{ url_for('getplotjson', filename='summary.json') }}", (error, data) => {
+            //     summaryData = data;
+            //     console.log('summaryData', summaryData, error);
+            // });
         });
 
         function highlight(box) {
@@ -140,7 +144,8 @@
                 var box = $('.only-metric');
             } else {
                 var box = $('.only-stage');
-                drawBubbleGraph("#bubbleGraph", bubbleData, isStageReplication);
+                filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
+                // drawBubbleGraph("#bubbleGraph", bubbleData, isStageReplication);
             }
             highlight(both);
             highlight(box);
@@ -227,7 +232,8 @@
                 // Doughnut Graph filter by funders
                 filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
 
-                // TODO Bubble Graph filter by funders
+                // Bubble Graph filter by funders
+                filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
 
                 // TODO Summary filter by funders
             });
@@ -275,7 +281,12 @@
                     filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
                 }
 
-                // TODO Bubble Graph filter by funders
+                // Bubble Graph filter by funders
+                if (selectedFunderOptions.length === 0) {
+                    drawBubbleGraph("#bubbleGraph", getBubbleDataByFunders(bubbleData, ['All Funders']), isStageReplication);
+                } else {
+                    filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
+                }
 
                 // TODO Summary filter by funders
             });
@@ -377,6 +388,29 @@
             });
 
             return results;
+        }
+
+        function filterBubbleDataByFunders(selectedFunderOptions, isStageReplication) {
+            if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+                selectedFunderOptions = ['All Funders'];
+            }
+
+            drawBubbleGraph('#bubbleGraph', getBubbleDataByFunders(bubbleData, selectedFunderOptions), isStageReplication);
+        }
+
+        function getBubbleDataByFunders(data, funders) {
+            let keys = Object.keys(data);
+            let results = [];
+            
+            if (funders.find(funder => funder === 'All Funders')) {
+                return data;
+            } else {
+                keys.forEach(key => {
+                    results[key] = Object.entries(data[key]).map(e => e[1]).filter(obj => funders.find(funder => obj.funder.indexOf(funder) !== -1));
+                });
+    
+                return results;
+            }
         }
     </script>
 {% endblock %}
