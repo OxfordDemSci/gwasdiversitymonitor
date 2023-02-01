@@ -538,7 +538,9 @@ def make_choro_df(data_path):
                 country_merged = make_annual_CoR(countrylookup, Clean_CoR, year, agency)
                 annual_df = annual_df.append(country_merged, sort=True)
         annual_df = annual_df.reset_index().drop(['level_0'], axis=1).rename({'index': 'Country'}, axis=1)
+        annual_df = annual_df.sort_values(by = 'Year', ascending=True)
         annual_df.to_csv(os.path.join(data_path, 'toplot', 'choro_df.csv'), index=False)
+
         diversity_logger.info('Build of the choropleth dataset: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the choropleth dataset: Failed -- {e}')
@@ -1395,7 +1397,7 @@ if __name__ == "__main__":
 #        make_timeseries_df(tsinput, data_path, 'ts1')
 #        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
 #        make_timeseries_df(tsinput, data_path, 'ts2')
-#        make_choro_df(data_path)
+        make_choro_df(data_path)
 #        make_heatmap_dfs(data_path)
 #        make_parent_list(data_path)
         sumstats = create_summarystats(data_path)
