@@ -85,7 +85,7 @@ def pcs(input_df, filter, in_or_equals, sum_or_count):
         elif input_sum != 0 and temp_sum == 0:
             return 0
         elif input_sum == 0:
-            return np.nan
+            return 0
     elif sum_or_count == 'count':
         temp_count = len(temp_df)
         input_count = len(input_df)
@@ -94,7 +94,7 @@ def pcs(input_df, filter, in_or_equals, sum_or_count):
         elif input_count != 0 and temp_count == 0:
             return 0
         elif input_count == 0:
-            return np.nan
+            return 0
 
 
 def make_sumstats_headline(sumstats, funder, input_df):
@@ -103,17 +103,35 @@ def make_sumstats_headline(sumstats, funder, input_df):
         input_df = input_df[input_df['Agency'].notnull()]
         input_df = input_df[input_df['Agency'].str.contains(funder, regex=False)]
     euro_sum = input_df[input_df['Broader'] == 'European']['N'].sum()
-    sumstats['by_funder'][funder]['total_european'] = round(((euro_sum / input_df['N'].sum())*100), 2)
+    if round(((euro_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_european'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_european'] = round(((euro_sum / input_df['N'].sum())*100), 2)
     asia_sum = input_df[input_df['Broader'] == 'Asian']['N'].sum()
-    sumstats['by_funder'][funder]['total_asian'] = round(((asia_sum / input_df['N'].sum())*100), 2)
+    if round(((asia_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_asian'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_asian'] = round(((asia_sum / input_df['N'].sum())*100), 2)
     afri_sum = input_df[input_df['Broader'] == 'African']['N'].sum()
-    sumstats['by_funder'][funder]['total_african'] = round(((afri_sum / input_df['N'].sum())*100), 2)
+    if round(((afri_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_african'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_african'] = round(((afri_sum / input_df['N'].sum())*100), 2)
     oth_sum = input_df[input_df['Broader'].str.contains('Other')]['N'].sum()
-    sumstats['by_funder'][funder]['total_othermixed'] = round(((oth_sum / input_df['N'].sum())*100), 2)
+    if round(((oth_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_othermixed'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_othermixed'] = round(((oth_sum / input_df['N'].sum())*100), 2)
     cari_sum = input_df[input_df['Broader'].str.contains('Cari')]['N'].sum()
-    sumstats['by_funder'][funder]['total_afamafcam'] = round(((cari_sum / input_df['N'].sum())*100), 2)
+    if round(((cari_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_afamafcam'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_afamafcam'] = round(((cari_sum / input_df['N'].sum())*100), 2)
     hisp_sum = input_df[input_df['Broader'].str.contains('Hispanic')]['N'].sum()
-    sumstats['by_funder'][funder]['total_hisorlatinam'] = round(((hisp_sum / input_df['N'].sum())*100), 2)
+    if round(((hisp_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_hisorlatinam'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_hisorlatinam'] = round(((hisp_sum / input_df['N'].sum())*100), 2)
 
     anc_nonr_init = input_df[input_df['STAGE'] == 'initial']
     sumstats['by_funder'][funder]['discovery_participants_european'] = pcs(anc_nonr_init, 'European', 'equals', 'sum')
@@ -276,12 +294,12 @@ def make_heatmatrix(merged, stage, col_list, index_list, funder=None):
     """
     Make the heatmatrix!
     """
-    if funder!=None:
-        # @TODO: Why are there nulls here? Due to no disease terms?
-        merged = merged[merged['Agency'].notnull()]
+    merged = merged[merged['Agency'].notnull()]
+    if funder!='All Funders':
+    # @TODO: Why are there nulls here? Due to no disease terms?
         merged = merged[merged['Agency'].str.contains(funder, regex=False)]
-    else:
-        diversity_logger.debug(f'Potential null funders in make_heatmatrix()')
+#    else:
+#        diversity_logger.debug(f'Potential null funders in make_heatmatrix()')
     count_df = pd.DataFrame(columns=col_list)
     sum_df = pd.DataFrame(columns=col_list)
     merged = merged[merged['STAGE'] == stage]
@@ -300,20 +318,18 @@ def make_heatmatrix(merged, stage, col_list, index_list, funder=None):
                                   (temp_merged['parentterm'] == column)]['N'].sum()
                 temp_sum_df.at[index, column] = sum
         if temp_sum_df.sum().sum() > 0:
-            temp_sum_df = ((temp_sum_df /
-                            temp_sum_df.sum().sum()) * 100).round(2)
+#                            temp_sum_df = ((temp_sum_df /
+#                            temp_sum_df.sum().sum()) * 100).round(2)
             temp_sum_df['Year'] = year
-            if funder != None:
+            if funder != 'All Funders':
                 temp_sum_df['Funder'] = funder
             sum_df = pd.concat([sum_df, temp_sum_df], sort=False)
         if temp_count_df.sum().sum() > 0:
-            temp_count_df = ((temp_count_df /
-                              temp_count_df.sum().sum()) * 100).round(2)
+#            temp_count_df = ((temp_count_df /
+#                              temp_count_df.sum().sum()) * 100).round(2)
             temp_count_df['Year'] = year
-            if funder != None:
+            if funder != 'All Funders':
                 temp_count_df['Funder'] = funder
-            else:
-                temp_count_df['Funder'] = 'All Funders'
             count_df = pd.concat([count_df, temp_count_df], sort=False)
     return sum_df, count_df
 
@@ -325,12 +341,12 @@ def make_heatmap_dfs(data_path):
     try:
         Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
-                               usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT'],
+                               usecols=['STUDY ACCESSION', 'DISEASE/TRAIT'],
                                sep='\t')
         Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
                                            'raw', 'Cat_Map.tsv'),
                               sep='\t',
-                              usecols = ['Disease trait', 'Parent term'])
+                              usecols=['Disease trait', 'Parent term'])
         Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
                                left_on='DISEASE/TRAIT',
                                right_on='Disease trait')
@@ -396,14 +412,10 @@ def make_heatmap_dfs(data_path):
                                       (temp_merged['parentterm'] == column)]['N'].sum()
                     temp_sum_df.at[index, column] = sum
             if temp_sum_df.sum().sum() > 0:
-                temp_sum_df = ((temp_sum_df /
-                                temp_sum_df.sum().sum()) * 100).round(2)
                 temp_sum_df['Year'] = year
                 temp_sum_df['Funder'] = 'All Funders'
                 init_sum = pd.concat([init_sum, temp_sum_df], sort=False)
             if temp_count_df.sum().sum() > 0:
-                temp_count_df = ((temp_count_df /
-                                  temp_count_df.sum().sum()) * 100).round(2)
                 temp_count_df['Year'] = year
                 temp_count_df['Funder'] = 'All Funders'
                 init_count = pd.concat([init_count, temp_count_df], sort=False)
@@ -426,18 +438,14 @@ def make_heatmap_dfs(data_path):
                                       (temp_merged['parentterm'] == column)]['N'].sum()
                     temp_sum_df.at[index, column] = sum
             if temp_sum_df.sum().sum() > 0:
-                temp_sum_df = ((temp_sum_df /
-                                temp_sum_df.sum().sum()) * 100).round(2)
                 temp_sum_df['Year'] = year
                 temp_sum_df['Funder'] = 'All Funders'
                 rep_sum = pd.concat([rep_sum, temp_sum_df], sort=False)
             if temp_count_df.sum().sum() > 0:
-                temp_count_df = ((temp_count_df /
-                                  temp_count_df.sum().sum()) * 100).round(2)
                 temp_count_df['Year'] = year
                 temp_count_df['Funder'] = 'All Funders'
                 rep_count = pd.concat([init_count, temp_count_df], sort=False)
-
+#        agencies.append('All Funders')
         res = Parallel(n_jobs=-1)(delayed(make_heatmatrix)(merged, 'initial', col_list, index_list, agency) for agency in agencies)
         init_sum_list = [item[0] for item in res]
         init_count_list = [item[1] for item in res]
@@ -1208,7 +1216,7 @@ def generate_funder_data(data_path):
             if 'GrantList' in paper['MedlineCitation']['Article']:
                 for grant in paper['MedlineCitation']['Article']['GrantList']:
                     if 'GrantID' in grant:
-                        if  str(grant['GrantID']) not in str(paper_grants.loc[PMID, 'GrantID']):
+                        if str(grant['GrantID']) not in str(paper_grants.loc[PMID, 'GrantID']):
                             paper_grants.at[PMID, 'GrantID'] = paper_grants.at[PMID, 'GrantID'] + str(grant['GrantID']) + ';'
                         if str(grant['GrantID']) in grantids.index:
                             grantids.at[str(grant['GrantID']), 'Counter'] += 1
@@ -1345,11 +1353,14 @@ def clean_funder_data(data_path):
                 pass
             agency_holder = agency_holder[:-1]
             paper_grants.loc[row, 'Agency'] = agency_holder
-        clean_agencies_list.insert(0, 'All Studies')
+        clean_agencies_list.insert(0, 'All Funders')
+        clean_agencies_list.remove('Unclear')
+        clean_agencies_list.remove('Under 50 Studies')
         with open(os.path.join(data_path, 'pubmed', 'agency_list.txt'), 'w') as f:
             write = csv.writer(f)
             write.writerow(clean_agencies_list)
         agencies.to_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'), sep='\t')
+        paper_grants.to_csv(os.path.join(data_path, 'pubmed', 'paper_grants.tsv'), sep='\t')
         diversity_logger.info('Cleaning and merging the funders: Complete')
     except Exception as e:
         diversity_logger.debug(f'Cleaning and merging the funders: Failed -- {e}')
@@ -1371,21 +1382,21 @@ if __name__ == "__main__":
     diversity_logger.info('final year is being set to: ' + str(final_year))
     reports_path = os.path.join(os.getcwd(), 'reports')
     try:
-        download_cat(data_path, ebi_download)
-        clean_gwas_cat(data_path)
-        generate_funder_data(data_path)
+#        download_cat(data_path, ebi_download)
+#        clean_gwas_cat(data_path)
+#        generate_funder_data(data_path)
         clean_funder_data(data_path)
-        generate_reports(data_path, reports_path, diversity_logger)
-        make_bubbleplot_df(data_path)
-        make_doughnut_df(data_path)
-        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
-        make_timeseries_df(tsinput, data_path, 'ts1')
-        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
-        make_timeseries_df(tsinput, data_path, 'ts2')
-        make_choro_df(data_path)
-        make_heatmap_dfs(data_path)
-        make_parent_list(data_path)
+#        generate_reports(data_path, reports_path, diversity_logger)
+#        make_bubbleplot_df(data_path)
+#        make_doughnut_df(data_path)
+#        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+#                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
+#        make_timeseries_df(tsinput, data_path, 'ts1')
+#        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
+#        make_timeseries_df(tsinput, data_path, 'ts2')
+#        make_choro_df(data_path)
+#        make_heatmap_dfs(data_path)
+#        make_parent_list(data_path)
         sumstats = create_summarystats(data_path)
         zip_for_download(os.path.join(data_path, 'toplot'),
                          os.path.join(data_path, 'todownload'))
