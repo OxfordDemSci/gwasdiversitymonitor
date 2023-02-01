@@ -85,7 +85,7 @@ def pcs(input_df, filter, in_or_equals, sum_or_count):
         elif input_sum != 0 and temp_sum == 0:
             return 0
         elif input_sum == 0:
-            return np.nan
+            return 0
     elif sum_or_count == 'count':
         temp_count = len(temp_df)
         input_count = len(input_df)
@@ -94,7 +94,7 @@ def pcs(input_df, filter, in_or_equals, sum_or_count):
         elif input_count != 0 and temp_count == 0:
             return 0
         elif input_count == 0:
-            return np.nan
+            return 0
 
 
 def make_sumstats_headline(sumstats, funder, input_df):
@@ -103,17 +103,35 @@ def make_sumstats_headline(sumstats, funder, input_df):
         input_df = input_df[input_df['Agency'].notnull()]
         input_df = input_df[input_df['Agency'].str.contains(funder, regex=False)]
     euro_sum = input_df[input_df['Broader'] == 'European']['N'].sum()
-    sumstats['by_funder'][funder]['total_european'] = round(((euro_sum / input_df['N'].sum())*100), 2)
+    if round(((euro_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_european'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_european'] = round(((euro_sum / input_df['N'].sum())*100), 2)
     asia_sum = input_df[input_df['Broader'] == 'Asian']['N'].sum()
-    sumstats['by_funder'][funder]['total_asian'] = round(((asia_sum / input_df['N'].sum())*100), 2)
+    if round(((asia_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_asian'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_asian'] = round(((asia_sum / input_df['N'].sum())*100), 2)
     afri_sum = input_df[input_df['Broader'] == 'African']['N'].sum()
-    sumstats['by_funder'][funder]['total_african'] = round(((afri_sum / input_df['N'].sum())*100), 2)
+    if round(((afri_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_african'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_african'] = round(((afri_sum / input_df['N'].sum())*100), 2)
     oth_sum = input_df[input_df['Broader'].str.contains('Other')]['N'].sum()
-    sumstats['by_funder'][funder]['total_othermixed'] = round(((oth_sum / input_df['N'].sum())*100), 2)
+    if round(((oth_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_othermixed'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_othermixed'] = round(((oth_sum / input_df['N'].sum())*100), 2)
     cari_sum = input_df[input_df['Broader'].str.contains('Cari')]['N'].sum()
-    sumstats['by_funder'][funder]['total_afamafcam'] = round(((cari_sum / input_df['N'].sum())*100), 2)
+    if round(((cari_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_afamafcam'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_afamafcam'] = round(((cari_sum / input_df['N'].sum())*100), 2)
     hisp_sum = input_df[input_df['Broader'].str.contains('Hispanic')]['N'].sum()
-    sumstats['by_funder'][funder]['total_hisorlatinam'] = round(((hisp_sum / input_df['N'].sum())*100), 2)
+    if round(((hisp_sum / input_df['N'].sum())*100), 2) == np.nan:
+        sumstats['by_funder'][funder]['total_hisorlatinam'] = 0
+    else:
+        sumstats['by_funder'][funder]['total_hisorlatinam'] = round(((hisp_sum / input_df['N'].sum())*100), 2)
 
     anc_nonr_init = input_df[input_df['STAGE'] == 'initial']
     sumstats['by_funder'][funder]['discovery_participants_european'] = pcs(anc_nonr_init, 'European', 'equals', 'sum')
@@ -1198,7 +1216,7 @@ def generate_funder_data(data_path):
             if 'GrantList' in paper['MedlineCitation']['Article']:
                 for grant in paper['MedlineCitation']['Article']['GrantList']:
                     if 'GrantID' in grant:
-                        if  str(grant['GrantID']) not in str(paper_grants.loc[PMID, 'GrantID']):
+                        if str(grant['GrantID']) not in str(paper_grants.loc[PMID, 'GrantID']):
                             paper_grants.at[PMID, 'GrantID'] = paper_grants.at[PMID, 'GrantID'] + str(grant['GrantID']) + ';'
                         if str(grant['GrantID']) in grantids.index:
                             grantids.at[str(grant['GrantID']), 'Counter'] += 1
@@ -1342,6 +1360,7 @@ def clean_funder_data(data_path):
             write = csv.writer(f)
             write.writerow(clean_agencies_list)
         agencies.to_csv(os.path.join(data_path, 'pubmed', 'agencies.tsv'), sep='\t')
+        paper_grants.to_csv(os.path.join(data_path, 'pubmed', 'paper_grants.tsv'), sep='\t')
         diversity_logger.info('Cleaning and merging the funders: Complete')
     except Exception as e:
         diversity_logger.debug(f'Cleaning and merging the funders: Failed -- {e}')
@@ -1366,7 +1385,7 @@ if __name__ == "__main__":
 #        download_cat(data_path, ebi_download)
 #        clean_gwas_cat(data_path)
 #        generate_funder_data(data_path)
-#        clean_funder_data(data_path)
+        clean_funder_data(data_path)
 #        generate_reports(data_path, reports_path, diversity_logger)
 #        make_bubbleplot_df(data_path)
 #        make_doughnut_df(data_path)
@@ -1376,7 +1395,7 @@ if __name__ == "__main__":
 #        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
 #        make_timeseries_df(tsinput, data_path, 'ts2')
 #        make_choro_df(data_path)
-        make_heatmap_dfs(data_path)
+#        make_heatmap_dfs(data_path)
 #        make_parent_list(data_path)
         sumstats = create_summarystats(data_path)
         zip_for_download(os.path.join(data_path, 'toplot'),
