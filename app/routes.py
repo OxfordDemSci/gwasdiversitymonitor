@@ -1,12 +1,22 @@
 import os
 import json
+import gzip
 
-from flask import render_template
-from flask import request
-from flask import Response
-from flask import send_file, jsonify
-from app import app
-from app import DataLoader
+from flask_caching import Cache
+
+from flask import (
+    request,
+    render_template,
+    Response,
+    send_file,
+    jsonify
+)
+
+from app import app, DataLoader
+
+
+cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})
+
 
 @app.context_processor
 def inject_template_scope():
@@ -25,6 +35,7 @@ def inject_template_scope():
 
     return injections
 
+
 @app.route('/')
 @app.route('/index')
 def index():
@@ -42,21 +53,33 @@ def index():
     heatMap = dataLoader.getHeatMap()
     doughnutGraph = dataLoader.getDoughnutGraph(ancestriesOrdered)
 
+    # Works with the full integration endpoint
+    filename_list = ["tsPlot.json", "heatMap.json", "ancestriesOrdered.json", "chloroMap.json", "doughnutGraph.json", "bubbleGraph.json"]
+
+    for filename in filename_list:
+        if cache.get(filename) is None:
+            response = getplotjson(filename=filename)
+            continue
+
     return render_template('index.html', title='Home', switches='true', ancestries=ancestries, ancestriesOrdered=ancestriesOrdered, parentTerms=parentTerms, traits=traits, summary=summary, bubbleGraph=bubbleGraph, tsPlot=tsPlot, chloroMap=chloroMap, heatMap=heatMap, doughnutGraph=doughnutGraph)
+
 
 @app.route('/privacy-policy')
 def privacy():
     return render_template('pages/privacy-policy.html', title='Privacy Policy', alwaysShowCookies=1)
 
+
 @app.route('/qandas')
 def qandas():
     return render_template('pages/qandas.html', title='Q&As')
+
 
 @app.route('/additional-information')
 def additional():
     dataLoader = DataLoader.DataLoader()
     summary = dataLoader.getSummaryStatistics()
     return render_template('pages/additional-information.html', summary=summary, title='Additional Information')
+
 
 @app.route("/getCSV/<filename>")
 def getCSV(filename):
@@ -75,13 +98,21 @@ def getCSV(filename):
 
 
 @app.route("/json/<filename>")
+@cache.cached(timeout=3000)
 def getplotjson(filename):
-    with open(f'data/toplot/{filename}') as fp:
-        json = fp.read()
+    # Check if JSON is already in cache even when initialising
+    compressed_json_data = cache.get(filename)
+    if compressed_json_data is None:
+        with open(f'data/toplot/{filename}') as fp:
+            json_data = fp.read()
+            compressed_json_data = gzip.compress(json_data.encode('utf-8'))
+            cache.set(filename, compressed_json_data)
+            compressed_json_data = cache.get(filename)
 
-        return Response(
-            json,
-            mimetype="application/json")
+    response = Response(compressed_json_data, mimetype="application/json")
+    response.headers['Content-Encoding'] = 'gzip'
+
+    return response
 
 
 @app.route("/api/traits", methods=['GET'])
@@ -97,7 +128,7 @@ def getFilterTraits():
 def getFilterFunders():
     funders_list = []
     # Converted the funders_cleaner.txt to json for easier traversal
-    with open(f'app/funder_cleaner.json') as file:
+    with open("data/support/funder_cleaner.json") as file:
         data = json.load(file)
         # Sorting the data in the backend before sending returning response
         sorted_grouping_list = sorted([grouping for grouping in set(data.values())])
