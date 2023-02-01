@@ -394,14 +394,16 @@ def make_heatmap_dfs(data_path):
                                       (temp_merged['parentterm'] == column)]['N'].sum()
                     temp_sum_df.at[index, column] = sum
             if temp_sum_df.sum().sum() > 0:
-                temp_sum_df = ((temp_sum_df /
-                                temp_sum_df.sum().sum()) * 100).round(2)
+#                temp_sum_df = ((temp_sum_df /
+#                                temp_sum_df.sum().sum()) * 100).round(2)
+                temp_sum_df = temp_sum_df.round(2)
                 temp_sum_df['Year'] = year
                 temp_sum_df['Funder'] = 'All Funders'
                 init_sum = pd.concat([init_sum, temp_sum_df], sort=False)
             if temp_count_df.sum().sum() > 0:
-                temp_count_df = ((temp_count_df /
-                                  temp_count_df.sum().sum()) * 100).round(2)
+#                temp_count_df = ((temp_count_df /
+#                                  temp_count_df.sum().sum()) * 100).round(2)
+                temp_count_df = temp_count_df.round(2)
                 temp_count_df['Year'] = year
                 temp_count_df['Funder'] = 'All Funders'
                 init_count = pd.concat([init_count, temp_count_df], sort=False)
@@ -424,14 +426,16 @@ def make_heatmap_dfs(data_path):
                                       (temp_merged['parentterm'] == column)]['N'].sum()
                     temp_sum_df.at[index, column] = sum
             if temp_sum_df.sum().sum() > 0:
-                temp_sum_df = ((temp_sum_df /
-                                temp_sum_df.sum().sum()) * 100).round(2)
+#                temp_sum_df = ((temp_sum_df /
+#                                temp_sum_df.sum().sum()) * 100).round(2)
+                temp_sum_df.round(2)
                 temp_sum_df['Year'] = year
                 temp_sum_df['Funder'] = 'All Funders'
                 rep_sum = pd.concat([rep_sum, temp_sum_df], sort=False)
             if temp_count_df.sum().sum() > 0:
-                temp_count_df = ((temp_count_df /
-                                  temp_count_df.sum().sum()) * 100).round(2)
+#                temp_count_df = ((temp_count_df /
+#                                  temp_count_df.sum().sum()) * 100).round(2)
+                temp_count_df.round(2)
                 temp_count_df['Year'] = year
                 temp_count_df['Funder'] = 'All Funders'
                 rep_count = pd.concat([init_count, temp_count_df], sort=False)
