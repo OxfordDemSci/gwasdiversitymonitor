@@ -285,9 +285,10 @@ def create_summarystats(data_path):
         with open(json_path, 'w') as outfile:
             json.dump(sumstats, outfile)
         diversity_logger.info('Build of the summary stats: Complete')
+        return sumstats
     except Exception as e:
+        print(traceback.format_exc())
         diversity_logger.debug(f'Build of the summary stats: Failed -- {e}')
-    return sumstats
 
 
 def make_heatmatrix(merged, stage, col_list, index_list, funder=None):
@@ -537,7 +538,9 @@ def make_choro_df(data_path):
                 country_merged = make_annual_CoR(countrylookup, Clean_CoR, year, agency)
                 annual_df = annual_df.append(country_merged, sort=True)
         annual_df = annual_df.reset_index().drop(['level_0'], axis=1).rename({'index': 'Country'}, axis=1)
+        annual_df = annual_df.sort_values(by = 'Year', ascending=True)
         annual_df.to_csv(os.path.join(data_path, 'toplot', 'choro_df.csv'), index=False)
+
         diversity_logger.info('Build of the choropleth dataset: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the choropleth dataset: Failed -- {e}')
@@ -1385,7 +1388,7 @@ if __name__ == "__main__":
 #        download_cat(data_path, ebi_download)
 #        clean_gwas_cat(data_path)
 #        generate_funder_data(data_path)
-        clean_funder_data(data_path)
+#        clean_funder_data(data_path)
 #        generate_reports(data_path, reports_path, diversity_logger)
 #        make_bubbleplot_df(data_path)
 #        make_doughnut_df(data_path)
@@ -1394,7 +1397,7 @@ if __name__ == "__main__":
 #        make_timeseries_df(tsinput, data_path, 'ts1')
 #        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
 #        make_timeseries_df(tsinput, data_path, 'ts2')
-#        make_choro_df(data_path)
+        make_choro_df(data_path)
 #        make_heatmap_dfs(data_path)
 #        make_parent_list(data_path)
         sumstats = create_summarystats(data_path)
