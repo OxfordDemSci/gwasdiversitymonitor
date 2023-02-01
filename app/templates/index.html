@@ -79,7 +79,7 @@
 				heatData = data;
 				d3.json("{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}", (error, adata) => {
 					ancestriesData = adata;
-					drawHeatMap(heatData, false, false, ancestriesData);
+					drawHeatMap(getHeatDataByFunders(heatData, Object.keys(heatData), ['All Funders']), false, false, ancestriesData);
 				})
 			});
 			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
@@ -256,7 +256,7 @@
 
                 // Heatmap filter by funders
                 if (selectedFunderOptions.length === 0) {
-                    drawHeatMap(heatData, isMetricByStudies, isStageReplication, ancestriesData);
+                    drawHeatMap(getHeatDataByFunders(heatData, Object.keys(heatData), ['All Funders']), isMetricByStudies, isStageReplication, ancestriesData);
                 } else {
                     filterHeatDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
                 }
