@@ -285,9 +285,10 @@ def create_summarystats(data_path):
         with open(json_path, 'w') as outfile:
             json.dump(sumstats, outfile)
         diversity_logger.info('Build of the summary stats: Complete')
+        return sumstats
     except Exception as e:
+        print(traceback.format_exc())
         diversity_logger.debug(f'Build of the summary stats: Failed -- {e}')
-    return sumstats
 
 
 def make_heatmatrix(merged, stage, col_list, index_list, funder=None):
@@ -1385,7 +1386,7 @@ if __name__ == "__main__":
 #        download_cat(data_path, ebi_download)
 #        clean_gwas_cat(data_path)
 #        generate_funder_data(data_path)
-        clean_funder_data(data_path)
+#        clean_funder_data(data_path)
 #        generate_reports(data_path, reports_path, diversity_logger)
 #        make_bubbleplot_df(data_path)
 #        make_doughnut_df(data_path)
