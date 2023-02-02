@@ -6,6 +6,7 @@ import numpy as np
 import json
 import logging
 import datetime
+import time
 import requests
 import requests_ftp
 import os
@@ -1189,6 +1190,22 @@ def check_data(data_path):
         diversity_logger.debug(f'Unpacking static_data.zip: Failed -- {e}')
 
 
+def get_pubmed_data(id_list):
+    """ A quick helper function to grab the pubmed data."""
+    Entrez.email = 'contact@gwasdiversitymonitor.com'
+    got_data = False
+    diversity_logger.info('Downloading the funders data from PubMed...')
+    while got_data is False:
+        try:
+            papers = Entrez.read(Entrez.efetch(db='pubmed', retmode='xml', id=','.join(id_list)))
+            got_data = True
+        except Exception as e:
+            print(traceback.format_exc())
+            diversity_logger.info('Incomplete read getting pubmed data? Sleeping, trying again')
+            time.sleep(5)
+    diversity_logger.info('Downloading the funders data from PubMed: Complete!')
+    return papers
+
 def generate_funder_data(data_path):
     try:
         raw_path = os.path.join(data_path, 'catalog', 'raw')
@@ -1211,8 +1228,7 @@ def generate_funder_data(data_path):
         agencies = pd.DataFrame(columns=['Counter'])
         countries = pd.DataFrame(columns=['Counter'])
         grantids = pd.DataFrame(columns=['Counter'])
-        Entrez.email = 'contact@gwasdiversitymonitor.com'
-        papers = Entrez.read(Entrez.efetch(db='pubmed', retmode='xml', id=','.join(id_list)))
+        papers = get_pubmed_data(id_list)
         counter = 0
         for i, paper in enumerate(papers['PubmedArticle']):
             PMID = str(papers['PubmedArticle'][counter]['MedlineCitation']['PMID'])
@@ -1385,21 +1401,21 @@ if __name__ == "__main__":
     diversity_logger.info('final year is being set to: ' + str(final_year))
     reports_path = os.path.join(os.getcwd(), 'reports')
     try:
-#        download_cat(data_path, ebi_download)
-#        clean_gwas_cat(data_path)
-#        generate_funder_data(data_path)
-#        clean_funder_data(data_path)
-#        generate_reports(data_path, reports_path, diversity_logger)
-#        make_bubbleplot_df(data_path)
-#        make_doughnut_df(data_path)
-#        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-#                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
-#        make_timeseries_df(tsinput, data_path, 'ts1')
-#        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
-#        make_timeseries_df(tsinput, data_path, 'ts2')
+        download_cat(data_path, ebi_download)
+        clean_gwas_cat(data_path)
+        generate_funder_data(data_path)
+        clean_funder_data(data_path)
+        generate_reports(data_path, reports_path, diversity_logger)
+        make_bubbleplot_df(data_path)
+        make_doughnut_df(data_path)
+        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
+        make_timeseries_df(tsinput, data_path, 'ts1')
+        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
+        make_timeseries_df(tsinput, data_path, 'ts2')
         make_choro_df(data_path)
-#        make_heatmap_dfs(data_path)
-#        make_parent_list(data_path)
+        make_heatmap_dfs(data_path)
+        make_parent_list(data_path)
         sumstats = create_summarystats(data_path)
         zip_for_download(os.path.join(data_path, 'toplot'),
                          os.path.join(data_path, 'todownload'))
