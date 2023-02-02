@@ -95,10 +95,10 @@
 				drawBubbleGraph("#bubbleGraph", getBubbleDataByFunders(bubbleData, ['All Funders']), false);
 			});
 
-            // d3.json("{{ url_for('getplotjson', filename='summary.json') }}", (error, data) => {
-            //     summaryData = data;
-            //     console.log('summaryData', summaryData, error);
-            // });
+            d3.json("{{ url_for('getplotjson', filename='summary.json') }}", (error, data) => {
+                summaryData = data;
+                updateSummaryGraphByFunders(['All Funders'], false, false);
+            });
         });
 
         function highlight(box) {
@@ -134,6 +134,9 @@
             // Doughnut graph
             filterDoughnutDataByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication)
 
+            // Summary chart
+            updateSummaryGraphByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
+
             // Change titles
             filtersTitle(isMetricByStudies, isStageReplication);
             setDescription();
@@ -145,7 +148,6 @@
             } else {
                 var box = $('.only-stage');
                 filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
-                // drawBubbleGraph("#bubbleGraph", bubbleData, isStageReplication);
             }
             highlight(both);
             highlight(box);
@@ -198,7 +200,6 @@
                 $("#funders-select").select2ToTree({treeData: {dataArr:mydata}, placeholder: 'Select funders'});
             })
 
-
             // Select2-to-tree Open event
             $('#funders-select').on('select2:open', () => {
                 $('.select2-dropdown').addClass('funders-dropdown');
@@ -235,7 +236,8 @@
                 // Bubble Graph filter by funders
                 filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
 
-                // TODO Summary filter by funders
+                // Summary filter by funders
+                updateSummaryGraphByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
             });
 
             $('#funders-select').on('select2:unselect', () => {
@@ -288,7 +290,8 @@
                     filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
                 }
 
-                // TODO Summary filter by funders
+                // Summary filter by funders
+                updateSummaryGraphByFunders(selectedFunderOptions, isMetricByStudies, isStageReplication);
             });
         }
 
@@ -411,6 +414,92 @@
     
                 return results;
             }
+        }
+
+        function updateSummaryGraphByFunders(funders, isMetricByStudies, isStageReplication) {
+            if (!funders || funders.length === 0) {
+                funders = ['All Funders'];
+            }
+
+            setSummaryPercentages(funders, isMetricByStudies, isStageReplication);
+        }
+
+        function setSummaryPercentages(funders, isMetricByStudies, isStageReplication) {
+            if (!isMetricByStudies && !isStageReplication) {
+                // default state
+                updateTiles(funders, 'discovery_participants_');
+            }
+
+            if (isMetricByStudies && !isStageReplication) {
+                updateTiles(funders, 'discovery_studies_');
+            }
+
+            if (!isMetricByStudies && isStageReplication) {
+                updateTiles(funders, 'replication_participants_');
+            }
+
+            if (isMetricByStudies && isStageReplication) {
+                updateTiles(funders, 'replication_studies_');
+            }
+        }
+
+        function updateTiles(funders, key) {
+            let tileNumbers = document.querySelectorAll('.tile-numbers');
+
+            tileNumbers.forEach(tile => {
+                let filling = tile.querySelector('.filling');
+                let percentage = tile.querySelector('.percentage');
+
+                if (tile.classList.contains('european')) {
+                    filling.style.height = getAverage(funders, key + 'european');
+                    percentage.innerHTML = getAverage(funders, key + 'european') + '%';
+                }
+
+                if (tile.classList.contains('asian')) {
+                    filling.style.height = getAverage(funders, key + 'asian');
+                    percentage.innerHTML = getAverage(funders, key + 'asian') + '%';
+                }
+
+                if (tile.classList.contains('african')) {
+                    filling.style.height = getAverage(funders, key + 'african');
+                    percentage.innerHTML = getAverage(funders, key + 'african') + '%';
+                }
+
+                if (tile.classList.contains('african-american-or-afro-caribbean')) {
+                    filling.style.height = getAverage(funders, key + 'afamafcam');
+                    percentage.innerHTML = getAverage(funders, key + 'afamafcam') + '%';
+                }
+
+                if (tile.classList.contains('hispanic-or-latin-american')) {
+                    filling.style.height = getAverage(funders, key + 'hisorlatinam');
+                    percentage.innerHTML = getAverage(funders, key + 'hisorlatinam') + '%';
+                }
+
+                if (tile.classList.contains('other-mixed')) {
+                    filling.style.height = getAverage(funders, key + 'othermixed');
+                    percentage.innerHTML = getAverage(funders, key + 'othermixed') + '%';
+                }
+            });
+        }
+
+        function getAverage(funders, property) {
+            let keys = Object.keys(summaryData.by_funder).filter(key => funders.find(funder => funder === key));
+            let average;
+            if (keys && keys.length > 1) {
+                average = keys.reduce((prev, current) => {
+                    if (!summaryData.by_funder[current][property]) {
+                        summaryData.by_funder[current][property] = 0;
+                    }
+
+                    return prev + summaryData.by_funder[current][property];
+                }, 0) / keys.length;
+            }
+
+            if (keys && keys.length === 1) {
+                average = summaryData.by_funder[keys[0]][property];
+            }
+
+            return average;
         }
     </script>
 {% endblock %}
