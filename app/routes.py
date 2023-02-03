@@ -133,10 +133,11 @@ def getFilterFunders():
 
 
 @app.route("/pdf/<fundername>")
-def getResultsPDF(fundername):
+def getReportsPDF(fundername):
+    current_working_directory = os.getcwd()
     try:
         return send_file(
-            f'reports/{fundername}/report.pdf',
+            f'{current_working_directory}/reports/{fundername}/figure.pdf',
             attachment_filename=f'{fundername}.pdf',
             as_attachment=True
             )
