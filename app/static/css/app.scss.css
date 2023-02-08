@@ -2856,6 +2856,8 @@ button, .btn {
     width: 100%;
     max-width: 121px;
     border: none; }
+    .header-select .gwas-select-container--lg {
+      max-width: 242px; }
     .header-select .gwas-select-container::before {
       border-color: #1E1E1E transparent transparent transparent;
       right: 10px;

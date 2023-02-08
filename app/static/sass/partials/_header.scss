@@ -123,6 +123,10 @@
     max-width: 121px;
     border: none;
 
+    &--lg {
+      max-width: 242px;
+    }
+
     &::before {
       border-color: #1E1E1E transparent transparent transparent;
       right: 10px;
