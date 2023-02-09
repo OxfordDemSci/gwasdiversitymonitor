@@ -2815,7 +2815,8 @@ button, .btn {
       justify-content: flex-end; }
     #header .container .download,
     #header .container .add-info {
-      display: none; }
+      display: none;
+      white-space: nowrap; }
 
 .header-filters__left {
   display: none; }
@@ -2845,7 +2846,8 @@ button, .btn {
 .header-select {
   display: flex;
   align-items: center;
-  gap: 11px; }
+  gap: 11px;
+  overflow: hidden; }
   .header-select span {
     font-size: 12px;
     font-weight: 700;
@@ -2855,9 +2857,12 @@ button, .btn {
   .header-select .gwas-select-container {
     width: 100%;
     max-width: 121px;
+    min-width: 121px;
+    max-height: 41px;
     border: none; }
     .header-select .gwas-select-container--lg {
-      max-width: 242px; }
+      max-width: 242px;
+      min-width: 242px; }
     .header-select .gwas-select-container::before {
       border-color: #1E1E1E transparent transparent transparent;
       right: 10px;
@@ -4823,7 +4828,9 @@ select {
 .s2-to-tree li.select2-results__option {
   position: relative;
   padding: 0px;
+  width: fit-content;
   height: auto;
+  min-width: 100%;
   overflow-y: hidden; }
 
 .s2-to-tree li.select2-results__option[data-pup] {
@@ -4889,5 +4896,8 @@ select {
 
 .s2-to-tree.select2-container--open .select2-dropdown--below.funders-dropdown {
   border-top: none !important; }
+
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+  border: none !important; }
 
 /*# sourceMappingURL=app.scss.css.map */

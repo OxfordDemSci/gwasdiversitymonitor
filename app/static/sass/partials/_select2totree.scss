@@ -118,7 +118,9 @@
 .s2-to-tree li.select2-results__option {
 	position: relative;
 	padding: 0px;
+	width: fit-content;
 	height: auto;
+	min-width: 100%;
 	overflow-y: hidden;
 }
 
@@ -199,4 +201,8 @@
 
 .s2-to-tree.select2-container--open .select2-dropdown--below.funders-dropdown {
 	border-top: none !important;
+}
+
+.select2-container--default.select2-container--focus .select2-selection--multiple {
+	border: none !important;
 }
