@@ -135,7 +135,6 @@ def getFilterFunders():
         for n, funder_name in enumerate(sorted_funders_name_list):
             funder_dictionary = {"id": n, "text": funder_name, "inc": []}
             funders_list.append(funder_dictionary)
-    print(funders_list)
     json_object = json.dumps({"data": funders_list})
     return (json_object)
 
