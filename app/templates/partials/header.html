@@ -16,6 +16,9 @@
                     Report
                     <i class="icon-download-data"></i>
                 </a>
+                {% with title='Funders', name='funders', id='funders-select' %}
+                {% include 'components/tree-select.html' %}
+                {% endwith %}
             </div>
             <div class="header-filters__right">
                 {% with title='Metric', name='metric', items=[('By Participants', 'by-participants'), ('By Studies', 'by-studies')], type='single' %}
