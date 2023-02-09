@@ -1,26 +1,27 @@
-{% if key=='European' %}
-    {% set percentage = summary.total_european %}
+<!-- {% if key=='European' %}
+    {% set percentage = summary.by_funder['All Funders'].total_european %}
 {% elif key=='African' %}
-    {% set percentage = summary.total_african %}
+    {% set percentage = summary.by_funder['All Funders'].total_african %}
 {% elif key=='African American or Afro-Caribbean' %}
-    {% set percentage = summary.total_afamafcam %}
+    {% set percentage = summary.by_funder['All Funders'].total_afamafcam %}
 {% elif key=='Other/Mixed' %}
-    {% set percentage = summary.total_othermixed %}
+    {% set percentage = summary.by_funder['All Funders'].total_othermixed %}
 {% elif key=='Asian' %}
-    {% set percentage = summary.total_asian %}
+    {% set percentage = summary.by_funder['All Funders'].total_asian %}
 {% elif key=='Hispanic or Latin American' %}
-    {% set percentage = summary.total_hisorlatinam %}
-{% endif %}
+    {% set percentage = summary.by_funder['All Funders'].total_hisorlatinam %}
+{% endif %} -->
 
 <div class="tile tile-numbers col-xs-4 {{ key | lower | replace(' ', '-') | replace('/', '-') }}">
     <div class="numbers">
         <div class="block">
-            <div class="filling" style="height: {{ percentage }}%;">
+            <div class="filling">
+                <!--  style="height: {{ percentage }}%;" -->
                 <i class="icon-arrow"></i>
             </div>
         </div>
         <span class="percentage">
-            {{ percentage }}%
+            <!-- {{ percentage }}% -->
         </span>
         <span class="label">{{ key }}</span>
     </div>

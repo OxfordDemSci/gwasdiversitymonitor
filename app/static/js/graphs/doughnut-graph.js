@@ -63,7 +63,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
             }
         }
     } else if (!window.withMetric && !window.withStage) {
@@ -72,7 +72,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
             }
         }
     } else if (window.withMetric && window.withStage) {
@@ -81,7 +81,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
             }
         }
     } else if (window.withMetric && !window.withStage) {
@@ -90,7 +90,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             if (selected && selected[0].label) {
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
             } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
             }
         }
     }
@@ -131,7 +131,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         let parentTerm = selected[0].label;
 
         if (parentTerm === 'All parent terms') {
-            parentTerm = 'All';
+            parentTerm = 'All Parent Terms';
         }
 
         drawDoughnutPerYearPerAncestry(specificData, currentYear, parentTerm);
@@ -203,12 +203,12 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
             if (selected && selected[0].label) {
                 if (selected[0].label === 'All parent terms') {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
                 } else {
                     drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
                 }
             } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
             }
         } else {
             // Checkbox is not checked.. OFF
@@ -309,9 +309,9 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
     function drawDgOnYearChange() {
         if (selected && selected[0].label) {
             if (selected[0].label === 'All parent terms') {
-                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+                drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All Parent Terms');
                 if (associationSwitch.checked) {
-                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                    drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
                 }
             } else {
                 drawDoughnutPerYearPerAncestry(specificData, currentYear, selected[0].label);
@@ -320,9 +320,9 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 }
             }
         } else {
-            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+            drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All Parent Terms');
             if (associationSwitch.checked) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
+                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All Parent Terms');
             }
         }
     }
@@ -493,7 +493,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
             }
         }
 
-        drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
+        drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All Parent Terms');
     }
 
     /**

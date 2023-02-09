@@ -1,0 +1,11 @@
+<div class="header-select">
+    <span>{{ title }}</span>
+
+    <div class="gwas-select-container gwas-select-container--lg">
+        <select id="{{ id }}" multiple placeholder="{{ title }}">
+            {% for key, value in items %}
+            <option value="{{ value }}" name="{{ key }}">{{ key }}</option>
+            {% endfor %}
+        </select>
+    </div>
+</div>
