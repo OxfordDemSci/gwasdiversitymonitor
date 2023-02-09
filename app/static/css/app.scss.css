@@ -2856,6 +2856,8 @@ button, .btn {
     width: 100%;
     max-width: 121px;
     border: none; }
+    .header-select .gwas-select-container--lg {
+      max-width: 242px; }
     .header-select .gwas-select-container::before {
       border-color: #1E1E1E transparent transparent transparent;
       right: 10px;
@@ -2869,6 +2871,36 @@ button, .btn {
       font-size: 16px;
       font-weight: 400;
       color: #1E1E1E; }
+    .header-select .gwas-select-container .select2-container {
+      width: 100%; }
+    .header-select .gwas-select-container .select2-selection {
+      border-radius: 0px;
+      border: none; }
+    .header-select .gwas-select-container .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+      padding: 0 10px;
+      min-height: 41px;
+      display: flex;
+      flex-direction: row;
+      overflow: auto;
+      font-size: 16px; }
+      .header-select .gwas-select-container .select2-container--default .select2-selection--multiple .select2-selection__rendered li {
+        display: flex;
+        align-self: center;
+        margin-top: 0; }
+        .header-select .gwas-select-container .select2-container--default .select2-selection--multiple .select2-selection__rendered li.select2-selection__choice {
+          background-color: #5c6bc0;
+          color: white;
+          text-transform: none;
+          padding: 3px 6px;
+          font-weight: 400;
+          border: none; }
+          .header-select .gwas-select-container .select2-container--default .select2-selection--multiple .select2-selection__rendered li.select2-selection__choice .select2-selection__choice__remove {
+            font-size: 24px;
+            font-weight: 400;
+            color: white;
+            margin-right: 4px; }
+    .header-select .gwas-select-container .select2-container--default .select2-search--inline .select2-search__field {
+      margin-top: 0; }
 
 @media screen and (max-width: 480px) {
   #header.with-switches .container .right {
