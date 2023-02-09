@@ -228,7 +228,7 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
             .attr("x", function () { return x; })
             .attr("y", function (d, i) { return height-110-(i*17); })
             .attr("fill", function(d){
-                if (d.value === '0' || d.value === '0.0') {
+                if (d.value === '0' || d.value === '0.0' || d.value === 0 || d.value === 0.0) {
                     return "#5c6bc0";
                 } else {
                     return logColour_scale(logScale(d.value));
