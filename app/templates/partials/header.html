@@ -15,7 +15,7 @@
                 {% with title='Funders', name='funders', id='funders-select' %}
                 {% include 'components/tree-select.html' %}
                 {% endwith %}
-                <a href="{{ url_for ('getReportsPDF', fundername="All Funders")}}" class="btn btn-header">
+                <a href="{{ url_for ('getReportsPDF', fundername="All Funders")}}" class="btn btn-header btn-report">
                     Report
                     <i class="icon-download-data"></i>
                 </a>
