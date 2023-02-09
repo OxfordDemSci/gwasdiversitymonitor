@@ -1,3 +1,4 @@
+PyPDF2
 Bio==1.5.3
 Flask==2.0.2
 joblib==1.2.0

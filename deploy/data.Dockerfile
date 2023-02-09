@@ -12,6 +12,7 @@ RUN pip3 install -r requirements.txt
 
 COPY data_static.zip data_static.zip
 COPY generate_data.py generate_data.py
+COPY generate_reports.py generate_reports.py
 COPY app/DataLoader.py app/DataLoader.py
 
 # CMD ["python3", "generate_data.py", "&&", "cron", "-f"]

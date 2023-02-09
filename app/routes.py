@@ -138,3 +138,16 @@ def getFilterFunders():
     print(funders_list)
     json_object = json.dumps({"data": funders_list})
     return (json_object)
+
+
+@app.route("/pdf/<fundername>")
+def getReportsPDF(fundername):
+    current_working_directory = os.getcwd()
+    try:
+        return send_file(
+            f'{current_working_directory}/reports/{fundername}/report.pdf',
+            attachment_filename=f'{fundername}.pdf',
+            as_attachment=True
+            )
+    except Exception as e:
+        return str(e)
