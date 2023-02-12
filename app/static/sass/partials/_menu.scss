@@ -76,7 +76,7 @@
     }
   }
 
-  @include breakpoint(tablet) {
+  @include breakpoint(medium) {
     &-burger,
     &-nav {
       display: none;

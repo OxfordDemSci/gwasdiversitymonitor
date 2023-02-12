@@ -1,175 +1,681 @@
-{% extends "base.html" %}
+{% extends "base.html" %} {% block content %}
 
-{% block content %}
+<div class="dashboard row">
+  <div class="loader">Loader</div>
 
-    <div class="dashboard row">
+  <div class="tile col-xs-12 col-sm-6 col-lg-3">
+    <div class="box summary">{% include 'tiles/summary.html' %}</div>
+  </div>
 
-        <div class="loader">Loader</div>
-
-        <div class="tile col-xs-12 col-sm-6 col-lg-3">
-            <div class="box summary">
-                {% include 'tiles/summary.html' %}
-            </div>
-        </div>
-
-        <div class="tile col-xs-12 col-lg-6">
-            <div class="box only-stage" id="bubbleGraph">
-                {% include 'tiles/bubble-graph.html' %}
-            </div>
-        </div>
-
-        <div class="tile col-xs-12 col-sm-6 col-lg-3">
-            <div class="box metric-stage" id="timeSeries">
-                {% include 'tiles/time-series.html' %}
-            </div>
-        </div>
-
-        <div class="tile col-xs-12 col-sm-6 col-lg-3">
-            <div class="box metric-stage heat-map" id="heatMap">
-                {% include 'tiles/heat-map.html' %}
-            </div>
-        </div>
-
-        <div class="tile col-xs-12 col-lg-6">
-            <div class="box only-metric world-map" id="worldMap">
-                {% include 'tiles/world-map.html' %}
-            </div>
-        </div>
-
-        <div class="tile col-xs-12 col-sm-6 col-lg-3">
-            {% with graph_id='doughnutGraph' %}
-            <div class="box metric-stage doughnut-graph" id={{graph_id}}>
-                {% include 'tiles/doughnut-graph.html' %}
-            </div>
-            {% endwith %}
-        </div>
-
+  <div class="tile col-xs-12 col-lg-6">
+    <div class="box only-stage" id="bubbleGraph">
+      {% include 'tiles/bubble-graph.html' %}
     </div>
+  </div>
 
-    {% include 'components/logo-download.html' %}
+  <div class="tile col-xs-12 col-sm-6 col-lg-3">
+    <div class="box metric-stage" id="timeSeries">
+      {% include 'tiles/time-series.html' %}
+    </div>
+  </div>
 
-    <div id="downloadShell" style="display: none;"></div>
-    <canvas id="downloadCanvas" style="display: none;"></canvas>
+  <div class="tile col-xs-12 col-sm-6 col-lg-3">
+    <div class="box metric-stage heat-map" id="heatMap">
+      {% include 'tiles/heat-map.html' %}
+    </div>
+  </div>
 
-    <script src="{{ url_for('static', filename='js/graphs/time-series.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/graphs/world-map.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/graphs/bubble-graph.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/graphs/heat-map.js') }}"></script>
-    <script src="{{ url_for('static', filename='js/graphs/doughnut-graph.js') }}"></script>
-    <script type="text/javascript">
-		let timeseriesData;
-		let heatData;
-		let ancestriesData;
-		let mapData;
-		let doughnutData;
-		let bubbleData;
+  <div class="tile col-xs-12 col-lg-6">
+    <div class="box only-metric world-map" id="worldMap">
+      {% include 'tiles/world-map.html' %}
+    </div>
+  </div>
 
-        $(document).ready(function() {
-			setDescription();
+  <div class="tile col-xs-12 col-sm-6 col-lg-3">
+    {% with graph_id='doughnutGraph' %}
+    <div class="box metric-stage doughnut-graph" id="{{graph_id}}">
+      {% include 'tiles/doughnut-graph.html' %}
+    </div>
+    {% endwith %}
+  </div>
+</div>
 
-			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
-				timeseriesData = data;
-				drawTimeSeries(timeseriesData, '#timeSeries');
-			});
-			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
-				heatData = data;
-				d3.json("{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}", (error, adata) => {
-					ancestriesData = adata;
-					drawHeatMap(heatData, false, false, ancestriesData);
-				})
-			});
-			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
-				mapData = data;
-				drawWorldMapChart(mapData);
-			});
-			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
-				doughnutData = data;
-				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
-			});
+{% include 'components/logo-download.html' %}
 
-			d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
-				bubbleData = data;
-				drawBubbleGraph("#bubbleGraph", bubbleData);
-			});
+<div id="downloadShell" style="display: none"></div>
+<canvas id="downloadCanvas" style="display: none"></canvas>
+
+<script src="{{ url_for('static', filename='js/graphs/time-series.js') }}"></script>
+<script src="{{ url_for('static', filename='js/graphs/world-map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/graphs/bubble-graph.js') }}"></script>
+<script src="{{ url_for('static', filename='js/graphs/heat-map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/graphs/doughnut-graph.js') }}"></script>
+<script type="text/javascript">
+  let timeseriesData;
+  let heatData;
+  let ancestriesData;
+  let mapData;
+  let doughnutData;
+  let bubbleData;
+
+  $(document).ready(function () {
+    setDescription();
+
+    initFundersSelect();
+
+    d3.json(
+      "{{ url_for('getplotjson', filename='tsPlot.json') }}",
+      (error, data) => {
+        timeseriesData = data;
+        let timeseriesDataKeys = Object.keys(timeseriesData);
+        drawTimeSeries(
+          getAllFundersTimeseriesData(timeseriesData, timeseriesDataKeys, [
+            "All Funders",
+          ]),
+          "#timeSeries"
+        );
+      }
+    );
+    d3.json(
+      "{{ url_for('getplotjson', filename='heatMap.json') }}",
+      (error, data) => {
+        heatData = data;
+        d3.json(
+          "{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}",
+          (error, adata) => {
+            ancestriesData = adata;
+            drawHeatMap(
+              getHeatDataByFunders(heatData, Object.keys(heatData), [
+                "All Funders",
+              ]),
+              false,
+              false,
+              ancestriesData
+            );
+          }
+        );
+      }
+    );
+    d3.json(
+      "{{ url_for('getplotjson', filename='chloroMap.json') }}",
+      (error, data) => {
+        mapData = data;
+        drawWorldMapChart(mapData);
+      }
+    );
+    d3.json(
+      "{{ url_for('getplotjson', filename='doughnutGraph.json') }}",
+      (error, data) => {
+        doughnutData = data;
+        drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
+      }
+    );
+
+    d3.json(
+      "{{ url_for('getplotjson', filename='bubbleGraph.json') }}",
+      (error, data) => {
+        bubbleData = data;
+        drawBubbleGraph(
+          "#bubbleGraph",
+          getBubbleDataByFunders(bubbleData, ["All Funders"]),
+          false
+        );
+      }
+    );
+
+    d3.json(
+      "{{ url_for('getplotjson', filename='summary.json') }}",
+      (error, data) => {
+        summaryData = data;
+        updateSummaryGraphByFunders(["All Funders"], false, false);
+      }
+    );
+  });
+
+  function highlight(box) {
+    box.addClass("highlight");
+    setTimeout(function () {
+      box.removeClass("highlight");
+    }, 1500);
+  }
+
+  function redrawGraph(el) {
+    let metricFilter = document.getElementById("metric-filter");
+    let stageFilter = document.getElementById("stage-filter");
+
+    // true = by-studies
+    // false = by-participants
+    isMetricByStudies = metricFilter.value === "by-studies" ? true : false;
+    // true = 'replication'
+    // false = 'discovery'
+    isStageReplication = stageFilter.value === "replication" ? true : false;
+
+    let selectedFunderOptions = $("#funders-select")
+      .select2("data")
+      .map((node) => node.text);
+
+    // Redraw with Studies
+    // Map
+    filterMapDataByFunders(selectedFunderOptions, isMetricByStudies);
+
+    // Timeseries
+    filterTimeseriesByFunders(selectedFunderOptions);
+
+    // Heatmap
+    filterHeatDataByFunders(
+      selectedFunderOptions,
+      isMetricByStudies,
+      isStageReplication
+    );
+
+    // Doughnut graph
+    filterDoughnutDataByFunders(
+      selectedFunderOptions,
+      isMetricByStudies,
+      isStageReplication
+    );
+
+    // Summary chart
+    updateSummaryGraphByFunders(
+      selectedFunderOptions,
+      isMetricByStudies,
+      isStageReplication
+    );
+
+    // Change titles
+    filtersTitle(isMetricByStudies, isStageReplication);
+    setDescription();
+
+    // Highlight boxes
+    var both = $(".metric-stage");
+    if ($(el).attr("id") === "cb1") {
+      var box = $(".only-metric");
+    } else {
+      var box = $(".only-stage");
+      filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
+    }
+    highlight(both);
+    highlight(box);
+  }
+
+  function filtersTitle(metric, stage) {
+    let metricTitle = $(".metric-title");
+    let stageTitle = $(".stage-title");
+
+    if (metric) {
+      metricTitle.html("Studies");
+      if (stage) {
+        stageTitle.html("Replication");
+      } else {
+        stageTitle.html("Discovery");
+      }
+    } else {
+      metricTitle.html("Participants");
+      if (stage) {
+        stageTitle.html("Replication");
+      } else {
+        stageTitle.html("Discovery");
+      }
+    }
+  }
+
+  function numberFormatter(val) {
+    if (val >= 1000000) {
+      val = val / 1000000;
+      val = Math.round(val * 10) / 10;
+      val = val + "M";
+    } else if (val >= 1000) {
+      val = val / 1000;
+      val = Math.round(val * 10) / 10;
+      val = val + "k";
+    } else {
+      val = Math.round(val);
+    }
+
+    return val;
+  }
+
+  function initFundersSelect() {
+    let mydata;
+    fetch("api/funders")
+      .then((response) => response.json())
+      .then((response_json) => {
+        mydata = response_json.data;
+        // Select2-to-tree init
+        $("#funders-select").select2ToTree({
+          treeData: { dataArr: mydata },
+          placeholder: "Select funders",
+        });
+      });
+
+    // Select2-to-tree Open event
+    $("#funders-select").on("select2:open", () => {
+      $(".select2-dropdown").addClass("funders-dropdown");
+    });
+
+    // Select2-to-tree Change event
+    $("#funders-select").on("select2:select", (e) => {
+      // Get selected values and call backend endpoint
+      let selectedFunderOptions = $("#funders-select")
+        .select2("data")
+        .map((node) => node.text);
+
+      // Get dropdowns (ex switches) boolean value
+      let metricFilter = document.getElementById("metric-filter");
+      let stageFilter = document.getElementById("stage-filter");
+
+      // true = by-studies
+      // false = by-participants
+      let isMetricByStudies =
+        metricFilter.value === "by-studies" ? true : false;
+      // true = 'replication'
+      // false = 'discovery'
+      let isStageReplication =
+        stageFilter.value === "replication" ? true : false;
+
+      // Map Data filter by funders
+      filterMapDataByFunders(selectedFunderOptions, isMetricByStudies);
+
+      // Timeseries filter by funders
+      filterTimeseriesByFunders(selectedFunderOptions);
+
+      // Heatmap filter by funders
+      filterHeatDataByFunders(
+        selectedFunderOptions,
+        isMetricByStudies,
+        isStageReplication
+      );
+
+      // Doughnut Graph filter by funders
+      filterDoughnutDataByFunders(
+        selectedFunderOptions,
+        isMetricByStudies,
+        isStageReplication
+      );
+
+      // Bubble Graph filter by funders
+      filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
+
+      // Summary filter by funders
+      updateSummaryGraphByFunders(
+        selectedFunderOptions,
+        isMetricByStudies,
+        isStageReplication
+      );
+
+      setReportHref(selectedFunderOptions);
+    });
+
+    $("#funders-select").on("select2:unselect", () => {
+      // Get selected values and call backend endpoint
+      let selectedFunderOptions = $("#funders-select")
+        .select2("data")
+        .map((node) => node.text);
+
+      // Get dropdowns (ex switches) boolean value
+      let metricFilter = document.getElementById("metric-filter");
+      let stageFilter = document.getElementById("stage-filter");
+
+      // true = by-studies
+      // false = by-participants
+      let isMetricByStudies =
+        metricFilter.value === "by-studies" ? true : false;
+      // true = 'replication'
+      // false = 'discovery'
+      let isStageReplication =
+        stageFilter.value === "replication" ? true : false;
+
+      // Map Data filter by funders
+      if (selectedFunderOptions.length === 0) {
+        drawWorldMapChart(mapData, isMetricByStudies);
+      } else {
+        filterMapDataByFunders(selectedFunderOptions);
+      }
+
+      // Heatmap filter by funders
+      if (selectedFunderOptions.length === 0) {
+        drawHeatMap(
+          getHeatDataByFunders(heatData, Object.keys(heatData), [
+            "All Funders",
+          ]),
+          isMetricByStudies,
+          isStageReplication,
+          ancestriesData
+        );
+      } else {
+        filterHeatDataByFunders(
+          selectedFunderOptions,
+          isMetricByStudies,
+          isStageReplication
+        );
+      }
+
+      // Timeseries filter by funders
+      if (selectedFunderOptions.length === 0) {
+        drawTimeSeries(
+          getAllFundersTimeseriesData(
+            timeseriesData,
+            Object.keys(timeseriesData),
+            ["All Funders"]
+          ),
+          "#timeSeries",
+          isMetricByStudies,
+          isStageReplication
+        );
+      } else {
+        filterTimeseriesByFunders(selectedFunderOptions);
+      }
+
+      // Doughnut Graph filter by funders
+      if (selectedFunderOptions.length == 0) {
+        drawDoughnutGraph(
+          "#doughnutGraph",
+          doughnutData,
+          isMetricByStudies,
+          isStageReplication
+        );
+      } else {
+        filterDoughnutDataByFunders(
+          selectedFunderOptions,
+          isMetricByStudies,
+          isStageReplication
+        );
+      }
+
+      // Bubble Graph filter by funders
+      if (selectedFunderOptions.length === 0) {
+        drawBubbleGraph(
+          "#bubbleGraph",
+          getBubbleDataByFunders(bubbleData, ["All Funders"]),
+          isStageReplication
+        );
+      } else {
+        filterBubbleDataByFunders(selectedFunderOptions, isStageReplication);
+      }
+
+      // Summary filter by funders
+      updateSummaryGraphByFunders(
+        selectedFunderOptions,
+        isMetricByStudies,
+        isStageReplication
+      );
+
+      setReportHref(selectedFunderOptions);
+    });
+  }
+
+  function filterMapDataByFunders(selectedFunderOptions, isMetricByStudies) {
+    let mapDataByFunders;
+    let mapDataArray = Object.entries(mapData);
+    let structuredFilteredData = {};
+    if (selectedFunderOptions && selectedFunderOptions.length > 0) {
+      mapDataArray.forEach((year) => {
+        let filteredData = Object.values(year[1]).filter((node) => {
+          return selectedFunderOptions.find((funder) => funder === node.funder);
         });
 
-        function highlight(box) {
-            box.addClass('highlight');
-            setTimeout(function() {
-                box.removeClass('highlight');
-            }, 1500)
-        }
+        structuredFilteredData[year[0]] = filteredData;
+      });
 
-        function redrawGraph(el) {
-            let switchMetric = document.getElementById('cb1');
-            let switchStage = document.getElementById('cb2');
+      drawWorldMapChart(structuredFilteredData, isMetricByStudies);
+    } else {
+      drawWorldMapChart(mapData, isMetricByStudies);
+    }
+  }
 
-            // Redraw with Studies
-            drawWorldMapChart(mapData, switchMetric.checked);
-            drawTimeSeries(timeseriesData, '#timeSeries', switchMetric.checked, switchStage.checked);
-            drawHeatMap(heatData, switchMetric.checked, switchStage.checked, ancestriesData);
-            drawDoughnutGraph("#doughnutGraph", doughnutData, switchMetric.checked, switchStage.checked);
+  function getAllFundersTimeseriesData(data, keys, funders) {
+    let results = [];
 
-            // Change titles
-            filtersTitle(switchMetric.checked, switchStage.checked);
-            setDescription();
+    keys.forEach((key) => {
+      results[key] = {};
+      Object.keys(data[key]).forEach((ethnicity) => {
+        results[key][ethnicity] = Object.entries(data[key][ethnicity])
+          .map((e) => e[1])
+          .filter((obj) => funders.find((funder) => obj.funder === funder));
+      });
+    });
 
-            // Highlight boxes
-            var both = $('.metric-stage');
-            if($(el).attr('id') === 'cb1') {
-                var box = $('.only-metric');
-            } else {
-                var box = $('.only-stage');
-                drawBubbleGraph("#bubbleGraph", bubbleData, switchStage.checked);
-            }
-            highlight(both);
-            highlight(box);
-        }
+    return results;
+  }
 
-        function filtersTitle(metric, stage) {
-            let metricTitle = $('.metric-title');
-            let stageTitle = $('.stage-title');
+  function filterTimeseriesByFunders(selectedFunderOptions) {
+    // Get dropdowns (ex switches) boolean value
+    let metricFilter = document.getElementById("metric-filter");
+    let stageFilter = document.getElementById("stage-filter");
 
-            if(metric) {
-                metricTitle.html('Studies');
-                if(stage) {
-                    stageTitle.html('Replication');
-                } else {
-                    stageTitle.html('Discovery');
-                }
-            } else {
-                metricTitle.html('Participants');
-                if(stage) {
-                    stageTitle.html('Replication');
-                } else {
-                    stageTitle.html('Discovery');
-                }
-            }
-        }
+    // true = by-studies
+    // false = by-participants
+    let isMetricByStudies = metricFilter.value === "by-studies" ? true : false;
+    // true = 'replication'
+    // false = 'discovery'
+    let isStageReplication = stageFilter.value === "replication" ? true : false;
 
-        function numberFormatter(val) {
-            if(val >= 1000000) {
-                val = val / 1000000;
-                val = Math.round( val * 10 ) / 10;
-                val = val+"M";
-            } else if(val >= 1000) {
-                val = val / 1000;
-                val = Math.round( val * 10 ) / 10;
-                val = val+"k";
-            } else {
-                val = Math.round(val);
-            }
+    if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+      selectedFunderOptions = ["All Funders"];
+    }
 
-            return val;
-        }
+    drawTimeSeries(
+      getAllFundersTimeseriesData(
+        timeseriesData,
+        Object.keys(timeseriesData),
+        selectedFunderOptions
+      ),
+      "#timeSeries",
+      isMetricByStudies,
+      isStageReplication
+    );
+  }
 
-        function initFundersSelect() {
-            let mydata;
-            fetch('api/funders')
-            .then(response => response.json())
-            .then(response_json => {
-                mydata = response_json.data;
-            })
-        }
-    </script>
+  function filterHeatDataByFunders(
+    selectedFunderOptions,
+    isMetricByStudies,
+    isStageReplication
+  ) {
+    if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+      selectedFunderOptions = ["All Funders"];
+    }
+
+    drawHeatMap(
+      getHeatDataByFunders(
+        heatData,
+        Object.keys(heatData),
+        selectedFunderOptions
+      ),
+      isMetricByStudies,
+      isStageReplication,
+      ancestriesData
+    );
+  }
+
+  function getHeatDataByFunders(data, keys, funders) {
+    let results = [];
+
+    keys.forEach((key) => {
+      results[key] = {};
+      Object.keys(data[key]).forEach((year) => {
+        results[key][year] = Object.entries(data[key][year])
+          .map((e) => e[1])
+          .filter((obj) => funders.find((funder) => obj.funder === funder));
+      });
+    });
+
+    return results;
+  }
+
+  function filterDoughnutDataByFunders(
+    selectedFunderOptions,
+    isMetricByStudies,
+    isStageReplication
+  ) {
+    if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+      selectedFunderOptions = ["All Funders"];
+    }
+
+    drawDoughnutGraph(
+      "#doughnutGraph",
+      getDoughnutDataByFunders(doughnutData, selectedFunderOptions),
+      isMetricByStudies,
+      isStageReplication
+    );
+  }
+
+  function getDoughnutDataByFunders(data, funders) {
+    let keys = Object.keys(data);
+    let results = [];
+
+    keys.forEach((key) => {
+      results[key] = {};
+      Object.keys(data[key]).forEach((year) => {
+        results[key][year] = {};
+        Object.keys(data[key][year]).forEach((term) => {
+          results[key][year][term] = Object.entries(data[key][year][term])
+            .map((e) => e[1])
+            .filter((obj) => funders.find((funder) => obj.funder === funder));
+        });
+      });
+    });
+
+    return results;
+  }
+
+  function filterBubbleDataByFunders(
+    selectedFunderOptions,
+    isStageReplication
+  ) {
+    if (!selectedFunderOptions || selectedFunderOptions.length === 0) {
+      selectedFunderOptions = ["All Funders"];
+    }
+
+    drawBubbleGraph(
+      "#bubbleGraph",
+      getBubbleDataByFunders(bubbleData, selectedFunderOptions),
+      isStageReplication
+    );
+  }
+
+  function getBubbleDataByFunders(data, funders) {
+    let keys = Object.keys(data);
+    let results = [];
+    if (funders.find((funder) => funder === "All Funders")) {
+      return data;
+    } else {
+      keys.forEach((key) => {
+        results[key] = Object.entries(data[key])
+          .map((e) => e[1])
+          .filter((obj) =>
+            funders.find((funder) => obj.funder.indexOf(funder) !== -1)
+          );
+      });
+      return results;
+    }
+  }
+
+  function updateSummaryGraphByFunders(
+    funders,
+    isMetricByStudies,
+    isStageReplication
+  ) {
+    if (!funders || funders.length === 0) {
+      funders = ["All Funders"];
+    }
+
+    setSummaryPercentages(funders, isMetricByStudies, isStageReplication);
+  }
+
+  function setSummaryPercentages(
+    funders,
+    isMetricByStudies,
+    isStageReplication
+  ) {
+    if (!isMetricByStudies && !isStageReplication) {
+      // default state
+      updateTiles(funders, "discovery_participants_");
+    }
+
+    if (isMetricByStudies && !isStageReplication) {
+      updateTiles(funders, "discovery_studies_");
+    }
+
+    if (!isMetricByStudies && isStageReplication) {
+      updateTiles(funders, "replication_participants_");
+    }
+
+    if (isMetricByStudies && isStageReplication) {
+      updateTiles(funders, "replication_studies_");
+    }
+  }
+
+  function updateTiles(funders, key) {
+    let tileNumbers = document.querySelectorAll(".tile-numbers");
+
+    tileNumbers.forEach((tile) => {
+      let filling = tile.querySelector(".filling");
+      let percentage = tile.querySelector(".percentage");
+
+      if (tile.classList.contains("european")) {
+        filling.style.height = getAverage(funders, key + "european");
+        percentage.innerHTML = getAverage(funders, key + "european") + "%";
+      }
+
+      if (tile.classList.contains("asian")) {
+        filling.style.height = getAverage(funders, key + "asian");
+        percentage.innerHTML = getAverage(funders, key + "asian") + "%";
+      }
+
+      if (tile.classList.contains("african")) {
+        filling.style.height = getAverage(funders, key + "african");
+        percentage.innerHTML = getAverage(funders, key + "african") + "%";
+      }
+
+      if (tile.classList.contains("african-american-or-afro-caribbean")) {
+        filling.style.height = getAverage(funders, key + "afamafcam");
+        percentage.innerHTML = getAverage(funders, key + "afamafcam") + "%";
+      }
+
+      if (tile.classList.contains("hispanic-or-latin-american")) {
+        filling.style.height = getAverage(funders, key + "hisorlatinam");
+        percentage.innerHTML = getAverage(funders, key + "hisorlatinam") + "%";
+      }
+
+      if (tile.classList.contains("other-mixed")) {
+        filling.style.height = getAverage(funders, key + "othermixed");
+        percentage.innerHTML = getAverage(funders, key + "othermixed") + "%";
+      }
+    });
+  }
+
+  function getAverage(funders, property) {
+    let keys = Object.keys(summaryData.by_funder).filter((key) =>
+      funders.find((funder) => funder === key)
+    );
+    let average;
+    if (keys && keys.length > 1) {
+      average =
+        keys.reduce((prev, current) => {
+          if (!summaryData.by_funder[current][property]) {
+            summaryData.by_funder[current][property] = 0;
+          }
+
+          return prev + summaryData.by_funder[current][property];
+        }, 0) / keys.length;
+    }
+
+    if (keys && keys.length === 1) {
+      average = summaryData.by_funder[keys[0]][property];
+    }
+
+    return average;
+  }
+
+  function setReportHref(funders) {
+    var reportBtn = document.querySelector(".btn-report");
+    var url = "";
+    if (funders && funders.length > 0) {
+      url = "/pdf/" + funders[0];
+    } else {
+      url = "{{ url_for ('getReportsPDF', fundername='All Funders') }}";
+    }
+    reportBtn.href = url;
+  }
+</script>
 {% endblock %}
