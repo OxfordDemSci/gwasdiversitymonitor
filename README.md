@@ -1,5 +1,5 @@
 <p align="left">
-  <img src="https://github.com/OxfordDemSci/gwasdiversitymonitor/blob/master/app/static/images/logo_white_rect.png" width="450"/>
+  <img src="app/static/images/logo_white_rect.png" width="450"/>
 </p>
 
 [![DOI](https://zenodo.org/badge/220447592.svg)](https://zenodo.org/badge/latestdoi/220447592) [![Generic badge](https://img.shields.io/badge/Python-3.6-<red>.svg)](https://shields.io/)  [![Generic badge](https://img.shields.io/badge/License-MIT-green.svg)](https://shields.io/)  [![Generic badge](https://img.shields.io/badge/Maintained-Yes-red.svg)](https://shields.io/)
@@ -76,8 +76,4 @@ This work is free. You can redistribute it and/or modify it under the terms of t
 
 ### Acknowledgements
 
-We are grateful to the extensive help provided by [Global Initiative](https://www.global-initiative.com/) (and in particular to Jamie, Nynke, Veatriki, Alex, Lea and Quentin). Additional help and specific comments came from [Ian Knowles](https://github.com/ianknowles), [Yi Liu](https://github.com/YiLiu6240), [Jiani Yan](https://github.com/vallerrr), [Molly Przeworski](https://przeworskilab.com/), [Ben Domingue](https://github.com/ben-domingue), [Sam Trejo](https://cepa.stanford.edu/people/sam-trejo) and the [Sociogenome](http://www.sociogenome.org) group more generally.
-
-### Future Versions
-
-1. Additional tabs regarding funders, network analysis, and so forth.
+We are grateful to the extensive help provided by [Global Initiative](https://www.global-initiative.com/) (and in particular to Jamie, Nynke, Veatriki, Alex, Lea, Peter, Liam, Chris and Quentin). Additional help and specific comments came from [Ian Knowles](https://github.com/ianknowles), [Yi Liu](https://github.com/YiLiu6240), [Jiani Yan](https://github.com/vallerrr), [Molly Przeworski](https://przeworskilab.com/), [Ben Domingue](https://github.com/ben-domingue), [Sam Trejo](https://cepa.stanford.edu/people/sam-trejo), [Wesley Wang](https://sg.linkedin.com/in/wesley-wang-jiewei) and the [Sociogenome](http://www.sociogenome.org) group more generally.
