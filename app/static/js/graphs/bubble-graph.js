@@ -106,6 +106,7 @@ function drawBubbleGraph(selector, data, replication) {
         .attr("r", function(d){ return sizeScale(d.N) })
         .attr("pubmedid", function (d) { return d.PUBMEDID })
         .attr("author", function (d) { return d.AUTHOR })
+        .attr("funder", function (d) { return d.funder })
         .attr("accession", function (d) { return d.ACCESSION })
         .attr("N", function (d) { return d.N })
         .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait.replace('>', 'more than').replace('<', 'less than') })
@@ -194,6 +195,7 @@ function drawBubbleGraph(selector, data, replication) {
                 //var rAttr = $(selectedBubbles[i]).attr('r');
                 var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
                 var authorAttr = $(selectedBubbles[i]).attr('author');
+                var funderAttr = $(selectedBubbles[i]).attr('funder');
                 var accessionAttr = $(selectedBubbles[i]).attr('accession');
                 var nAttr = $(selectedBubbles[i]).attr('N');
                 var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
@@ -213,6 +215,7 @@ function drawBubbleGraph(selector, data, replication) {
                     .attr("r", rAttr)
                     .attr("pubmedid", pubmedidAttr)
                     .attr("author", authorAttr)
+                    .attr("funder", funderAttr)
                     .attr("accession", accessionAttr)
                     .attr("N", nAttr)
                     .attr("DiseaseOrTrait", diseaseOrTraitAttr)
@@ -293,6 +296,7 @@ function drawBubbleGraph(selector, data, replication) {
                 var cxAttr = $(selectedBubbles[i]).attr('cx');
                 var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
                 var authorAttr = $(selectedBubbles[i]).attr('author');
+                var funderAttr = $(selectedBubbles[i]).attr('funder');
                 var accessionAttr = $(selectedBubbles[i]).attr('accession');
                 var nAttr = $(selectedBubbles[i]).attr('N');
                 var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
@@ -310,6 +314,7 @@ function drawBubbleGraph(selector, data, replication) {
                     .attr("r", rAttr)
                     .attr("pubmedid", pubmedidAttr)
                     .attr("author", authorAttr)
+                    .attr("funder", funderAttr)
                     .attr("accession", accessionAttr)
                     .attr("N", nAttr)
                     .attr("DiseaseOrTrait", diseaseOrTraitAttr)
@@ -366,6 +371,7 @@ function drawBubbleGraph(selector, data, replication) {
                 var rAttr = $(selectedBubbles[i]).attr('r');
                 var pubmedidAttr = $(selectedBubbles[i]).attr('pubmedid');
                 var authorAttr = $(selectedBubbles[i]).attr('author');
+                var funderAttr = $(selectedBubbles[i]).attr('funder');
                 var accessionAttr = $(selectedBubbles[i]).attr('accession');
                 var nAttr = $(selectedBubbles[i]).attr('N');
                 var diseaseOrTraitAttr = $(selectedBubbles[i]).attr('DiseaseOrTrait');
@@ -382,6 +388,7 @@ function drawBubbleGraph(selector, data, replication) {
                     .attr("r", rAttr)
                     .attr("pubmedid", pubmedidAttr)
                     .attr("author", authorAttr)
+                    .attr("funder", funderAttr)
                     .attr("accession", accessionAttr)
                     .attr("N", nAttr)
                     .attr("DiseaseOrTrait", diseaseOrTraitAttr)
@@ -480,7 +487,8 @@ function makeSelected(node) {
             $("#bubbleGraph .details").append(
                 "<div class='row' id='" + id + "'>"+
                 "<div class='first'><a href='https://www.ncbi.nlm.nih.gov/pubmed/" + id + "' target='_blank'>PUBMEDID: " + id + "</a>"+
-                "<span>First Author <strong>" + node.getAttribute("author")+"</strong></span></div>"+
+                "<span>First Author <strong>" + node.getAttribute("author")+"</strong></span>"+
+                "<span>Funder <strong>" + node.getAttribute("funder").replaceAll(';', ' - ')+"</strong></span></div>"+
                 "<div class='last' id='" + size + "'><span>Size: " + numberFormatter(size) + " Part.</span>"+
                 "<div class='last-inside'><span>" + node.getAttribute("accession") + "</span>"+
                 "<span>" + node.getAttribute("DiseaseOrTrait") + "</span></div></div>"+
@@ -540,6 +548,7 @@ function reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, t
         .attr("r", function(d){ return sizeScale(d.N) })
         .attr("pubmedid", function (d) { return d.PUBMEDID })
         .attr("author", function (d) { return d.AUTHOR })
+        .attr("funder", function (d) { return d.funder })
         .attr("accession", function (d) { return d.ACCESSION })
         .attr("N", function (d) { return d.N })
         .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait.replace('>', 'more than').replace('<', 'less than') })

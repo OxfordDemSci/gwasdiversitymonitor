@@ -138,3 +138,93 @@ dmypy.json
 # *.zip
 # *.json
 # *.css.map
+reports/
+/reports/All Studies/report.pdf
+/reports/Medical Research Council (UK)/report.pdf
+/reports/NCI NIH HHS/report.pdf
+/reports/NCRR NIH HHS/report.pdf
+/reports/NHGRI NIH HHS/report.pdf
+/reports/NHLBI NIH HHS/report.pdf
+/reports/NIA NIH HHS/report.pdf
+/reports/NIDDK NIH HHS/report.pdf
+/reports/NIMH NIH HHS/report.pdf
+/reports/Wellcome Trust/report.pdf
+/reports/All Studies/report.tex
+/reports/Medical Research Council (UK)/report.tex
+/reports/NCI NIH HHS/report.tex
+/reports/NCRR NIH HHS/report.tex
+/reports/NHGRI NIH HHS/report.tex
+/reports/NHLBI NIH HHS/report.tex
+/reports/NIA NIH HHS/report.tex
+/reports/NIDDK NIH HHS/report.tex
+/reports/NIMH NIH HHS/report.tex
+/reports/Wellcome Trust/report.tex
+/pyPdf
+/reports/Arthritis Research UK/report.pdf
+/reports/Biotechnology and Biological Sciences Research Council/report.pdf
+/reports/British Heart Foundation/report.pdf
+/reports/Cancer Research UK/report.pdf
+/reports/CCR NIH HHS/report.pdf
+/reports/Chief Scientist Office UK/report.pdf
+/reports/CIHR/report.pdf
+/reports/European Research Council/report.pdf
+/reports/FIC NIH HHS/report.pdf
+/reports/Howard Hughes Medical Institute/report.pdf
+/reports/Intramural NIH HHS/report.pdf
+/reports/NCATS NIH HHS/report.pdf
+/reports/NCCDPHP CDC HHS/report.pdf
+/reports/NEI NIH HHS/report.pdf
+/reports/NIAAA NIH HHS/report.pdf
+/reports/NIAID NIH HHS/report.pdf
+/reports/NIAMS NIH HHS/report.pdf
+/reports/NIBIB NIH HHS/report.pdf
+/reports/NICHD NIH HHS/report.pdf
+/reports/NIDA NIH HHS/report.pdf
+/reports/NIDCR NIH HHS/report.pdf
+/reports/NIEHS NIH HHS/report.pdf
+/reports/NIGMS NIH HHS/report.pdf
+/reports/NIH (Other)/report.pdf
+/reports/NIMHD NIH HHS/report.pdf
+/reports/NINDS NIH HHS/report.pdf
+/reports/NLM NIH HHS/report.pdf
+/reports/Parkinson's UK/report.pdf
+/reports/PHS HHS/report.pdf
+/reports/Unclear/report.pdf
+/reports/Under 50 Studies/report.pdf
+/reports/Versus Arthritis/report.pdf
+/reports/Veterans Association/report.pdf
+/reports/WHI NIH HHS/report.pdf
+/reports/Arthritis Research UK/report.tex
+/reports/Biotechnology and Biological Sciences Research Council/report.tex
+/reports/British Heart Foundation/report.tex
+/reports/Cancer Research UK/report.tex
+/reports/CCR NIH HHS/report.tex
+/reports/Chief Scientist Office UK/report.tex
+/reports/CIHR/report.tex
+/reports/European Research Council/report.tex
+/reports/FIC NIH HHS/report.tex
+/reports/Howard Hughes Medical Institute/report.tex
+/reports/Intramural NIH HHS/report.tex
+/reports/NCATS NIH HHS/report.tex
+/reports/NCCDPHP CDC HHS/report.tex
+/reports/NEI NIH HHS/report.tex
+/reports/NIAAA NIH HHS/report.tex
+/reports/NIAID NIH HHS/report.tex
+/reports/NIAMS NIH HHS/report.tex
+/reports/NIBIB NIH HHS/report.tex
+/reports/NICHD NIH HHS/report.tex
+/reports/NIDA NIH HHS/report.tex
+/reports/NIDCR NIH HHS/report.tex
+/reports/NIEHS NIH HHS/report.tex
+/reports/NIGMS NIH HHS/report.tex
+/reports/NIH (Other)/report.tex
+/reports/NIMHD NIH HHS/report.tex
+/reports/NINDS NIH HHS/report.tex
+/reports/NLM NIH HHS/report.tex
+/reports/Parkinson's UK/report.tex
+/reports/PHS HHS/report.tex
+/reports/Unclear/report.tex
+/reports/Under 50 Studies/report.tex
+/reports/Versus Arthritis/report.tex
+/reports/Veterans Association/report.tex
+/reports/WHI NIH HHS/report.tex
