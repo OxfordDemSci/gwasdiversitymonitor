@@ -144,7 +144,7 @@ def getReportsPDF(fundername):
     current_working_directory = os.getcwd()
     try:
         return send_file(
-            f'{current_working_directory}/reports/{fundername}/report.pdf',
+            f'{current_working_directory}/data/reports/{fundername}/report.pdf',
             attachment_filename=f'{fundername}.pdf',
             as_attachment=True
             )
