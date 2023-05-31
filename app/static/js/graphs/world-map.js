@@ -26,6 +26,8 @@ function drawWorldMapChart(data, withMetric) {
     let margin = {top: 0, right: 0, bottom: 0, left: 0};
     let width;
 
+    window.associationSwitch = document.getElementById('cbAssociation');
+
     if (window.worldMapInitWidth && window.associationSwitch.checked) {
         width = window.worldMapInitWidth;
     } else {
