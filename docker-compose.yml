@@ -19,27 +19,29 @@ services:
 
   flask:
     container_name: gwas_flask
+    volumes:
+      - ./:/var/www
+      - ./data:/app/data
     build:
       context: ./
       dockerfile: deploy/flask.Dockerfile
     command: gunicorn --config gunicorn_config.py wsgi:app
-    volumes:
-      - ./:/var/www
-      - ./data:/app/data
     networks:
       my-network:
         aliases:
           - flask-app
+    depends_on:
+      - data
     restart: unless-stopped
 
   data:
     container_name: gwas_data
+    volumes:
+      - ./data:/app/data
     build:
       context: ./
       dockerfile: deploy/data.Dockerfile
     command: ["python3", "generate_data.py"]
-    volumes:
-      - ./data:/app/data
     networks:
       - my-network
     restart: on-failure

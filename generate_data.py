@@ -1342,7 +1342,6 @@ def check_paths(data_path):
             os.mkdir(os.path.join(data_path, subdir))
     if os.path.exists(os.path.join(data_path, 'catalog', 'raw')) is False:
         os.mkdir(os.path.join(data_path, 'catalog', 'raw'))
-        os.mkdir(os.path.join(data_path, 'catalog', 'raw'))
     if os.path.exists(os.path.join(data_path, 'catalog', 'synthetic')) is False:
         os.mkdir(os.path.join(data_path, 'catalog', 'synthetic'))
 
