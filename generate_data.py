@@ -20,6 +20,7 @@ import math
 from app.DataLoader import DataLoader
 from joblib import Parallel, delayed, cpu_count
 from Bio import Entrez
+from simple_file_checksum import get_checksum
 from generate_reports import generate_reports
 warnings.filterwarnings("ignore")
 
@@ -1083,33 +1084,56 @@ def make_clean_CoR(Cat_Anc, data_path):
 def download_cat(data_path, ebi_download):
     """ Downloads the data from the ebi main site and ftp"""
     try:
+        stud_file = os.path.join(data_path, 'catalog', 'raw', 'Cat_Stud.tsv')
+        if os.path.exists(stud_file):
+            stud_old_checksum = get_checksum(stud_file)
+        else:
+            stud_old_checksum = np.nan
         r = requests.get(ebi_download + 'studies_alternative')
         if r.status_code == 200:
             catstud_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Stud.tsv'), 'wb') as tsvfile:
+            with open(stud_file, 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of {catstud_name}: Complete')
+            stud_new_checksum = get_checksum(stud_file)
         else:
             diversity_logger.debug(f'Download of {catstud_name}: Failed')
+
+        anc_file = os.path.join(data_path, 'catalog', 'raw', 'Cat_Anc.tsv')
+        if os.path.exists(anc_file):
+            anc_old_checksum = get_checksum(anc_file)
+        else:
+            anc_old_checksum = np.nan
         r = requests.get(ebi_download + 'ancestry')
         if r.status_code == 200:
             catanc_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Anc.tsv'), 'wb') as tsvfile:
+            with open(anc_file, 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of {catanc_name}: Complete')
+            anc_new_checksum = get_checksum(anc_file)
         else:
             diversity_logger.debug(f'Download of {catanc_name}: Failed')
+
+        full_file = os.path.join(data_path, 'catalog', 'raw', 'Cat_Full.tsv')
+        if os.path.exists(full_file):
+            full_old_checksum = get_checksum(full_file)
+        else:
+            full_old_checksum = np.nan
         r = requests.get(ebi_download + 'full')
         if r.status_code == 200:
             catfull_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Full.tsv'), 'wb') as tsvfile:
+            with open(full_file, 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of {catfull_name}: Complete')
+            full_new_checksum = get_checksum(full_file)
         else:
             diversity_logger.debug(f'Download of {catfull_name}: Failed')
+
+        map_file = os.path.join(data_path, 'catalog', 'raw', 'Cat_Map.tsv')
+        if os.path.exists(map_file):
+            map_old_checksum = get_checksum(map_file)
+        else:
+            map_old_checksum = np.nan
         requests_ftp.monkeypatch_session()
         s = requests.Session()
         ftpsite = 'ftp://ftp.ebi.ac.uk/'
@@ -1117,14 +1141,22 @@ def download_cat(data_path, ebi_download):
         file = 'gwas-efo-trait-mappings.tsv'
         r = s.get(ftpsite+subdom+file)
         if r.status_code == 200:
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Map.tsv'), 'wb') as tsvfile:
+            with open(map_file, 'wb') as tsvfile:
                 tsvfile.write(r.content)
             diversity_logger.info(f'Download of efo-trait-mappings: Complete')
+            map_new_checksum = get_checksum(map_file)
         else:
             diversity_logger.debug(f'Download of efo-trait-mappings: Failed')
+        if (stud_old_checksum != stud_new_checksum) or\
+           (full_old_checksum != full_new_checksum) or\
+           (anc_old_checksum != anc_new_checksum) or\
+           (map_old_checksum != map_new_checksum):
+           return True
+        else:
+           return False
     except Exception as e:
         diversity_logger.debug('Problem downloading Catalog data!' + str(e))
+        return False
 
 
 def make_disease_list(df):
@@ -1200,7 +1232,6 @@ def get_pubmed_data(id_list):
             papers = Entrez.read(Entrez.efetch(db='pubmed', retmode='xml', id=','.join(id_list)))
             got_data = True
         except Exception as e:
-            print(traceback.format_exc())
             diversity_logger.info('Incomplete read getting pubmed data? Sleeping, trying again')
             time.sleep(5)
     diversity_logger.info('Downloading the funders data from PubMed: Complete!')
@@ -1401,26 +1432,28 @@ if __name__ == "__main__":
     diversity_logger.info('final year is being set to: ' + str(final_year))
     reports_path = os.path.join(os.getcwd(), 'reports')
     try:
-        download_cat(data_path, ebi_download)
-        clean_gwas_cat(data_path)
-        generate_funder_data(data_path)
-        clean_funder_data(data_path)
-        generate_reports(data_path, reports_path, diversity_logger)
-        make_bubbleplot_df(data_path)
-        make_doughnut_df(data_path)
-        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
-        make_timeseries_df(tsinput, data_path, 'ts1')
-        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
-        make_timeseries_df(tsinput, data_path, 'ts2')
-        make_choro_df(data_path)
-        make_heatmap_dfs(data_path)
-        make_parent_list(data_path)
-        sumstats = create_summarystats(data_path)
-        zip_for_download(os.path.join(data_path, 'toplot'),
-                         os.path.join(data_path, 'todownload'))
-        json_converter(data_path)
-        diversity_logger.info('generate_data.py ran successfully!')
+        if download_cat(data_path, ebi_download) is True:
+            clean_gwas_cat(data_path)
+            generate_funder_data(data_path)
+            clean_funder_data(data_path)
+            generate_reports(data_path, reports_path, diversity_logger)
+            make_bubbleplot_df(data_path)
+            make_doughnut_df(data_path)
+            tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+                                               'Cat_Anc_wBroader.tsv'),  sep='\t')
+            make_timeseries_df(tsinput, data_path, 'ts1')
+            tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
+            make_timeseries_df(tsinput, data_path, 'ts2')
+            make_choro_df(data_path)
+            make_heatmap_dfs(data_path)
+            make_parent_list(data_path)
+            sumstats = create_summarystats(data_path)
+            zip_for_download(os.path.join(data_path, 'toplot'),
+                             os.path.join(data_path, 'todownload'))
+            json_converter(data_path)
+            diversity_logger.info('generate_data.py completed with new data!')
+        else:
+            diversity_logger.info('generate_data.py completed quickly: no new data!')
     except Exception as e:
         print(traceback.format_exc())
         diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
