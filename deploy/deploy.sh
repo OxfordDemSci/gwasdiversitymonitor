@@ -1,6 +1,8 @@
 #!/bin/bash
-sudo apt-get update -y
-sudo apt-get upgrade -y
+
+sudo hostnamectl set-hostname gwasdiversitymonitor
+
+sudo apt-get update -y && sudo apt-get upgrade -y && sudo apt-get autoremove
 
 #---- docker ----#
 
@@ -51,3 +53,4 @@ sudo cp deploy/gwasdiversitymonitor_crontab /etc/cron.d/
 # ---- launch gwasdiversitymonitor ---- #
 cd ~/gwasdiversitymonitor
 docker-compose up -d
+
