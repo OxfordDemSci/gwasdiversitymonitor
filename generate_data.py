@@ -1342,7 +1342,6 @@ def check_paths(data_path):
             os.mkdir(os.path.join(data_path, subdir))
     if os.path.exists(os.path.join(data_path, 'catalog', 'raw')) is False:
         os.mkdir(os.path.join(data_path, 'catalog', 'raw'))
-        os.mkdir(os.path.join(data_path, 'catalog', 'raw'))
     if os.path.exists(os.path.join(data_path, 'catalog', 'synthetic')) is False:
         os.mkdir(os.path.join(data_path, 'catalog', 'synthetic'))
 
@@ -1430,13 +1429,12 @@ if __name__ == "__main__":
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
-    reports_path = os.path.join(os.getcwd(), 'reports')
+    reports_path = os.path.join(data_path, 'reports')
     try:
         if download_cat(data_path, ebi_download) is True:
             clean_gwas_cat(data_path)
             generate_funder_data(data_path)
             clean_funder_data(data_path)
-            generate_reports(data_path, reports_path, diversity_logger)
             make_bubbleplot_df(data_path)
             make_doughnut_df(data_path)
             tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
@@ -1451,6 +1449,7 @@ if __name__ == "__main__":
             zip_for_download(os.path.join(data_path, 'toplot'),
                              os.path.join(data_path, 'todownload'))
             json_converter(data_path)
+            generate_reports(data_path, reports_path, diversity_logger)
             diversity_logger.info('generate_data.py completed with new data!')
         else:
             diversity_logger.info('generate_data.py completed quickly: no new data!')

@@ -3,7 +3,9 @@
 
 FROM python:3.8-slim-buster
 
-RUN apt-get update
+RUN apt-get update -y
+RUN apt-get install latexmk -y
+RUN apt-get install -y texlive-latex-extra
 
 WORKDIR /app
 

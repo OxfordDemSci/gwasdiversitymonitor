@@ -28,9 +28,8 @@ def get_agency_list(data_path):
 
 
 def watermark(path, data_path):
-    watermark_path = os.path.join('app',
-                                  'static',
-                                  'images',
+    watermark_path = os.path.join(os.getcwd(),
+                                  'data',
                                   'lcds_watermark.pdf')
     Doc = open(path+'.pdf', 'rb')
     pdfReader = PyPDF2.PdfReader(Doc)
