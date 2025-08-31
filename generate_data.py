@@ -721,16 +721,16 @@ def make_bubbleplot_df(data_path):
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
-        merged['cssclassname'] = merged['Broader'].str.replace('/', '-', regex=False).str. \
-                                     replace('\s', '-', regex=True).str.lower() + " " + \
-                                 merged['parentterm'].str.replace(',\s+', ',', regex=True).str. \
-                                     replace('\s', '-', regex=True).str. \
+        merged['cssclassname'] = merged['Broader'].str.replace(r'/', '-', regex=False).str. \
+                                     replace(r'\s', '-', regex=True).str.lower() + " " + \
+                                 merged['parentterm'].str.replace(r',\s+', ',', regex=True).str. \
+                                     replace(r'\s', '-', regex=True).str. \
                                      replace(',', ' ', regex=False).str.lower()
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].str. \
             replace('>', 'more than', regex=False).str. \
             replace('<', 'less than', regex=False)
         merged['trait'] = merged['DiseaseOrTrait'].str. \
-            replace('\s', '-', regex=True).str. \
+            replace(r'\s', '-', regex=True).str. \
             replace('(', '-', regex=False).str. \
             replace(')', '-', regex=False).str.lower()
 
@@ -823,11 +823,11 @@ def make_clean_CoR(Cat_Anc, data_path):
                    'Republic of Korea': 'Korea, South',
                    'Czech Republic': 'Czechia',
                    'Russian Federation': 'Russia',
-                   'Iran \(Islamic Republic of\)': 'Iran',
+                   r'Iran \(Islamic Republic of\)': 'Iran',
                    'Viet Nam': 'Vietnam',
                    'United Republic of Tanzania': 'Tanzania',
                    'Republic of Ireland': 'Ireland',
-                   'Micronesia \(Federated States of\)': 'Micronesia, Federated States of'}
+                   r'Micronesia \(Federated States of\)': 'Micronesia, Federated States of'}
         for key, value in cleaner.items():
             Clean_CoR['Cleaned Country'] = Clean_CoR['Cleaned Country'].str.replace(key, value)
         Clean_CoR = Clean_CoR[Clean_CoR['Cleaned Country'] != 'NR']
