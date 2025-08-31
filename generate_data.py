@@ -3,6 +3,7 @@
 import pandas as pd
 import traceback
 import json
+import numpy as np
 import logging
 import datetime
 import requests
@@ -76,25 +77,25 @@ def create_summarystats(data_path):
         usecols = ['PUBMEDID', 'DATE', 'FIRST AUTHOR', 'STUDY ACCESSION',
                    'DISEASE/TRAIT', 'MAPPED_TRAIT', 'ASSOCIATION COUNT',
                    'JOURNAL']
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
-                                            'raw', 'Cat_Stud.tsv'),
-                               sep='\t',
-                               low_memory=False,
-                               usecols=usecols,
-                               quotechar='"',
-                               warn_bad_lines=False,
-                               error_bad_lines=False,
-                               dtype=dtypes
-                               )
-        Cat_Full = pd.read_csv(os.path.join(data_path, 'catalog',
-                                            'raw', 'Cat_Full.tsv'),
-                               sep='\t',
-                               engine='python',
-                               usecols=['P-VALUE'],
-                               quotechar='"',
-                               warn_bad_lines=False,
-                               error_bad_lines=False,
-                               dtype={'P-VALUE': object})
+        Cat_Stud = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'raw', 'Cat_Stud.tsv'),
+            sep='\t',
+            low_memory=False,
+            usecols=usecols,
+            quotechar='"',
+            on_bad_lines="skip",          # new replacement
+            dtype=dtypes
+        )
+
+        Cat_Full = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'raw', 'Cat_Full.tsv'),
+            sep='\t',
+            engine='python',
+            usecols=['P-VALUE'],
+            quotechar='"',
+            on_bad_lines="skip",          # new replacement
+            dtype={'P-VALUE': object}
+        )
         Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
                                                     'synthetic',
                                                     'Cat_Anc_wBroader.tsv'),
@@ -541,138 +542,173 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
 
 
 def make_doughnut_df(data_path):
-    """ Make the doughnut chart dataframe for use in main.py"""
+    """ Make the doughnut chart dataframe for use in main.py """
     try:
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
-                                            'raw', 'Cat_Stud.tsv'),
-                               sep='\t',
-                               usecols = ['STUDY ACCESSION',
-                                          'DISEASE/TRAIT',
-                                          'ASSOCIATION COUNT'])
-        Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog', 'raw',
-                                           'Cat_Map.tsv'), sep='\t',
-                              usecols = ['Disease trait', 'Parent term'])
-        Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
-                               left_on='DISEASE/TRAIT',
-                               right_on='Disease trait')
-        Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                        'Disease_to_Parent_Mappings.tsv'),
-                           sep='\t')
-        Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION',
-                                   'DISEASE/TRAIT', 'ASSOCIATION COUNT']]
-        Cat_StudMap = Cat_StudMap.drop_duplicates()
-        Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
-        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
-                                                    'synthetic',
-                                                    'Cat_Anc_wBroader.tsv'),
-                                       sep='\t',
-                                       index_col=False,
-                                       parse_dates=['DATE'])
-        Cat_Anc_wBroader = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] !=
-                                            'In Part Not Recorded']
-        merged = pd.merge(Cat_StudMap, Cat_Anc_wBroader,
-                          how='left', on='STUDY ACCESSION')
-        merged["DATE"] = merged["DATE"].astype(str)
-        cols = ['Broader', 'parentterm', 'Year', 'InitialN', 'InitialCount',
-               'ReplicationN', 'ReplicationCount', 'InitialAssociationSum']
-        doughnut_df = pd.DataFrame(index=[], columns=cols)
-        merged = merged[merged['Broader'].notnull()]
-        merged = merged[merged['parentterm'].notnull()]
+        # ---------- Cat_Stud ----------
+        stud_path = os.path.join(data_path, 'catalog', 'raw', 'Cat_Stud.tsv')
+        sniff = pd.read_csv(stud_path, sep='\t', nrows=0)
+        usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT', 'ASSOCIATION COUNT']
+        if 'MAPPED_TRAIT' in sniff.columns:
+            usecols.append('MAPPED_TRAIT')
+        if 'MAPPED_TRAIT_URI' in sniff.columns:
+            usecols.append('MAPPED_TRAIT_URI')
+
+        Cat_Stud = pd.read_csv(stud_path, sep='\t', usecols=usecols, dtype=str)
+        Cat_Stud['ASSOCIATION COUNT'] = pd.to_numeric(Cat_Stud['ASSOCIATION COUNT'], errors='coerce')
+        Cat_Stud['STUDY ACCESSION'] = Cat_Stud['STUDY ACCESSION'].astype(str)
+
+        req = {'STUDY ACCESSION','DISEASE/TRAIT','ASSOCIATION COUNT'}
+        missing = req - set(Cat_Stud.columns)
+        if missing:
+            raise KeyError(f'Cat_Stud missing required columns: {sorted(missing)}')
+        diversity_logger.debug(f'Cat_Stud: {Cat_Stud.shape}, assoc non-null={Cat_Stud["ASSOCIATION COUNT"].notna().mean():.3f}')
+
+        # ---------- Cat_Map (robust) ----------
+        cmap_path = os.path.join(data_path, 'catalog', 'raw', 'Cat_Map.tsv')
+        Cat_Map = pd.read_csv(cmap_path, sep='\t', dtype=str)
+        req_map = {'Disease trait','EFO term','EFO URI','Parent term','Parent URI'}
+        if not req_map.issubset(set(Cat_Map.columns)):
+            raise KeyError(f'Unexpected Cat_Map.tsv columns: {Cat_Map.columns.tolist()}')
+        Cat_Map = Cat_Map[['Disease trait','EFO term','EFO URI','Parent term','Parent URI']]
+
+        diversity_logger.debug(f'Cat_Map: {Cat_Map.shape}')
+
+        # ---------- Normalized keys & mapping dicts ----------
+        def _norm_text(s: pd.Series) -> pd.Series:
+            return (s.astype(str).str.strip().str.replace(r'\s+',' ', regex=True).str.casefold())
+        def _norm_uri(s: pd.Series) -> pd.Series:
+            return s.astype(str).str.strip().str.casefold()
+
+        Cat_Stud['_DT_norm']  = _norm_text(Cat_Stud['DISEASE/TRAIT'])
+        if 'MAPPED_TRAIT' in Cat_Stud.columns:
+            Cat_Stud['_MT_norm']  = _norm_text(Cat_Stud['MAPPED_TRAIT'])
+        else:
+            Cat_Stud['_MT_norm']  = ''
+        if 'MAPPED_TRAIT_URI' in Cat_Stud.columns:
+            Cat_Stud['_MTU_norm'] = _norm_uri(Cat_Stud['MAPPED_TRAIT_URI'])
+        else:
+            Cat_Stud['_MTU_norm'] = ''
+
+        Cat_Map['_DT_norm']   = _norm_text(Cat_Map['Disease trait'])
+        Cat_Map['_ET_norm']   = _norm_text(Cat_Map['EFO term'])
+        Cat_Map['_EURI_norm'] = _norm_uri (Cat_Map['EFO URI'])
+
+        # mapping Series (use first occurrence)
+        map_DT   = Cat_Map.dropna(subset=['_DT_norm'])  .drop_duplicates('_DT_norm').set_index('_DT_norm')['Parent term']
+        map_ET   = Cat_Map.dropna(subset=['_ET_norm'])  .drop_duplicates('_ET_norm').set_index('_ET_norm')['Parent term']
+        map_EURI = Cat_Map.dropna(subset=['_EURI_norm']).drop_duplicates('_EURI_norm').set_index('_EURI_norm')['Parent term']
+
+        # ---------- Build Cat_StudMap (no merge misalignment) ----------
+        Cat_StudMap = Cat_Stud[['STUDY ACCESSION','DISEASE/TRAIT','ASSOCIATION COUNT']].copy()
+        # successive fallbacks
+        parent = Cat_Stud['_DT_norm'].map(map_DT)
+        parent = parent.fillna(Cat_Stud['_DT_norm'].map(map_ET))
+        if 'MAPPED_TRAIT' in Cat_Stud.columns:
+            parent = parent.fillna(Cat_Stud['_MT_norm'].map(map_DT))
+            parent = parent.fillna(Cat_Stud['_MT_norm'].map(map_ET))
+        if 'MAPPED_TRAIT_URI' in Cat_Stud.columns:
+            parent = parent.fillna(Cat_Stud['_MTU_norm'].map(map_EURI))
+
+        Cat_StudMap['parentterm'] = parent
+        diversity_logger.debug(f'Cat_StudMap parentterm coverage overall={Cat_StudMap["parentterm"].notna().mean():.3f}')
+
+        # Write-through (as before) for traceability
+        Cat_StudMap[['DISEASE/TRAIT','parentterm']].rename(columns={'parentterm':'Parent term'}).to_csv(
+            os.path.join(data_path, 'catalog', 'synthetic', 'Disease_to_Parent_Mappings.tsv'),
+            sep='\t', index=False
+        )
+
+        # ---------- Ancestry & merge ----------
+        anc_path = os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv')
+        Cat_Anc_wBroader = pd.read_csv(anc_path, sep='\t', index_col=False, parse_dates=['DATE'])
+        Cat_Anc_wBroader = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] != 'In Part Not Recorded']
+        Cat_Anc_wBroader['STUDY ACCESSION'] = Cat_Anc_wBroader['STUDY ACCESSION'].astype(str)
+
+        merged = pd.merge(Cat_StudMap, Cat_Anc_wBroader, how='left', on='STUDY ACCESSION')
+        merged['DATE'] = pd.to_datetime(merged['DATE'], errors='coerce')
+        merged['_Year'] = merged['DATE'].dt.year
+
+        # original filters
+        merged = merged[merged['Broader'].notnull() & merged['parentterm'].notnull()]
+        if merged.empty:
+            raise RuntimeError('merged is empty after join to ancestry')
+
+        year_cov = (merged.groupby('_Year')['parentterm'].apply(lambda s: s.notna().mean()).sort_index())
+        diversity_logger.debug(f'parentterm coverage by year (tail): {year_cov.tail(5).to_dict()}')
+        diversity_logger.debug(f'Years present in merged (tail): {sorted(merged["_Year"].dropna().unique().tolist())[-10:]}')
+
+        # ---------- Build output (same schema) ----------
+        cols = ['Broader','parentterm','Year',
+                'InitialN','InitialCount','ReplicationN','ReplicationCount',
+                'InitialAssociationSum']
+        doughnut_df = pd.DataFrame(columns=cols)
+
         counter = 0
-        for year in range(2008, final_year+1):
-            for ancestry in merged['Broader'].unique().tolist():
-                doughnut_df.at[counter, 'Broader'] = ancestry
-                doughnut_df.at[counter, 'parentterm'] = 'All'
-                doughnut_df.at[counter, 'Year'] = year
-                rep_anc = merged[(merged['STAGE'] == 'replication') &
-                                 (merged['Broader'] == ancestry) &
-                                 (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                rep_tot = merged[(merged['STAGE'] == 'replication') &
-                                 (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                init_anc =merged[(merged['STAGE'] == 'initial') &
-                                 (merged['Broader'] == ancestry) &
-                                 (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                init_tot = merged[(merged['STAGE'] == 'initial') &
-                                  (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                doughnut_df.at[counter, 'ReplicationN'] = (rep_anc/rep_tot)*100
-                doughnut_df.at[counter, 'InitialN'] =  (init_anc/init_tot)*100
-                init_ass_anc = merged[(merged['STAGE'] == 'initial') &
-                                      (merged['Broader'] == ancestry) &
-                                      (merged['DATE'].str.contains(str(year)))]
-                init_ass_anc = init_ass_anc['ASSOCIATION COUNT'].sum()
-                init_ass_tot = merged[(merged['STAGE'] =='initial') &
-                                      (merged['DATE'].str.contains(str(year)))]
-                init_ass_tot = init_ass_tot['ASSOCIATION COUNT'].sum()
-                doughnut_df.at[counter, 'InitialAssociationSum'] = (init_ass_anc/init_ass_tot)*100
-                init_anc = len(merged[(merged['STAGE'] == 'initial') &
-                                      (merged['DATE'].str.contains(str(year))) &
-                                      (merged['Broader'] == ancestry)])
-                init_tot = len(merged[(merged['STAGE'] == 'initial') &
-                                      (merged['DATE'].str.contains(str(year)))])
-                rep_anc = len(merged[(merged['STAGE'] =='replication') &
-                                     (merged['DATE'].str.contains(str(year))) &
-                                     (merged['Broader'] == ancestry)])
-                rep_tot = len(merged[(merged['STAGE'] == 'replication') &
-                                     (merged['DATE'].str.contains(str(year)))])
-                doughnut_df.at[counter, 'InitialCount'] = (init_anc/init_tot)*100
-                doughnut_df.at[counter, 'ReplicationCount'] = (rep_anc/rep_tot)*100
-                counter = counter + 1
-                for parent in merged['parentterm'].unique().tolist():
-                    try:
-                        doughnut_df.at[counter, 'Broader'] = ancestry
-                        doughnut_df.at[counter, 'parentterm'] = parent
-                        doughnut_df.at[counter, 'Year'] = year
-                        rep_anc = merged[(merged['STAGE'] == 'replication') &
-                                         (merged['parentterm'] == parent) &
-                                         (merged['DATE'].str.contains(str(year))) &
-                                         (merged['Broader'] == ancestry)]['N'].sum()
-                        rep_tot = merged[(merged['STAGE'] == 'replication') &
-                                         (merged['DATE'].str.contains(str(year))) &
-                                         (merged['parentterm'] == parent)]['N'].sum()
-                        init_anc = merged[(merged['STAGE'] == 'initial') &
-                                          (merged['Broader'] == ancestry) &
-                                          (merged['DATE'].str.contains(str(year))) &
-                                          (merged['parentterm'] == parent)]['N'].sum()
-                        init_tot = merged[(merged['STAGE'] == 'initial') &
-                                          (merged['DATE'].str.contains(str(year))) &
-                                          (merged['parentterm'] == parent)]['N'].sum()
-                        doughnut_df.at[counter, 'ReplicationN'] = (rep_anc/rep_tot)*100
-                        doughnut_df.at[counter, 'InitialN'] = (init_anc/init_tot)*100
-                        init_ass_anc = merged[(merged['STAGE'] == 'initial') &
-                                              (merged['Broader'] == ancestry) &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['parentterm'] == parent)]
-                        init_ass_anc = init_ass_anc['ASSOCIATION COUNT'].sum()
-                        init_ass_tot = merged[(merged['STAGE'] == 'initial') &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['parentterm'] == parent)]
-                        init_ass_tot = init_ass_tot['ASSOCIATION COUNT'].sum()
-                        doughnut_df.at[counter, 'InitialAssociationSum'] = (init_ass_anc/init_ass_tot)*100
-                        rep_anc = len(merged[(merged['STAGE'] == 'replication') &
-                                             (merged['parentterm'] == parent) &
-                                             (merged['DATE'].str.contains(str(year))) &
-                                             (merged['Broader'] == ancestry)])
-                        rep_tot = len(merged[(merged['STAGE'] == 'replication') &
-                                             (merged['DATE'].str.contains(str(year))) &
-                                             (merged['parentterm'] == parent)])
-                        init_anc = len(merged[(merged['STAGE'] == 'initial') &
-                                              (merged['parentterm'] == parent) &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['Broader'] == ancestry)])
-                        init_tot = len(merged[(merged['STAGE'] == 'initial') &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['parentterm'] == parent)])
-                        doughnut_df.at[counter, 'ReplicationCount'] = (rep_anc/rep_tot)*100
-                        doughnut_df.at[counter,'InitialCount'] = (init_anc/init_tot)*100
-                    except ZeroDivisionError:
-                        doughnut_df.at[counter, 'InitialN'] = np.nan
-                    counter = counter + 1
-        doughnut_df['Broader'] = doughnut_df['Broader'].str.\
-            replace('Hispanic/Latin American', 'Hispanic/L.A.')
-        doughnut_df.to_csv(os.path.join(data_path, 'toplot', 'doughnut_df.csv'))
+        for year in range(2008, final_year + 1):
+            year_df = merged[merged['_Year'] == year]
+            if year_df.empty:
+                continue
+
+            for ancestry in year_df['Broader'].unique():
+                anc_df = year_df[year_df['Broader'] == ancestry]
+
+                # "All"
+                rep_anc = anc_df.loc[anc_df['STAGE'] == 'replication', 'N'].sum()
+                rep_tot = year_df.loc[year_df['STAGE'] == 'replication', 'N'].sum()
+                init_anc = anc_df.loc[anc_df['STAGE'] == 'initial', 'N'].sum()
+                init_tot = year_df.loc[year_df['STAGE'] == 'initial', 'N'].sum()
+
+                init_ass_anc = anc_df.loc[anc_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+                init_ass_tot = year_df.loc[year_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+
+                doughnut_df.loc[counter] = [
+                    ancestry, 'All', year,
+                    (init_anc / init_tot * 100) if init_tot else np.nan,
+                    (len(anc_df[anc_df['STAGE'] == 'initial']) /
+                     len(year_df[year_df['STAGE'] == 'initial']) * 100) if len(year_df[year_df['STAGE'] == 'initial']) else np.nan,
+                    (rep_anc / rep_tot * 100) if rep_tot else np.nan,
+                    (len(anc_df[anc_df['STAGE'] == 'replication']) /
+                     len(year_df[year_df['STAGE'] == 'replication']) * 100) if len(year_df[year_df['STAGE'] == 'replication']) else np.nan,
+                    (init_ass_anc / init_ass_tot * 100) if init_ass_tot else np.nan
+                ]
+                counter += 1
+
+                # Per-parent rows
+                for parent in year_df['parentterm'].dropna().unique():
+                    parent_df = year_df[year_df['parentterm'] == parent]
+                    anc_parent_df = parent_df[parent_df['Broader'] == ancestry]
+
+                    rep_anc = anc_parent_df.loc[anc_parent_df['STAGE'] == 'replication', 'N'].sum()
+                    rep_tot = parent_df.loc[parent_df['STAGE'] == 'replication', 'N'].sum()
+                    init_anc = anc_parent_df.loc[anc_parent_df['STAGE'] == 'initial', 'N'].sum()
+                    init_tot = parent_df.loc[parent_df['STAGE'] == 'initial', 'N'].sum()
+
+                    init_ass_anc = anc_parent_df.loc[anc_parent_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+                    init_ass_tot = parent_df.loc[parent_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+
+                    doughnut_df.loc[counter] = [
+                        ancestry, parent, year,
+                        (init_anc / init_tot * 100) if init_tot else np.nan,
+                        (len(anc_parent_df[anc_parent_df['STAGE'] == 'initial']) /
+                         len(parent_df[parent_df['STAGE'] == 'initial']) * 100) if len(parent_df[parent_df['STAGE'] == 'initial']) else np.nan,
+                        (rep_anc / rep_tot * 100) if rep_tot else np.nan,
+                        (len(anc_parent_df[anc_parent_df['STAGE'] == 'replication']) /
+                         len(parent_df[parent_df['STAGE'] == 'replication']) * 100) if len(parent_df[parent_df['STAGE'] == 'replication']) else np.nan,
+                        (init_ass_anc / init_ass_tot * 100) if init_ass_tot else np.nan
+                    ]
+                    counter += 1
+
+        doughnut_df['Broader'] = doughnut_df['Broader'].str.replace(
+            'Hispanic/Latin American', 'Hispanic/L.A.', regex=False
+        )
+        diversity_logger.debug(f'doughnut_df shape={doughnut_df.shape}, last year={doughnut_df["Year"].max() if not doughnut_df.empty else None}')
+        doughnut_df.to_csv(os.path.join(data_path, 'toplot', 'doughnut_df.csv'), index=False)
         diversity_logger.info('Build of the doughnut datasets: Complete')
-    except Exception as e:
-        diversity_logger.debug(f'Build of the doughnut datasets: Failed -- {e}')
+
+    except Exception:
+        diversity_logger.exception('Build of the doughnut datasets: Failed')
+
+
 
 
 def make_bubbleplot_df(data_path):
@@ -843,7 +879,7 @@ def make_clean_CoR(Cat_Anc, data_path):
 def download_cat(data_path, ebi_download):
     """ Downloads the data from the ebi main site and ftp"""
     try:
-        r = requests.get(ebi_download + 'studies_alternative')
+        r = requests.get(ebi_download + 'studies/v1.0.3.1')
         if r.status_code == 200:
             catstud_name = r.headers['Content-Disposition'].split('=')[1]
             with open(os.path.join(data_path, 'catalog', 'raw',
@@ -973,7 +1009,7 @@ if __name__ == "__main__":
     try:
         download_cat(data_path, ebi_download)
         clean_gwas_cat(data_path)
-        make_bubbleplot_df(data_path)
+        #make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
         tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                            'Cat_Anc_wBroader.tsv'),  sep='\t')
