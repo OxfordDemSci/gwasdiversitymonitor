@@ -440,48 +440,67 @@ def make_heatmap_dfs(data_path):
     except Exception as e:
         diversity_logger.debug(f'Build of the heatmap dataset: Failed -- {e}')
 
+
 def make_choro_df(data_path):
     """
-        Create the dataframe for the choropleth map
+    Create the dataframe for the choropleth map.
+    Robust year extraction and LEFT join to the country lookup to avoid
+    losing rows for newer/renamed countries.
     """
     try:
-        Cat_Ancestry = pd.read_csv(os.path.join(data_path,
-                                                'catalog',
-                                                'synthetic',
-                                                'Cat_Anc_wBroader.tsv'),
-                                   sep='\t')
-        annual_df = pd.DataFrame(columns=['Year', 'N', 'Count'])
+        Cat_Ancestry = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
+            sep='\t'
+        )
+        print('donk')
+        print(pd.to_datetime(Cat_Ancestry['DATE']).dt.year.max())
+        # Clean CoR without exploding (one record per study)
         Clean_CoR = make_clean_CoR(Cat_Ancestry, data_path)
-        countrylookup = pd.read_csv(os.path.join(data_path,
-                                                 'support',
-                                                 'Country_Lookup.csv'),
-                                    index_col='Country')
-        for year in range(2008, final_year+1):
-            tempdf = Clean_CoR[Clean_CoR['Date'].str.contains(str(year))]
-            tempdf_sum = pd.DataFrame(
-                tempdf.groupby(['Cleaned Country'])['N'].sum())
-            tempdf_count = pd.DataFrame(
-                tempdf.groupby(['Cleaned Country'])['N'].count()).\
-                rename(columns={'N': 'Count'})
-            tempdf_merged = pd.merge(tempdf_sum, tempdf_count,
-                                     left_index=True, right_index=True)
-            tempdf_merged['Year'] = str(year)
-            country_merged = pd.merge(countrylookup, tempdf_merged,
-                                      left_index=True,
-                                      right_index=True)
-            country_merged = country_merged.reset_index()
-            count_pc = round((pd.to_numeric(country_merged['Count']) /
-                              pd.to_numeric(country_merged['Count']).sum()) * 100, 2)
-            country_merged['Count (%)'] = count_pc
-            n_pc = round((pd.to_numeric(country_merged['N']) /
-                          pd.to_numeric(country_merged['N'].sum())) * 100, 2)
-            country_merged['N (%)'] = n_pc
-            annual_df = annual_df.append(country_merged, sort=True)
-        annual_df = annual_df.reset_index().drop(['level_0'], axis=1)
-        annual_df.to_csv(os.path.join(data_path, 'toplot', 'choro_df.csv'))
-        diversity_logger.info('Build of the choropleth dataset: Complete')
-    except Exception as e:
-        diversity_logger.debug(f'Build of the choropleth dataset: Failed -- {e}')
+        Clean_CoR['Year'] = pd.to_datetime(Clean_CoR['Date'], errors='coerce').dt.year
+
+        countrylookup = pd.read_csv(
+            os.path.join(data_path, 'support', 'Country_Lookup.csv'),
+            index_col='Country'
+        )
+
+        frames = []
+        for year in range(2008, final_year + 1):
+            tmp = Clean_CoR[Clean_CoR['Year'] == year]
+            if tmp.empty:
+                continue
+
+            # Aggregate by country
+            agg_sum  = tmp.groupby('Cleaned Country')['N'].sum().to_frame('N')
+            agg_cnt  = tmp.groupby('Cleaned Country')['N'].count().to_frame('Count')
+            tempdf_merged = agg_sum.join(agg_cnt, how='outer')  # keep all countries observed
+            tempdf_merged['Year'] = year
+
+            # LEFT join from data to lookup; don’t drop unknown names
+            merged = tempdf_merged.merge(countrylookup, left_index=True, right_index=True, how='left')
+            merged = merged.reset_index().rename(columns={'index': 'Country'})
+
+            # Percentages (guard against zero totals)
+            totN = merged['N'].sum()
+            totC = merged['Count'].sum()
+            merged['Count (%)'] = (merged['Count'] / totC * 100).round(2) if totC else 0.0
+            merged['N (%)']     = (merged['N']     / totN * 100).round(2) if totN else 0.0
+
+            frames.append(merged)
+
+        if frames:
+            annual_df = pd.concat(frames, ignore_index=True)
+            out = os.path.join(data_path, 'toplot', 'choro_df.csv')
+            annual_df.to_csv(out, index=False)
+
+            # Sanity logs so you can see it in your logfile immediately
+            yrs = sorted(annual_df['Year'].unique())
+            diversity_logger.debug(f"choro_df years present: {yrs[:5]} … {yrs[-5:]}")
+            diversity_logger.info('Build of the choropleth dataset: Complete')
+        else:
+            diversity_logger.warning('No choropleth data generated (no yearly data found)')
+
+    except Exception:
+        diversity_logger.exception('Build of the choropleth dataset: Failed')
 
 
 def make_timeseries_df(Cat_Ancestry, data_path, savename):
@@ -703,6 +722,7 @@ def make_doughnut_df(data_path):
         )
         diversity_logger.debug(f'doughnut_df shape={doughnut_df.shape}, last year={doughnut_df["Year"].max() if not doughnut_df.empty else None}')
         doughnut_df.to_csv(os.path.join(data_path, 'toplot', 'doughnut_df.csv'), index=False)
+        doughnut_df = doughnut_df.fillna(0)
         diversity_logger.info('Build of the doughnut datasets: Complete')
 
     except Exception:
@@ -823,8 +843,8 @@ def clean_gwas_cat(data_path):
                 to_csv(os.path.join(data_path, 'unmapped', 'unmapped_broader.txt'))
         else:
             diversity_logger.info('No missing Broader terms! Nice!')
-        Cat_Anc = Cat_Anc[Cat_Anc['Broader'].notnull()]
-        Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
+        #Cat_Anc = Cat_Anc[Cat_Anc['Broader'].notnull()]
+        #Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
         Cat_Anc.to_csv(os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
                        sep='\t',
                        index=False)
@@ -835,46 +855,72 @@ def clean_gwas_cat(data_path):
 
 def make_clean_CoR(Cat_Anc, data_path):
     """
-        Clean the country of recruitment field for the geospatial analysis.
+    Clean the country of recruitment WITHOUT exploding multi-country entries.
+    Deterministically select the first nonempty, non-'NR' token as the
+    canonical country. One record in -> one record out.
     """
     try:
-        with open(os.path.abspath(
-                  os.path.join(data_path, 'catalog', 'synthetic',
-                               'ancestry_CoR.csv')), 'w') as fileout:
-            rec_out = csv.writer(fileout, delimiter=',', lineterminator='\n')
-            rec_out .writerow(['Date', 'PUBMEDID', 'N', 'Cleaned Country'])
-            for index, row in Cat_Anc.iterrows():
-                if len(row['COUNTRY OF RECRUITMENT'].split(',')) == 1:
-                    rec_out .writerow([row['DATE'],
-                                       str(row['PUBMEDID']),
-                                       str(row['N']),
-                                       row['COUNTRY OF RECRUITMENT']])
-        Clean_CoR = pd.read_csv(os.path.abspath(
-                                os.path.join(data_path, 'catalog', 'synthetic',
-                                             'ancestry_CoR.csv')))
-        cleaner = {'U.S.': 'United States',
-                   'Gambia': 'Gambia, The',
-                   'U.K.': 'United Kingdom',
-                   'Republic of Korea': 'Korea, South',
-                   'Czech Republic': 'Czechia',
-                   'Russian Federation': 'Russia',
-                   r'Iran \(Islamic Republic of\)': 'Iran',
-                   'Viet Nam': 'Vietnam',
-                   'United Republic of Tanzania': 'Tanzania',
-                   'Republic of Ireland': 'Ireland',
-                   r'Micronesia \(Federated States of\)': 'Micronesia, Federated States of'}
-        for key, value in cleaner.items():
-            Clean_CoR['Cleaned Country'] = Clean_CoR['Cleaned Country'].str.replace(key, value)
-        Clean_CoR = Clean_CoR[Clean_CoR['Cleaned Country'] != 'NR']
-        Clean_CoR.to_csv(os.path.abspath(
-                         os.path.join(data_path, 'catalog', 'synthetic',
-                                      'GWAScatalogue_CleanedCountry.tsv')),
-                         sep='\t',
-                         index=False)
-        return Clean_CoR
-        diversity_logger.info('Clean of the raw Country datasets: Complete')
-    except Exception as e:
-        diversity_logger.debug(f'Clean of the raw Country datasets: Failed -- {e}')
+        req_base = ['DATE', 'PUBMEDID', 'COUNTRY OF RECRUITMENT']
+        missing = [c for c in req_base if c not in Cat_Anc.columns]
+        if missing:
+            raise KeyError(f"Cat_Anc missing columns: {missing}")
+
+        df = Cat_Anc[req_base].copy()
+
+        # N: accept 'N' (synthetic) or 'NUMBER OF INDIVDUALS' (raw)
+        if 'N' in Cat_Anc.columns:
+            df['N'] = pd.to_numeric(Cat_Anc['N'], errors='coerce')
+        elif 'NUMBER OF INDIVDUALS' in Cat_Anc.columns:
+            df['N'] = pd.to_numeric(Cat_Anc['NUMBER OF INDIVDUALS'], errors='coerce')
+        else:
+            df['N'] = pd.NA
+        df['N'] = df['N'].fillna(0)
+
+        # Standardize delimiters then select first usable token
+        s = (df['COUNTRY OF RECRUITMENT'].astype(str)
+                                      .str.replace('[;|]', ',', regex=True))
+
+        def first_token(x: str) -> str:
+            for t in x.split(','):
+                t = t.strip()
+                if t and t != 'NR':
+                    return t
+            return ''
+
+        df['Cleaned Country'] = s.apply(first_token)
+        df = df[df['Cleaned Country'] != '']
+
+        # Harmonize common variants
+        repl = {
+            'U.S.': 'United States',
+            'U.K.': 'United Kingdom',
+            'Gambia': 'Gambia, The',
+            'Republic of Korea': 'Korea, South',
+            'Czech Republic': 'Czechia',
+            'Russian Federation': 'Russia',
+            r'Iran \(Islamic Republic of\)': 'Iran',
+            'Viet Nam': 'Vietnam',
+            'United Republic of Tanzania': 'Tanzania',
+            'Republic of Ireland': 'Ireland',
+            r'Micronesia \(Federated States of\)': 'Micronesia, Federated States of',
+        }
+        for k, v in repl.items():
+            df['Cleaned Country'] = df['Cleaned Country'].str.replace(k, v, regex=True)
+
+        # Persist (same schema/paths as before)
+        out_csv = os.path.join(data_path, 'catalog', 'synthetic', 'ancestry_CoR.csv')
+        df[['DATE', 'PUBMEDID', 'N', 'Cleaned Country']].rename(columns={'DATE': 'Date'}).to_csv(out_csv, index=False)
+
+        out_tsv = os.path.join(data_path, 'catalog', 'synthetic', 'GWAScatalogue_CleanedCountry.tsv')
+        df[['DATE', 'PUBMEDID', 'N', 'Cleaned Country']].rename(columns={'DATE': 'Date'}).to_csv(out_tsv, sep='\t', index=False)
+
+        # Return with 'Date' column name for downstream
+        return df.rename(columns={'DATE': 'Date'})
+
+    except Exception:
+        diversity_logger.exception('Clean of the raw Country datasets: Failed')
+
+
 
 def download_cat(data_path, ebi_download):
     """ Downloads the data from the ebi main site and ftp"""
@@ -1007,15 +1053,15 @@ if __name__ == "__main__":
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
     try:
-        download_cat(data_path, ebi_download)
+        #download_cat(data_path, ebi_download)
         clean_gwas_cat(data_path)
         #make_bubbleplot_df(data_path)
-        make_doughnut_df(data_path)
-        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
-        make_timeseries_df(tsinput, data_path, 'ts1')
-        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
-        make_timeseries_df(tsinput, data_path, 'ts2')
+        #make_doughnut_df(data_path)
+        #tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+        #                                   'Cat_Anc_wBroader.tsv'),  sep='\t')
+        #make_timeseries_df(tsinput, data_path, 'ts1')
+        #tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
+        #make_timeseries_df(tsinput, data_path, 'ts2')
         make_choro_df(data_path)
         make_heatmap_dfs(data_path)
         make_parent_list(data_path)
