@@ -178,33 +178,29 @@ class DataLoader:
 
     def getChloroMap(self):
         data = {}
+        with open('data/toplot/choro_df.csv', newline='') as csv_file:
+            csv_reader = csv.reader(csv_file)
+            next(csv_reader, None)  # skip header
 
-        with open('data/toplot/choro_df.csv') as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=',')
-
-            line_count = 0
+            current_year = None
             i = 0
-            year = 0
             for row in csv_reader:
-                if line_count > 0:
+                year = row[3]  # string is fine; be consistent
 
-                    if row[3] != year:
-                        i = 0
+                if year != current_year:
+                    current_year = year
+                    data.setdefault(current_year, {})
+                    i = 0
 
-                    if year not in data:
-                        data[year] = dict()
-
-                    data[year][i] = {
-                        'country' : row[0],
-                        'population' : row[5],
-                        'studies' : row[2],
-                        'studiesPercentage' : row[6],
-                        'participants' : row[1],
-                        'participantsPercentage' : row[7],
-                    }
-                    i += 1
-                line_count += 1
-
+                data[current_year][i] = {
+                    'country': row[0],
+                    'population': row[5],
+                    'studies': row[2],
+                    'studiesPercentage': row[6],
+                    'participants': row[1],
+                    'participantsPercentage': row[7],
+                }
+                i += 1
         return data
 
     def getTSPlot(self):

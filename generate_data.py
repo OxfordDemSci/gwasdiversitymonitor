@@ -1283,22 +1283,22 @@ if __name__ == "__main__":
     final_year = determine_year(datetime.date.today())
     diversity_logger.info('final year is being set to: ' + str(final_year))
     try:
-        #download_cat(data_path, ebi_download)
-        #clean_gwas_cat(data_path)
-        #make_bubbleplot_df(data_path)
-        #make_doughnut_df(data_path)
+        download_cat(data_path, ebi_download)
+        clean_gwas_cat(data_path)
+        make_bubbleplot_df(data_path)
+        make_doughnut_df(data_path)
         make_doughnut_df_old(data_path)
-        #tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
-        #                                   'Cat_Anc_wBroader.tsv'),  sep='\t')
-        #make_timeseries_df(tsinput, data_path, 'ts1')
-        #tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
-        #make_timeseries_df(tsinput, data_path, 'ts2')
+        tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
+                                           'Cat_Anc_wBroader.tsv'),  sep='\t')
+        make_timeseries_df(tsinput, data_path, 'ts1')
+        tsinput = tsinput[tsinput['Broader'] != 'In Part Not Recorded']
+        make_timeseries_df(tsinput, data_path, 'ts2')
         make_choro_df(data_path)
         make_heatmap_dfs(data_path)
-        #make_parent_list(data_path)
-        #sumstats = create_summarystats(data_path)
-        #zip_for_download(os.path.join(data_path, 'toplot'),
- #                        os.path.join(data_path, 'todownload'))
+        make_parent_list(data_path)
+        sumstats = create_summarystats(data_path)
+        zip_for_download(os.path.join(data_path, 'toplot'),
+                         os.path.join(data_path, 'todownload'))
         json_converter(data_path)
         diversity_logger.info('generate_data.py ran successfully!')
     except Exception as e:
