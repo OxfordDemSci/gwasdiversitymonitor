@@ -5,7 +5,6 @@ import traceback
 import json
 import logging
 import datetime
-import numpy as np
 import requests
 import requests_ftp
 import os
