@@ -349,37 +349,57 @@ def create_summarystats(data_path):
 
 def make_heatmatrix(merged, stage, out_path):
     """
-    Make the heatmatrix!
+    Build heatmap CSVs (count & sum) without DataFrame.append.
+    Output matches the original: rows = Broader (repeated per year),
+    columns = all parent terms + 'Year' (as last column), with zeros
+    for missing combos. Index is written to CSV (blank header) to keep
+    DataLoader expectations intact.
     """
-    col_list = merged['parentterm'].unique().tolist()
-    col_list.append('Year')
-    index_list = merged[merged['Broader'].notnull()]['Broader'].\
-        unique().tolist()
-    count_df = pd.DataFrame(columns=col_list)
-    sum_df = pd.DataFrame(columns=col_list)
-    for year in range(2008, final_year+1):
-        temp_merged = merged[(merged['STAGE'] == stage) &
-                             (merged['DATE'].str.contains(str(year)))]
-        temp_count_df = pd.DataFrame(index=index_list,
-                                     columns=col_list)
-        for index in temp_count_df.index:
-            for column in temp_count_df.columns:
-                length = len(temp_merged[(temp_merged['Broader'] == index) &
-                                         (temp_merged['parentterm'] == column)])
-                temp_count_df.at[index, column] = length
-                temp_count_df.at[index, 'Year'] = year
-        count_df = count_df.append(temp_count_df, sort=False)
-        temp_sum_df = pd.DataFrame(index=index_list,
-                                   columns=col_list)
-        for index in temp_sum_df.index:
-            for column in temp_sum_df.columns:
-                sum = temp_merged[(temp_merged['Broader'] == index) &
-                                  (temp_merged['parentterm'] == column)]['N'].sum()
-                temp_sum_df.at[index, column] = sum
-            temp_sum_df.at[index, 'Year'] = year
-        sum_df = sum_df.append(temp_sum_df, sort=False)
-    sum_df.to_csv(os.path.join(out_path, 'heatmap_sum_'+stage+'.csv'))
-    count_df.to_csv(os.path.join(out_path, 'heatmap_count_'+stage+'.csv'))
+    # Columns (parent terms) and row index (ancestries) in the same order as before
+    parent_terms = merged['parentterm'].unique().tolist()
+    index_list   = merged.loc[merged['Broader'].notnull(), 'Broader'].unique().tolist()
+
+    frames_count = []
+    frames_sum   = []
+
+    for year in range(2008, final_year + 1):
+        # same year filter behavior as original (DATE was already cast to str)
+        mask = (merged['STAGE'] == stage) & (merged['DATE'].str.contains(str(year)))
+        tmp  = merged.loc[mask, ['Broader', 'parentterm', 'N']]
+
+        # counts
+        count = (tmp
+                 .groupby(['Broader', 'parentterm'])
+                 .size()
+                 .unstack('parentterm'))
+        # sums
+        ssum  = (tmp
+                 .groupby(['Broader', 'parentterm'])['N']
+                 .sum()
+                 .unstack('parentterm'))
+
+        # ensure full grid & zeros for missing combos; keep original ordering
+        count = count.reindex(index=index_list, columns=parent_terms, fill_value=0)
+        ssum  = ssum .reindex(index=index_list, columns=parent_terms, fill_value=0)
+
+        # add Year as last column (overwrites any earlier placeholder like the original)
+        count['Year'] = year
+        ssum['Year']  = year
+
+        # preserve column order: all parent terms + 'Year'
+        count = count[parent_terms + ['Year']]
+        ssum  = ssum [parent_terms + ['Year']]
+
+        frames_count.append(count)
+        frames_sum.append(ssum)
+
+    # one concat instead of repeated append
+    count_df = pd.concat(frames_count)
+    sum_df   = pd.concat(frames_sum)
+
+    # write with index to keep the leading blank header column expected by DataLoader.getHeatMapData
+    sum_df.to_csv(os.path.join(out_path, f'heatmap_sum_{stage}.csv'))
+    count_df.to_csv(os.path.join(out_path, f'heatmap_count_{stage}.csv'))
 
 
 def make_heatmap_dfs(data_path):
