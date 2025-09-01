@@ -3,9 +3,9 @@
 import pandas as pd
 import traceback
 import json
+import numpy as np
 import logging
 import datetime
-import numpy as np
 import requests
 import requests_ftp
 import os
@@ -20,31 +20,87 @@ from app.DataLoader import DataLoader
 warnings.filterwarnings("ignore")
 
 
-def json_converter(data_path):
-    """Convert the .csvs to .jsons to bypass dataLoader
-    Keeps the same names as the outputs returned in routes.py
-    @TODO: harmonize paths (and get rid of the awful __file__ stuff).
+def read_tsv_with_aliases(path, required, optional=None, logger=None):
     """
+    Read a TSV where headers may have changed (e.g., 'PUBMEDID' -> 'PUBMED ID').
+    Returns a DataFrame with canonical column names as given in `required`/`optional`.
+    Only those columns are read.
+    """
+    optional = optional or []
+    # Canonical -> acceptable variants
+    ALIASES = {
+        'PUBMEDID': {'PUBMEDID', 'PUBMED ID', 'PUBMED_ID'},
+        'STUDY ACCESSION': {'STUDY ACCESSION', 'STUDY_ACCESSION', 'STUDY ACCESSSION'},
+        'FIRST AUTHOR': {'FIRST AUTHOR', 'FIRST_AUTHOR', 'FIRST AUTHOR(S)'},
+        'DISEASE/TRAIT': {'DISEASE/TRAIT', 'DISEASE / TRAIT', 'DISEASE_TRAIT'},
+        'MAPPED_TRAIT': {'MAPPED_TRAIT', 'MAPPED TRAIT'},
+        'ASSOCIATION COUNT': {'ASSOCIATION COUNT', 'ASSOCIATION_COUNT'},
+        'JOURNAL': {'JOURNAL'},
+        'DATE': {'DATE'},
+    }
 
+    def norm(s: str) -> str:
+        return s.replace('\ufeff', '').strip().replace('_', ' ').casefold()
+
+    # 1) sniff the header
+    sniff = pd.read_csv(path, sep='\t', nrows=0)
+    raw_cols = [c.replace('\ufeff','').strip() for c in sniff.columns]
+
+    # 2) find the actual column name for each canonical
+    found = {}  # canonical -> actual
+    for canon in required + optional:
+        variants = {canon} | ALIASES.get(canon, set())
+        variants_norm = {norm(v) for v in variants}
+        for c in raw_cols:
+            if norm(c) in variants_norm:
+                found[canon] = c
+                break
+
+    missing = [c for c in required if c not in found]
+    if missing:
+        if logger:
+            logger.debug(f"Header sniff for {path}: {raw_cols}")
+        raise KeyError(f"{path}: missing required columns (after alias matching): {missing}")
+
+    # 3) read only what we found
+    usecols_actual = [found[c] for c in (required + [c for c in optional if c in found])]
+    df = pd.read_csv(path, sep='\t', usecols=usecols_actual, dtype=str, low_memory=False)
+
+    # 4) rename to canonical
+    rename_map = {v: k for k, v in found.items()}
+    df = df.rename(columns=rename_map)
+    return df
+
+
+def json_converter(data_path):
+    """Convert the .csvs to .jsons to bypass dataLoader."""
     dl = DataLoader()
     plot_path = os.path.join(data_path, 'toplot')
-    def json_maker(name, output):
-        with open(name, 'w') as fp:
-            json.dump(output, fp)
+    os.makedirs(plot_path, exist_ok=True)
 
-    for key, value in {'ancestries.json': dl.getAncestriesList(),
-                       'ancestriesOrdered.json': dl.getAncestriesListOrder(),
-                       'parentTerms.json': dl.getTermsList(),
-                       'traits.json': dl.getTraitsList(),
-                       'bubbleGraph.json': dl.getBubbleGraph(),
-                       'tsPlot.json': dl.getTSPlot(),
-                       'chloroMap.json': dl.getChloroMap(),
-                       'heatMap.json': dl.getHeatMap(),
-                       'doughnutGraph.json': dl.getDoughnutGraph(dl.getAncestriesListOrder()),
-                       'summary.json': dl.getSummaryStatistics()
-                      }.items():
-        json_maker(os.path.join(plot_path, key), value)
+    # filename -> function (do NOT call here)
+    tasks = [
+        ('ancestries.json',         dl.getAncestriesList),
+        ('ancestriesOrdered.json',  dl.getAncestriesListOrder),
+        ('parentTerms.json',        dl.getTermsList),
+        ('traits.json',             dl.getTraitsList),
+        ('bubbleGraph.json',        dl.getBubbleGraph),
+        ('tsPlot.json',             dl.getTSPlot),
+        ('chloroMap.json',          dl.getChloroMap),
+        ('heatMap.json',            dl.getHeatMap),
+        ('doughnutGraph.json',      lambda: dl.getDoughnutGraph(dl.getAncestriesListOrder())),
+        ('summary.json',            dl.getSummaryStatistics),
+    ]
 
+    for filename, func in tasks:
+        try:
+            diversity_logger.info(f'json_converter: building {filename}')
+            data = func()  # evaluate lazily here
+            with open(os.path.join(plot_path, filename), 'w') as fp:
+                json.dump(data, fp)
+        except Exception as e:
+            diversity_logger.exception(f'json_converter: failed {filename}: {e}')
+            # continue to next one
 
 def setup_logging(logpath):
     """ Set up the logging """
@@ -69,278 +125,254 @@ def setup_logging(logpath):
 def create_summarystats(data_path):
     """
         Create the summarystats .json used to propogate index.html
+        Robust to header changes like 'PUBMEDID' -> 'PUBMED ID'.
     """
+    sumstats = {}  # ensure defined even if we hit an exception early
     try:
-        dtypes = {'FIRST AUTHOR': str, 'DISEASE/TRAIT': str,
-                  'ASSOCIATION COUNT': np.int64, 'JOURNAL': str,
-                  'MAPPED_TRAIT': str}
-        usecols = ['PUBMEDID', 'DATE', 'FIRST AUTHOR', 'STUDY ACCESSION',
-                   'DISEASE/TRAIT', 'MAPPED_TRAIT', 'ASSOCIATION COUNT',
-                   'JOURNAL']
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
-                                            'raw', 'Cat_Stud.tsv'),
-                               sep='\t',
-                               low_memory=False,
-                               usecols=usecols,
-                               quotechar='"',
-                               warn_bad_lines=False,
-                               error_bad_lines=False,
-                               dtype=dtypes
-                               )
-        Cat_Full = pd.read_csv(os.path.join(data_path, 'catalog',
-                                            'raw', 'Cat_Full.tsv'),
-                               sep='\t',
-                               engine='python',
-                               usecols=['P-VALUE'],
-                               quotechar='"',
-                               warn_bad_lines=False,
-                               error_bad_lines=False,
-                               dtype={'P-VALUE': object})
-        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
-                                                    'synthetic',
-                                                    'Cat_Anc_wBroader.tsv'),
-                                       '\t', index_col=False,
-                                       low_memory=False)
-        temp_bubble_df = pd.read_csv(os.path.join(data_path,
-                                                  'toplot', 'bubble_df.csv'),
-                                     sep=',', index_col=False, low_memory=False)
-        sumstats = {}
+        # --- Robust read of Cat_Stud with header aliasing ---
+        stud_path = os.path.join(data_path, 'catalog', 'raw', 'Cat_Stud.tsv')
 
-        # Calculate summary statistics from the Cat_Stud file here
-        sumstats['number_studies'] = int(len(Cat_Stud['PUBMEDID'].unique()))
+        # Canonical -> acceptable variants
+        ALIASES = {
+            'PUBMEDID': {'PUBMEDID', 'PUBMED ID', 'PUBMED_ID'},
+            'DATE': {'DATE'},
+            'FIRST AUTHOR': {'FIRST AUTHOR', 'FIRST_AUTHOR', 'FIRST AUTHOR(S)'},
+            'STUDY ACCESSION': {'STUDY ACCESSION', 'STUDY_ACCESSION', 'STUDY ACCESSSION'},
+            'DISEASE/TRAIT': {'DISEASE/TRAIT', 'DISEASE / TRAIT', 'DISEASE_TRAIT'},
+            'MAPPED_TRAIT': {'MAPPED_TRAIT', 'MAPPED TRAIT'},
+            'ASSOCIATION COUNT': {'ASSOCIATION COUNT', 'ASSOCIATION_COUNT'},
+            'JOURNAL': {'JOURNAL'}
+        }
+
+        def _norm(s: str) -> str:
+            return s.replace('\ufeff', '').strip().replace('_', ' ').casefold()
+
+        # sniff headers
+        sniff = pd.read_csv(stud_path, sep='\t', nrows=0)
+        raw_cols = [c.replace('\ufeff','').strip() for c in sniff.columns]
+
+        # required + optional columns
+        required = ['PUBMEDID', 'DATE', 'FIRST AUTHOR', 'STUDY ACCESSION',
+                    'DISEASE/TRAIT', 'ASSOCIATION COUNT', 'JOURNAL']
+        optional = ['MAPPED_TRAIT']
+
+        # build mapping actual_name -> canonical
+        found = {}
+        for canon in required + optional:
+            variants_norm = {_norm(v) for v in (ALIASES.get(canon, {canon}))}
+            for c in raw_cols:
+                if _norm(c) in variants_norm:
+                    found[canon] = c
+                    break
+
+        missing = [c for c in required if c not in found]
+        if missing:
+            diversity_logger.debug(f"Cat_Stud header sniff: {raw_cols}")
+            raise KeyError(f"Cat_Stud.tsv missing required columns (after alias matching): {missing}")
+
+        # read only what we found, dtype as strings first
+        usecols_actual = [found[c] for c in (required + [c for c in optional if c in found])]
+        Cat_Stud = pd.read_csv(
+            stud_path,
+            sep='\t',
+            low_memory=False,
+            usecols=usecols_actual,
+            quotechar='"',
+            on_bad_lines="skip",
+            dtype=str
+        )
+
+        # rename back to canonical
+        Cat_Stud = Cat_Stud.rename(columns={v: k for k, v in found.items()})
+
+        # ensure optional column exists
+        if 'MAPPED_TRAIT' not in Cat_Stud.columns:
+            Cat_Stud['MAPPED_TRAIT'] = 'N/A'
+
+        # cast types
+        Cat_Stud['ASSOCIATION COUNT'] = pd.to_numeric(Cat_Stud['ASSOCIATION COUNT'], errors='coerce')
+
+        # --- Cat_Full (unchanged) ---
+        Cat_Full = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'raw', 'Cat_Full.tsv'),
+            sep='\t',
+            engine='python',
+            usecols=['P-VALUE'],
+            quotechar='"',
+            on_bad_lines="skip",
+            dtype={'P-VALUE': object}
+        )
+
+        # --- Ancesty w/ Broader (unchanged) ---
+        Cat_Anc_wBroader = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
+            sep='\t',
+            index_col=False,
+            low_memory=False
+        )
+
+        # --- temp bubble df (unchanged) ---
+        temp_bubble_df = pd.read_csv(
+            os.path.join(data_path, 'toplot', 'bubble_df.csv'),
+            sep=',', index_col=False, low_memory=False
+        )
+
+        # ------------------- Summary stats -------------------
+        sumstats['number_studies'] = int(Cat_Stud['PUBMEDID'].nunique())
         sumstats['first_study_date'] = str(Cat_Stud['DATE'].min())
+
         datemin = Cat_Stud['DATE'] == Cat_Stud['DATE'].min()
         dateminauth = Cat_Stud.loc[datemin, 'FIRST AUTHOR']
         sumstats['first_study_firstauthor'] = str(dateminauth.iloc[0])
         dateminpubmed = Cat_Stud.loc[datemin, 'PUBMEDID']
-        sumstats['first_study_pubmedid'] = int(dateminpubmed.iloc[0])
+        # numeric pubmed if possible
+        try:
+            sumstats['first_study_pubmedid'] = int(pd.to_numeric(dateminpubmed.iloc[0], errors='coerce'))
+        except Exception:
+            sumstats['first_study_pubmedid'] = str(dateminpubmed.iloc[0])
+
         datemax = Cat_Stud['DATE'].max()
         sumstats['last_study_date'] = str(datemax)
         datemaxauth = Cat_Stud.loc[Cat_Stud['DATE'] == datemax, 'FIRST AUTHOR']
         sumstats['last_study_firstauthor'] = str(datemaxauth.iloc[0])
-        datemaxpubmed = Cat_Stud.loc[Cat_Stud['DATE'] == Cat_Stud['DATE'].max(), 'PUBMEDID']
-        sumstats['last_study_pubmedid'] = int(datemaxpubmed.iloc[0])
-        cat_stud_acc_uniq = Cat_Stud['STUDY ACCESSION'].unique()
-        sumstats['number_accessions'] = int(len(cat_stud_acc_uniq))
-        cat_stud_dis_uniq = Cat_Stud['DISEASE/TRAIT'].unique()
-        sumstats['number_diseasestraits'] = int(len(cat_stud_dis_uniq))
-        cat_stud_map_uniq = Cat_Stud['MAPPED_TRAIT'].unique()
-        sumstats['number_mappedtrait'] = int(len(cat_stud_map_uniq))
-        cat_stud_ass_sum = Cat_Stud['ASSOCIATION COUNT'].sum()
-        sumstats['found_associations'] = int(cat_stud_ass_sum)
-        cat_stud_ass_mean = Cat_Stud['ASSOCIATION COUNT'].mean()
-        sumstats['average_associations'] = float(cat_stud_ass_mean)
-        sumstats['mostcommon_journal'] = str(Cat_Stud['JOURNAL'].mode()[0])
-        sumstats['unique_journals'] = int(len(Cat_Stud['JOURNAL'].unique()))
+        datemaxpubmed = Cat_Stud.loc[Cat_Stud['DATE'] == datemax, 'PUBMEDID']
+        try:
+            sumstats['last_study_pubmedid'] = int(pd.to_numeric(datemaxpubmed.iloc[0], errors='coerce'))
+        except Exception:
+            sumstats['last_study_pubmedid'] = str(datemaxpubmed.iloc[0])
 
-        noneuro_trait = pd.DataFrame(temp_bubble_df[
-                                     temp_bubble_df['Broader'] != 'European'].
-                                     groupby(['DiseaseOrTrait']).size()).\
-            sort_values(by=0, ascending=False).reset_index()['DiseaseOrTrait'][0]
+        cat_stud_acc_uniq = Cat_Stud['STUDY ACCESSION'].astype(str).unique()
+        sumstats['number_accessions'] = int(len(cat_stud_acc_uniq))
+        sumstats['number_diseasestraits'] = int(Cat_Stud['DISEASE/TRAIT'].nunique())
+        sumstats['number_mappedtrait'] = int(Cat_Stud['MAPPED_TRAIT'].nunique())
+
+        cat_stud_ass_sum = pd.to_numeric(Cat_Stud['ASSOCIATION COUNT'], errors='coerce').sum(skipna=True)
+        sumstats['found_associations'] = int(cat_stud_ass_sum) if not np.isnan(cat_stud_ass_sum) else 0
+
+        cat_stud_ass_mean = pd.to_numeric(Cat_Stud['ASSOCIATION COUNT'], errors='coerce').mean(skipna=True)
+        sumstats['average_associations'] = float(cat_stud_ass_mean) if not np.isnan(cat_stud_ass_mean) else 0.0
+
+        # mode() can be empty; guard it
+        jmode = Cat_Stud['JOURNAL'].mode()
+        sumstats['mostcommon_journal'] = str(jmode.iloc[0]) if not jmode.empty else 'N/A'
+        sumstats['unique_journals'] = int(Cat_Stud['JOURNAL'].nunique())
+
+        noneuro_trait = (
+            temp_bubble_df[temp_bubble_df['Broader'] != 'European']
+            .groupby(['DiseaseOrTrait'])
+            .size()
+            .sort_values(ascending=False)
+            .reset_index()['DiseaseOrTrait'][0]
+        )
         sumstats['noneuro_trait'] = str(noneuro_trait)
-        sumstats['average_pval'] = float(round(Cat_Full['P-VALUE'].
-                                               astype(float).mean(), 10))
-        sumstats['threshold_pvals'] = int(len(Cat_Full[Cat_Full['P-VALUE'].
-                                              astype(float) < 5.000000e-8]))
-        Cat_Anc_byN = Cat_Anc_wBroader[['STUDY ACCESSION', 'N']]
-        Cat_Anc_byN = Cat_Anc_byN.groupby(by='STUDY ACCESSION').sum()
-        Cat_Anc_byN = Cat_Anc_byN.reset_index()
-        Cat_Anc_wBroader = Cat_Anc_wBroader.drop_duplicates('STUDY ACCESSION')
-        Cat_Anc_wBroader = Cat_Anc_wBroader[['PUBMEDID', 'FIRST AUTHOR', 'STUDY ACCESSION']]
-        Cat_Anc_byN = pd.merge(Cat_Anc_byN, Cat_Anc_wBroader,
-                               how='left',
-                               left_on='STUDY ACCESSION',
-                               right_on='STUDY ACCESSION')
+
+        sumstats['average_pval'] = float(round(pd.to_numeric(Cat_Full['P-VALUE'], errors='coerce').mean(skipna=True), 10))
+        sumstats['threshold_pvals'] = int((pd.to_numeric(Cat_Full['P-VALUE'], errors='coerce') < 5.0e-8).sum())
+
+        # Big-N study info
+        Cat_Anc_byN = Cat_Anc_wBroader[['STUDY ACCESSION', 'N']].copy()
+        Cat_Anc_byN = Cat_Anc_byN.groupby(by='STUDY ACCESSION').sum(numeric_only=True).reset_index()
+
+        # for author/pubmed lookup, de-dup by accession
+        tmp_lookup = (
+            Cat_Anc_wBroader.drop_duplicates('STUDY ACCESSION')[['PUBMEDID', 'FIRST AUTHOR', 'STUDY ACCESSION']]
+        )
+        Cat_Anc_byN = pd.merge(Cat_Anc_byN, tmp_lookup, how='left', on='STUDY ACCESSION')
+
         lar_acc = Cat_Anc_byN.sort_values(by='N', ascending=False)['N'].iloc[0]
         sumstats['big_n'] = int(lar_acc)
         biggestauth = Cat_Anc_byN.loc[Cat_Anc_byN['N'] == int(lar_acc), 'FIRST AUTHOR']
         sumstats['large_accesion_firstauthor'] = str(biggestauth.iloc[0])
         biggestpubmed = Cat_Anc_byN.loc[Cat_Anc_byN['N'] == int(lar_acc), 'PUBMEDID']
-        sumstats['large_accesion_pubmed'] = int(biggestpubmed.iloc[0])
-        Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
-                                                    'synthetic', 'Cat_Anc_wBroader.tsv'),
-                                       sep='\t',
-                                       index_col=False,
-                                       low_memory=False)
-        Cat_Anc_NoNR = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] != 'In Part Not Recorded']
+        try:
+            sumstats['large_accesion_pubmed'] = int(pd.to_numeric(biggestpubmed.iloc[0], errors='coerce'))
+        except Exception:
+            sumstats['large_accesion_pubmed'] = str(biggestpubmed.iloc[0])
+
+        # Composition excluding 'In Part Not Recorded'
+        Cat_Anc_NoNR = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] != 'In Part Not Recorded'].copy()
         no_NR_sum = Cat_Anc_NoNR['N'].sum()
-        euro_sum = Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'European']['N'].sum()
-        sumstats['total_european'] = round(((euro_sum / no_NR_sum)*100), 2)
-        asia_sum = Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'Asian']['N'].sum()
-        sumstats['total_asian'] = round(((asia_sum / no_NR_sum)*100), 2)
-        afri_sum = Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'African']['N'].sum()
-        sumstats['total_african'] = round(((afri_sum / no_NR_sum)*100), 2)
-        oth_sum = Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Other')]['N'].sum()
-        sumstats['total_othermixed'] = round(((oth_sum / no_NR_sum)*100), 2)
-        cari_sum = Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Cari')]['N'].sum()
-        sumstats['total_afamafcam'] = round(((cari_sum / no_NR_sum)*100), 2)
-        hisp_sum = Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Hispanic')]['N'].sum()
-        sumstats['total_hisorlatinam'] = round(((hisp_sum / no_NR_sum)*100), 2)
+        def pc(x): return round((x / no_NR_sum) * 100, 2) if no_NR_sum else 0.0
 
-        # now rotate through the 4 filters with six broader ancestries:
-        #        1. initial phase, number of participants
-        #        2. initial phase, number of studies
-        #        3. replication phase, number of participants
-        #        4. replication phase, number of studies
+        sumstats['total_european'] = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'European']['N'].sum())
+        sumstats['total_asian']    = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'Asian']['N'].sum())
+        sumstats['total_african']  = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'African']['N'].sum())
+        sumstats['total_othermixed']   = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Other')]['N'].sum())
+        sumstats['total_afamafcam']    = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Cari')]['N'].sum())
+        sumstats['total_hisorlatinam'] = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Hispanic')]['N'].sum())
 
-        # 1.: first set up the sum of cat_anc_nonr_init
+        # Discovery stage
         anc_nonr_init = Cat_Anc_NoNR[Cat_Anc_NoNR['STAGE'] == 'initial']
         anc_nonr_init_sum = anc_nonr_init['N'].sum()
+        def stage_pc(df): return round(((df['N'].sum() / anc_nonr_init_sum) * 100), 2) if anc_nonr_init_sum else 0.0
+        def stage_len_pc(n):
+            denom = len(anc_nonr_init)
+            return round(((n / denom) * 100), 2) if denom else 0.0
 
-        # 1.1.: then for euro
         disc_euro = anc_nonr_init[anc_nonr_init['Broader'] == 'European']
-        disc_part_euro_sum = disc_euro['N'].sum()
-        disc_part_euro_pc = round(((disc_part_euro_sum / anc_nonr_init_sum) * 100), 2)
-        sumstats['discovery_participants_european'] = disc_part_euro_pc
-
-        # 1.2.: then for asian
         disc_asia = anc_nonr_init[anc_nonr_init['Broader'] == 'Asian']
-        disc_part_asia_sum = disc_asia['N'].sum()
-        disc_part_asia_pc = round(((disc_part_asia_sum / anc_nonr_init_sum) * 100), 2)
-        sumstats['discovery_participants_asian'] = disc_part_asia_pc
-
-        # 1.3.: then for african
         disc_afri = anc_nonr_init[anc_nonr_init['Broader'] == 'African']
-        disc_part_afri_sum = disc_afri['N'].sum()
-        disc_part_afri_pc = round(((disc_part_afri_sum / anc_nonr_init_sum) * 100), 2)
-        sumstats['discovery_participants_african'] = disc_part_afri_pc
-
-        # 1.4.: then for other/mixed
         disc_othe = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Other')]
-        disc_part_othe_sum = disc_othe['N'].sum()
-        disc_part_othe_pc = round(((disc_part_othe_sum / anc_nonr_init_sum) * 100), 2)
-        sumstats['discovery_participants_othermixed'] = disc_part_othe_pc
-
-        # 1.5.: then for afamafcam
         disc_cari = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Cari')]
-        disc_part_cari_sum = disc_cari['N'].sum()
-        disc_part_cari_pc = round(((disc_part_cari_sum / anc_nonr_init_sum) * 100), 2)
-        sumstats['discovery_participants_afamafcam'] = disc_part_cari_pc
-
-        # 1.6.: then for hisorlatinam
         disc_hisp = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Hispanic')]
-        disc_part_hisp_sum = disc_hisp['N'].sum()
-        disc_part_hisp_pc = round(((disc_part_hisp_sum / anc_nonr_init_sum) * 100), 2)
-        sumstats['discovery_participants_hisorlatinam'] = disc_part_hisp_pc
 
-        # 2.: second set up the len of cat_anc_nonr_init
-        anc_nonr_init_len = len(anc_nonr_init)
+        sumstats['discovery_participants_european']   = stage_pc(disc_euro)
+        sumstats['discovery_participants_asian']      = stage_pc(disc_asia)
+        sumstats['discovery_participants_african']    = stage_pc(disc_afri)
+        sumstats['discovery_participants_othermixed'] = stage_pc(disc_othe)
+        sumstats['discovery_participants_afamafcam']  = stage_pc(disc_cari)
+        sumstats['discovery_participants_hisorlatinam']= stage_pc(disc_hisp)
 
-        # 2.1.: then for euro
-        disc_euro_len = len(disc_euro)
-        disc_euro_len_pc = round(((disc_euro_len / anc_nonr_init_len) * 100), 2)
-        sumstats['discovery_studies_european'] = disc_euro_len_pc
+        sumstats['discovery_studies_european']   = stage_len_pc(len(disc_euro))
+        sumstats['discovery_studies_asian']      = stage_len_pc(len(disc_asia))
+        sumstats['discovery_studies_african']    = stage_len_pc(len(disc_afri))
+        sumstats['discovery_studies_othermixed'] = stage_len_pc(len(disc_othe))
+        sumstats['discovery_studies_afamafcam']  = stage_len_pc(len(disc_cari))
+        sumstats['discovery_studies_hisorlatinam']= stage_len_pc(len(disc_hisp))
 
-        # 2.2.: then for asian
-        disc_asia_len = len(disc_asia)
-        disc_asia_len_pc = round(((disc_asia_len / anc_nonr_init_len) * 100), 2)
-        sumstats['discovery_studies_asian'] = disc_asia_len_pc
-
-        # 2.3.: then for african
-        disc_afri_len = len(disc_afri)
-        disc_afri_len_pc = round(((disc_afri_len / anc_nonr_init_len) * 100), 2)
-        sumstats['discovery_studies_african'] = disc_afri_len_pc
-
-        # 2.4.: then for othermixed
-        disc_othe_len = len(disc_othe)
-        disc_othe_len_pc = round(((disc_othe_len / anc_nonr_init_len) * 100), 2)
-        sumstats['discovery_studies_othermixed'] = disc_othe_len_pc
-
-        # 2.5.: then for afamafcam
-        disc_cari_len = len(disc_cari)
-        disc_cari_len_pc = round(((disc_cari_len / anc_nonr_init_len) * 100), 2)
-        sumstats['discovery_studies_afamafcam'] = disc_cari_len_pc
-
-        # 2.6.: then for hisorlatinam
-        disc_hisp_len = len(disc_hisp)
-        disc_cari_len_pc = round(((disc_cari_len / anc_nonr_init_len) * 100), 2)
-        sumstats['discovery_studies_hisorlatinam'] = disc_cari_len_pc
-
-        # 3.: first set up the sum of cat_anc_nonr_repl
+        # Replication stage
         anc_nonr_repl = Cat_Anc_NoNR[Cat_Anc_NoNR['STAGE'] == 'replication']
         anc_nonr_repl_sum = anc_nonr_repl['N'].sum()
+        def r_pc(df): return round(((df['N'].sum() / anc_nonr_repl_sum) * 100), 2) if anc_nonr_repl_sum else 0.0
+        def r_len_pc(n):
+            denom = len(anc_nonr_repl)
+            return round(((n / denom) * 100), 2) if denom else 0.0
 
-        # 3.1.: then for euro
         repl_euro = anc_nonr_repl[anc_nonr_repl['Broader'] == 'European']
-        repl_part_euro_sum = repl_euro['N'].sum()
-        repl_part_euro_pc = round(((repl_part_euro_sum / anc_nonr_repl_sum) * 100), 2)
-        sumstats['replication_participants_european'] = repl_part_euro_pc
-
-        # 3.2.: then for asian
         repl_asia = anc_nonr_repl[anc_nonr_repl['Broader'] == 'Asian']
-        repl_part_asia_sum = repl_asia['N'].sum()
-        repl_part_asia_pc = round(((repl_part_asia_sum / anc_nonr_repl_sum) * 100), 2)
-        sumstats['replication_participants_asian'] = repl_part_asia_pc
-
-        # 3.3.: then for african
         repl_afri = anc_nonr_repl[anc_nonr_repl['Broader'] == 'African']
-        repl_part_afri_sum = repl_afri['N'].sum()
-        repl_part_afri_pc = round(((repl_part_afri_sum / anc_nonr_repl_sum) * 100), 2)
-        sumstats['replication_participants_african'] = repl_part_afri_pc
-
-        # 3.4.: then for other/mixed
         repl_othe = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Other')]
-        repl_part_othe_sum = repl_othe['N'].sum()
-        repl_part_othe_pc = round(((repl_part_othe_sum / anc_nonr_repl_sum) * 100), 2)
-        sumstats['replication_participants_othermixed'] = repl_part_othe_pc
-
-        # 3.5.: then for afamafcam
         repl_cari = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Cari')]
-        repl_part_cari_sum = repl_cari['N'].sum()
-        repl_part_cari_pc = round(((repl_part_cari_sum / anc_nonr_repl_sum) * 100), 2)
-        sumstats['replication_participants_afamafcam'] = repl_part_cari_pc
-
-        # 3.6.: then for hisorlatinam
         repl_hisp = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Hispanic')]
-        repl_part_hisp_sum = repl_hisp['N'].sum()
-        repl_part_hisp_pc = round(((repl_part_hisp_sum / anc_nonr_repl_sum) * 100), 2)
-        sumstats['replication_participants_hisorlatinam'] = repl_part_hisp_pc
 
-        # 4.: second set up the len of cat_anc_nonr_repl
-        anc_nonr_repl_len = len(anc_nonr_repl)
+        sumstats['replication_participants_european']   = r_pc(repl_euro)
+        sumstats['replication_participants_asian']      = r_pc(repl_asia)
+        sumstats['replication_participants_african']    = r_pc(repl_afri)
+        sumstats['replication_participants_othermixed'] = r_pc(repl_othe)
+        sumstats['replication_participants_afamafcam']  = r_pc(repl_cari)
+        sumstats['replication_participants_hisorlatinam']= r_pc(repl_hisp)
 
-        # 4.1.: then for euro
-        repl_euro_len = len(repl_euro)
-        repl_euro_len_pc = round(((repl_euro_len / anc_nonr_repl_len) * 100), 2)
-        sumstats['replication_studies_european'] = repl_euro_len_pc
+        sumstats['replication_studies_european']   = r_len_pc(len(repl_euro))
+        sumstats['replication_studies_asian']      = r_len_pc(len(repl_asia))
+        sumstats['replication_studies_african']    = r_len_pc(len(repl_afri))
+        sumstats['replication_studies_othermixed'] = r_len_pc(len(repl_othe))
+        sumstats['replication_studies_afamafcam']  = r_len_pc(len(repl_cari))
+        sumstats['replication_studies_hisorlatinam']= r_len_pc(len(repl_hisp))
 
-        # 4.2.: then for asian
-        repl_asia_len = len(repl_asia)
-        repl_asia_len_pc = round(((repl_asia_len / anc_nonr_repl_len) * 100), 2)
-        sumstats['replication_studies_asian'] = repl_asia_len_pc
-
-        # 4.3.: then for african
-        repl_afri_len = len(repl_afri)
-        repl_afri_len_pc = round(((repl_afri_len / anc_nonr_repl_len) * 100), 2)
-        sumstats['replication_studies_african'] = repl_afri_len_pc
-
-        # 4.4.: then for othermixed
-        repl_othe_len = len(repl_othe)
-        repl_othe_len_pc = round(((repl_othe_len / anc_nonr_repl_len) * 100), 2)
-        sumstats['replication_studies_othermixed'] = repl_othe_len_pc
-
-        # 4.5.: then for afamafcam
-        repl_cari_len = len(repl_cari)
-        repl_cari_len_pc = round(((repl_cari_len / anc_nonr_repl_len) * 100), 2)
-        sumstats['replication_studies_afamafcam'] = repl_cari_len_pc
-
-        # 4.6.: then for hisorlatinam
-        repl_hisp_len = len(repl_hisp)
-        repl_cari_len_pc = round(((repl_cari_len / anc_nonr_repl_len) * 100), 2)
-        sumstats['replication_studies_hisorlatinam'] = repl_cari_len_pc
-
-        sumstats['timeupdated'] = datetime.datetime.now().\
-                                  strftime("%Y-%m-%d %H:%M:%S")
-        if os.path.exists(os.path.join(data_path, 'unmapped',
-                                       'unmapped_diseases.txt')):
-            unmapped_dis = pd.read_csv(os.path.join(data_path, 'unmapped',
-                                       'unmapped_diseases.txt'))
-            sumstats['unmapped_diseases'] = len(unmapped_dis)
+        # Timestamp + unmapped count
+        sumstats['timeupdated'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        unmapped_path = os.path.join(data_path, 'unmapped', 'unmapped_diseases.txt')
+        if os.path.exists(unmapped_path):
+            unmapped_dis = pd.read_csv(unmapped_path)
+            sumstats['unmapped_diseases'] = int(len(unmapped_dis))
         else:
             sumstats['unmapped_diseases'] = 0
+
+        # Write JSON
         json_path = os.path.join(data_path, 'summary', 'summary.json')
         with open(json_path, 'w') as outfile:
             json.dump(sumstats, outfile)
+
         diversity_logger.info('Build of the summary stats: Complete')
     except Exception as e:
         diversity_logger.debug(f'Build of the summary stats: Failed -- {e}')
@@ -349,37 +381,59 @@ def create_summarystats(data_path):
 
 def make_heatmatrix(merged, stage, out_path):
     """
-    Make the heatmatrix!
+    Build heatmap CSVs (count & sum) without DataFrame.append.
+    Output matches the original: rows = Broader (repeated per year),
+    columns = all parent terms + 'Year' (as last column), with zeros
+    for missing combos. Index is written to CSV (blank header) to keep
+    DataLoader expectations intact.
     """
-    col_list = merged['parentterm'].unique().tolist()
-    col_list.append('Year')
-    index_list = merged[merged['Broader'].notnull()]['Broader'].\
-        unique().tolist()
-    count_df = pd.DataFrame(columns=col_list)
-    sum_df = pd.DataFrame(columns=col_list)
-    for year in range(2008, final_year+1):
-        temp_merged = merged[(merged['STAGE'] == stage) &
-                             (merged['DATE'].str.contains(str(year)))]
-        temp_count_df = pd.DataFrame(index=index_list,
-                                     columns=col_list)
-        for index in temp_count_df.index:
-            for column in temp_count_df.columns:
-                length = len(temp_merged[(temp_merged['Broader'] == index) &
-                                         (temp_merged['parentterm'] == column)])
-                temp_count_df.at[index, column] = length
-                temp_count_df.at[index, 'Year'] = year
-        count_df = count_df.append(temp_count_df, sort=False)
-        temp_sum_df = pd.DataFrame(index=index_list,
-                                   columns=col_list)
-        for index in temp_sum_df.index:
-            for column in temp_sum_df.columns:
-                sum = temp_merged[(temp_merged['Broader'] == index) &
-                                  (temp_merged['parentterm'] == column)]['N'].sum()
-                temp_sum_df.at[index, column] = sum
-            temp_sum_df.at[index, 'Year'] = year
-        sum_df = sum_df.append(temp_sum_df, sort=False)
-    sum_df.to_csv(os.path.join(out_path, 'heatmap_sum_'+stage+'.csv'))
-    count_df.to_csv(os.path.join(out_path, 'heatmap_count_'+stage+'.csv'))
+    # Columns (parent terms) and row index (ancestries) in the same order as before
+    parent_terms = merged['parentterm'].unique().tolist()
+    index_list   = merged.loc[merged['Broader'].notnull(), 'Broader'].unique().tolist()
+
+    frames_count = []
+    frames_sum   = []
+
+    for year in range(2008, final_year + 1):
+        # same year filter behavior as original (DATE was already cast to str)
+        mask = (merged['STAGE'] == stage) & (merged['DATE'].str.contains(str(year)))
+        tmp  = merged.loc[mask, ['Broader', 'parentterm', 'N']]
+
+        # counts
+        count = (tmp
+                 .groupby(['Broader', 'parentterm'])
+                 .size()
+                 .unstack('parentterm'))
+        # sums
+        ssum  = (tmp
+                 .groupby(['Broader', 'parentterm'])['N']
+                 .sum()
+                 .unstack('parentterm'))
+
+        # ensure full grid & zeros for missing combos; keep original ordering
+        count = count.reindex(index=index_list, columns=parent_terms, fill_value=0)
+        ssum  = ssum .reindex(index=index_list, columns=parent_terms, fill_value=0)
+
+        # add Year as last column (overwrites any earlier placeholder like the original)
+        count['Year'] = year
+        ssum['Year']  = year
+
+        # preserve column order: all parent terms + 'Year'
+        count = count[parent_terms + ['Year']]
+        ssum  = ssum [parent_terms + ['Year']]
+
+        frames_count.append(count)
+        frames_sum.append(ssum)
+
+    # one concat instead of repeated append
+    count_df = pd.concat(frames_count)
+    sum_df   = pd.concat(frames_sum)
+
+    # write with index to keep the leading blank header column expected by DataLoader.getHeatMapData
+    sum_df.to_csv(os.path.join(out_path, f'heatmap_sum_{stage}.csv'),
+                  index=True, index_label='')
+    count_df.to_csv(os.path.join(out_path, f'heatmap_count_{stage}.csv'),
+                    index=True, index_label='')
 
 
 def make_heatmap_dfs(data_path):
@@ -440,48 +494,65 @@ def make_heatmap_dfs(data_path):
     except Exception as e:
         diversity_logger.debug(f'Build of the heatmap dataset: Failed -- {e}')
 
+
 def make_choro_df(data_path):
     """
-        Create the dataframe for the choropleth map
+    Create the dataframe for the choropleth map.
+    Robust year extraction and LEFT join to the country lookup to avoid
+    losing rows for newer/renamed countries.
     """
     try:
-        Cat_Ancestry = pd.read_csv(os.path.join(data_path,
-                                                'catalog',
-                                                'synthetic',
-                                                'Cat_Anc_wBroader.tsv'),
-                                   sep='\t')
-        annual_df = pd.DataFrame(columns=['Year', 'N', 'Count'])
+        Cat_Ancestry = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
+            sep='\t'
+        )
+        # Clean CoR without exploding (one record per study)
         Clean_CoR = make_clean_CoR(Cat_Ancestry, data_path)
-        countrylookup = pd.read_csv(os.path.join(data_path,
-                                                 'support',
-                                                 'Country_Lookup.csv'),
-                                    index_col='Country')
-        for year in range(2008, final_year+1):
-            tempdf = Clean_CoR[Clean_CoR['Date'].str.contains(str(year))]
-            tempdf_sum = pd.DataFrame(
-                tempdf.groupby(['Cleaned Country'])['N'].sum())
-            tempdf_count = pd.DataFrame(
-                tempdf.groupby(['Cleaned Country'])['N'].count()).\
-                rename(columns={'N': 'Count'})
-            tempdf_merged = pd.merge(tempdf_sum, tempdf_count,
-                                     left_index=True, right_index=True)
-            tempdf_merged['Year'] = str(year)
-            country_merged = pd.merge(countrylookup, tempdf_merged,
-                                      left_index=True,
-                                      right_index=True)
-            country_merged = country_merged.reset_index()
-            count_pc = round((pd.to_numeric(country_merged['Count']) /
-                              pd.to_numeric(country_merged['Count']).sum()) * 100, 2)
-            country_merged['Count (%)'] = count_pc
-            n_pc = round((pd.to_numeric(country_merged['N']) /
-                          pd.to_numeric(country_merged['N'].sum())) * 100, 2)
-            country_merged['N (%)'] = n_pc
-            annual_df = annual_df.append(country_merged, sort=True)
-        annual_df = annual_df.reset_index().drop(['level_0'], axis=1)
-        annual_df.to_csv(os.path.join(data_path, 'toplot', 'choro_df.csv'))
-        diversity_logger.info('Build of the choropleth dataset: Complete')
-    except Exception as e:
-        diversity_logger.debug(f'Build of the choropleth dataset: Failed -- {e}')
+        Clean_CoR['Year'] = pd.to_datetime(Clean_CoR['Date'], errors='coerce').dt.year
+
+        countrylookup = pd.read_csv(
+            os.path.join(data_path, 'support', 'Country_Lookup.csv'),
+            index_col='Country'
+        )
+
+        frames = []
+        for year in range(2008, final_year + 1):
+            tmp = Clean_CoR[Clean_CoR['Year'] == year]
+            if tmp.empty:
+                continue
+
+            # Aggregate by country
+            agg_sum  = tmp.groupby('Cleaned Country')['N'].sum().to_frame('N')
+            agg_cnt  = tmp.groupby('Cleaned Country')['N'].count().to_frame('Count')
+            tempdf_merged = agg_sum.join(agg_cnt, how='outer')  # keep all countries observed
+            tempdf_merged['Year'] = year
+
+            # LEFT join from data to lookup; don’t drop unknown names
+            merged = tempdf_merged.merge(countrylookup, left_index=True, right_index=True, how='left')
+            merged = merged.reset_index().rename(columns={'index': 'Country'})
+
+            # Percentages (guard against zero totals)
+            totN = merged['N'].sum()
+            totC = merged['Count'].sum()
+            merged['Count (%)'] = (merged['Count'] / totC * 100).round(2) if totC else 0.0
+            merged['N (%)']     = (merged['N']     / totN * 100).round(2) if totN else 0.0
+
+            frames.append(merged)
+
+        if frames:
+            annual_df = pd.concat(frames, ignore_index=True)
+            out = os.path.join(data_path, 'toplot', 'choro_df.csv')
+            annual_df.to_csv(out, index=False)
+
+            # Sanity logs so you can see it in your logfile immediately
+            yrs = sorted(annual_df['Year'].unique())
+            diversity_logger.debug(f"choro_df years present: {yrs[:5]} … {yrs[-5:]}")
+            diversity_logger.info('Build of the choropleth dataset: Complete')
+        else:
+            diversity_logger.warning('No choropleth data generated (no yearly data found)')
+
+    except Exception:
+        diversity_logger.exception('Build of the choropleth dataset: Failed')
 
 
 def make_timeseries_df(Cat_Ancestry, data_path, savename):
@@ -541,7 +612,9 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
         diversity_logger.debug(f'Build of the ts dataset: Failed -- {e}')
 
 
-def make_doughnut_df(data_path):
+
+
+def make_doughnut_df_old(data_path):
     """ Make the doughnut chart dataframe for use in main.py"""
     try:
         Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
@@ -676,6 +749,198 @@ def make_doughnut_df(data_path):
         diversity_logger.debug(f'Build of the doughnut datasets: Failed -- {e}')
 
 
+
+def make_doughnut_df(data_path):
+    """ Make the doughnut chart dataframe for use in main.py """
+    try:
+        # ---------- Cat_Stud ----------
+        stud_path = os.path.join(data_path, 'catalog', 'raw', 'Cat_Stud.tsv')
+        sniff = pd.read_csv(stud_path, sep='\t', nrows=0)
+        usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT', 'ASSOCIATION COUNT']
+        if 'MAPPED_TRAIT' in sniff.columns:
+            usecols.append('MAPPED_TRAIT')
+        if 'MAPPED_TRAIT_URI' in sniff.columns:
+            usecols.append('MAPPED_TRAIT_URI')
+
+        Cat_Stud = pd.read_csv(stud_path, sep='\t', usecols=usecols, dtype=str)
+        Cat_Stud['ASSOCIATION COUNT'] = pd.to_numeric(Cat_Stud['ASSOCIATION COUNT'], errors='coerce')
+        Cat_Stud['STUDY ACCESSION'] = Cat_Stud['STUDY ACCESSION'].astype(str)
+
+        req = {'STUDY ACCESSION','DISEASE/TRAIT','ASSOCIATION COUNT'}
+        missing = req - set(Cat_Stud.columns)
+        if missing:
+            raise KeyError(f'Cat_Stud missing required columns: {sorted(missing)}')
+        diversity_logger.debug(f'Cat_Stud: {Cat_Stud.shape}, assoc non-null={Cat_Stud["ASSOCIATION COUNT"].notna().mean():.3f}')
+
+        # ---------- Cat_Map (robust) ----------
+        cmap_path = os.path.join(data_path, 'catalog', 'raw', 'Cat_Map.tsv')
+        Cat_Map = pd.read_csv(cmap_path, sep='\t', dtype=str)
+        req_map = {'Disease trait','EFO term','EFO URI','Parent term','Parent URI'}
+        if not req_map.issubset(set(Cat_Map.columns)):
+            raise KeyError(f'Unexpected Cat_Map.tsv columns: {Cat_Map.columns.tolist()}')
+        Cat_Map = Cat_Map[['Disease trait','EFO term','EFO URI','Parent term','Parent URI']]
+
+        diversity_logger.debug(f'Cat_Map: {Cat_Map.shape}')
+
+        # ---------- Normalized keys & mapping dicts ----------
+        def _norm_text(s: pd.Series) -> pd.Series:
+            return (s.astype(str).str.strip().str.replace(r'\s+',' ', regex=True).str.casefold())
+        def _norm_uri(s: pd.Series) -> pd.Series:
+            return s.astype(str).str.strip().str.casefold()
+
+        Cat_Stud['_DT_norm']  = _norm_text(Cat_Stud['DISEASE/TRAIT'])
+        if 'MAPPED_TRAIT' in Cat_Stud.columns:
+            Cat_Stud['_MT_norm']  = _norm_text(Cat_Stud['MAPPED_TRAIT'])
+        else:
+            Cat_Stud['_MT_norm']  = ''
+        if 'MAPPED_TRAIT_URI' in Cat_Stud.columns:
+            Cat_Stud['_MTU_norm'] = _norm_uri(Cat_Stud['MAPPED_TRAIT_URI'])
+        else:
+            Cat_Stud['_MTU_norm'] = ''
+
+        Cat_Map['_DT_norm']   = _norm_text(Cat_Map['Disease trait'])
+        Cat_Map['_ET_norm']   = _norm_text(Cat_Map['EFO term'])
+        Cat_Map['_EURI_norm'] = _norm_uri (Cat_Map['EFO URI'])
+
+        # mapping Series (use first occurrence)
+        map_DT   = Cat_Map.dropna(subset=['_DT_norm'])  .drop_duplicates('_DT_norm').set_index('_DT_norm')['Parent term']
+        map_ET   = Cat_Map.dropna(subset=['_ET_norm'])  .drop_duplicates('_ET_norm').set_index('_ET_norm')['Parent term']
+        map_EURI = Cat_Map.dropna(subset=['_EURI_norm']).drop_duplicates('_EURI_norm').set_index('_EURI_norm')['Parent term']
+
+        # ---------- Build Cat_StudMap (no merge misalignment) ----------
+        Cat_StudMap = Cat_Stud[['STUDY ACCESSION','DISEASE/TRAIT','ASSOCIATION COUNT']].copy()
+        # successive fallbacks
+        parent = Cat_Stud['_DT_norm'].map(map_DT)
+        parent = parent.fillna(Cat_Stud['_DT_norm'].map(map_ET))
+        if 'MAPPED_TRAIT' in Cat_Stud.columns:
+            parent = parent.fillna(Cat_Stud['_MT_norm'].map(map_DT))
+            parent = parent.fillna(Cat_Stud['_MT_norm'].map(map_ET))
+        if 'MAPPED_TRAIT_URI' in Cat_Stud.columns:
+            parent = parent.fillna(Cat_Stud['_MTU_norm'].map(map_EURI))
+
+        Cat_StudMap['parentterm'] = parent
+        diversity_logger.debug(f'Cat_StudMap parentterm coverage overall={Cat_StudMap["parentterm"].notna().mean():.3f}')
+
+        # Write-through (as before) for traceability
+        Cat_StudMap[['DISEASE/TRAIT','parentterm']].rename(columns={'parentterm':'Parent term'}).to_csv(
+            os.path.join(data_path, 'catalog', 'synthetic', 'Disease_to_Parent_Mappings.tsv'),
+            sep='\t', index=False
+        )
+
+        # ---------- Ancestry & merge ----------
+        anc_path = os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv')
+        Cat_Anc_wBroader = pd.read_csv(anc_path, sep='\t', index_col=False, parse_dates=['DATE'])
+        Cat_Anc_wBroader = Cat_Anc_wBroader[Cat_Anc_wBroader['Broader'] != 'In Part Not Recorded']
+        Cat_Anc_wBroader['STUDY ACCESSION'] = Cat_Anc_wBroader['STUDY ACCESSION'].astype(str)
+
+        merged = pd.merge(Cat_StudMap, Cat_Anc_wBroader, how='left', on='STUDY ACCESSION')
+        merged['DATE'] = pd.to_datetime(merged['DATE'], errors='coerce')
+        merged['_Year'] = merged['DATE'].dt.year
+
+        # original filters
+        merged = merged[merged['Broader'].notnull() & merged['parentterm'].notnull()]
+        if merged.empty:
+            raise RuntimeError('merged is empty after join to ancestry')
+
+        year_cov = (merged.groupby('_Year')['parentterm'].apply(lambda s: s.notna().mean()).sort_index())
+        diversity_logger.debug(f'parentterm coverage by year (tail): {year_cov.tail(5).to_dict()}')
+        diversity_logger.debug(f'Years present in merged (tail): {sorted(merged["_Year"].dropna().unique().tolist())[-10:]}')
+
+        # ---------- Build output (same schema) ----------
+        cols = ['Broader','parentterm','Year',
+                'InitialN','InitialCount','ReplicationN','ReplicationCount',
+                'InitialAssociationSum']
+        doughnut_df = pd.DataFrame(columns=cols)
+
+        counter = 0
+        for year in range(2008, final_year + 1):
+            year_df = merged[merged['_Year'] == year]
+            if year_df.empty:
+                continue
+
+            for ancestry in year_df['Broader'].unique():
+                anc_df = year_df[year_df['Broader'] == ancestry]
+
+                # "All"
+                rep_anc = anc_df.loc[anc_df['STAGE'] == 'replication', 'N'].sum()
+                rep_tot = year_df.loc[year_df['STAGE'] == 'replication', 'N'].sum()
+                init_anc = anc_df.loc[anc_df['STAGE'] == 'initial', 'N'].sum()
+                init_tot = year_df.loc[year_df['STAGE'] == 'initial', 'N'].sum()
+
+                init_ass_anc = anc_df.loc[anc_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+                init_ass_tot = year_df.loc[year_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+
+                doughnut_df.loc[counter] = [
+                    ancestry, 'All', year,
+                    (init_anc / init_tot * 100) if init_tot else np.nan,
+                    (len(anc_df[anc_df['STAGE'] == 'initial']) /
+                     len(year_df[year_df['STAGE'] == 'initial']) * 100) if len(year_df[year_df['STAGE'] == 'initial']) else np.nan,
+                    (rep_anc / rep_tot * 100) if rep_tot else np.nan,
+                    (len(anc_df[anc_df['STAGE'] == 'replication']) /
+                     len(year_df[year_df['STAGE'] == 'replication']) * 100) if len(year_df[year_df['STAGE'] == 'replication']) else np.nan,
+                    (init_ass_anc / init_ass_tot * 100) if init_ass_tot else np.nan
+                ]
+                counter += 1
+
+                # Per-parent rows
+                for parent in year_df['parentterm'].dropna().unique():
+                    parent_df = year_df[year_df['parentterm'] == parent]
+                    anc_parent_df = parent_df[parent_df['Broader'] == ancestry]
+
+                    rep_anc = anc_parent_df.loc[anc_parent_df['STAGE'] == 'replication', 'N'].sum()
+                    rep_tot = parent_df.loc[parent_df['STAGE'] == 'replication', 'N'].sum()
+                    init_anc = anc_parent_df.loc[anc_parent_df['STAGE'] == 'initial', 'N'].sum()
+                    init_tot = parent_df.loc[parent_df['STAGE'] == 'initial', 'N'].sum()
+
+                    init_ass_anc = anc_parent_df.loc[anc_parent_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+                    init_ass_tot = parent_df.loc[parent_df['STAGE'] == 'initial', 'ASSOCIATION COUNT'].sum()
+
+                    doughnut_df.loc[counter] = [
+                        ancestry, parent, year,
+                        (init_anc / init_tot * 100) if init_tot else np.nan,
+                        (len(anc_parent_df[anc_parent_df['STAGE'] == 'initial']) /
+                         len(parent_df[parent_df['STAGE'] == 'initial']) * 100) if len(parent_df[parent_df['STAGE'] == 'initial']) else np.nan,
+                        (rep_anc / rep_tot * 100) if rep_tot else np.nan,
+                        (len(anc_parent_df[anc_parent_df['STAGE'] == 'replication']) /
+                         len(parent_df[parent_df['STAGE'] == 'replication']) * 100) if len(parent_df[parent_df['STAGE'] == 'replication']) else np.nan,
+                        (init_ass_anc / init_ass_tot * 100) if init_ass_tot else np.nan
+                    ]
+                    counter += 1
+
+        doughnut_df['Broader'] = doughnut_df['Broader'].str.replace(
+            'Hispanic/Latin American', 'Hispanic/L.A.', regex=False
+        )
+        diversity_logger.debug(f'doughnut_df shape={doughnut_df.shape}, last year={doughnut_df["Year"].max() if not doughnut_df.empty else None}')
+
+
+        doughnut_df['Value'] = doughnut_df['InitialN']  # default donut metric
+
+        cols_legacy = [
+            'parentterm', 'Broader', 'Year',
+            'InitialN', 'InitialCount',
+            'ReplicationN', 'ReplicationCount',
+            'InitialAssociationSum',
+            'Value'
+        ]
+
+        # enforce exact column order and clean NaNs/Infs
+        doughnut_df.columns = [str(c) for c in doughnut_df.columns]
+        doughnut_df = doughnut_df[cols_legacy].replace([np.inf, -np.inf], np.nan).fillna(0)
+
+        # write + quick sanity logs
+        out = os.path.join(data_path, 'toplot', 'doughnut_df.csv')
+        doughnut_df.to_csv(out, index=False)
+        diversity_logger.debug("doughnut_df header: %s", ",".join(doughnut_df.columns))
+        diversity_logger.debug("doughnut_df first row: %s", doughnut_df.head(1).to_dict(orient='records'))
+
+        diversity_logger.info('Build of the doughnut datasets: Complete')
+
+    except Exception:
+        diversity_logger.exception('Build of the doughnut datasets: Failed')
+
+
+
+
 def make_bubbleplot_df(data_path):
     """ Make data for the bubbleplot """
     try:
@@ -721,16 +986,16 @@ def make_bubbleplot_df(data_path):
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
-        merged['cssclassname'] = merged['Broader'].str.replace('/', '-', regex=False).str. \
-                                     replace('\s', '-', regex=True).str.lower() + " " + \
-                                 merged['parentterm'].str.replace(',\s+', ',', regex=True).str. \
-                                     replace('\s', '-', regex=True).str. \
+        merged['cssclassname'] = merged['Broader'].str.replace(r'/', '-', regex=False).str. \
+                                     replace(r'\s', '-', regex=True).str.lower() + " " + \
+                                 merged['parentterm'].str.replace(r',\s+', ',', regex=True).str. \
+                                     replace(r'\s', '-', regex=True).str. \
                                      replace(',', ' ', regex=False).str.lower()
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].str. \
             replace('>', 'more than', regex=False).str. \
             replace('<', 'less than', regex=False)
         merged['trait'] = merged['DiseaseOrTrait'].str. \
-            replace('\s', '-', regex=True).str. \
+            replace(r'\s', '-', regex=True).str. \
             replace('(', '-', regex=False).str. \
             replace(')', '-', regex=False).str.lower()
 
@@ -788,8 +1053,8 @@ def clean_gwas_cat(data_path):
                 to_csv(os.path.join(data_path, 'unmapped', 'unmapped_broader.txt'))
         else:
             diversity_logger.info('No missing Broader terms! Nice!')
-        Cat_Anc = Cat_Anc[Cat_Anc['Broader'].notnull()]
-        Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
+        #Cat_Anc = Cat_Anc[Cat_Anc['Broader'].notnull()]
+        #Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
         Cat_Anc.to_csv(os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
                        sep='\t',
                        index=False)
@@ -800,92 +1065,138 @@ def clean_gwas_cat(data_path):
 
 def make_clean_CoR(Cat_Anc, data_path):
     """
-        Clean the country of recruitment field for the geospatial analysis.
+    Clean the country of recruitment WITHOUT exploding multi-country entries.
+    Deterministically select the first nonempty, non-'NR' token as the
+    canonical country. One record in -> one record out.
     """
     try:
-        with open(os.path.abspath(
-                  os.path.join(data_path, 'catalog', 'synthetic',
-                               'ancestry_CoR.csv')), 'w') as fileout:
-            rec_out = csv.writer(fileout, delimiter=',', lineterminator='\n')
-            rec_out .writerow(['Date', 'PUBMEDID', 'N', 'Cleaned Country'])
-            for index, row in Cat_Anc.iterrows():
-                if len(row['COUNTRY OF RECRUITMENT'].split(',')) == 1:
-                    rec_out .writerow([row['DATE'],
-                                       str(row['PUBMEDID']),
-                                       str(row['N']),
-                                       row['COUNTRY OF RECRUITMENT']])
-        Clean_CoR = pd.read_csv(os.path.abspath(
-                                os.path.join(data_path, 'catalog', 'synthetic',
-                                             'ancestry_CoR.csv')))
-        cleaner = {'U.S.': 'United States',
-                   'Gambia': 'Gambia, The',
-                   'U.K.': 'United Kingdom',
-                   'Republic of Korea': 'Korea, South',
-                   'Czech Republic': 'Czechia',
-                   'Russian Federation': 'Russia',
-                   'Iran \(Islamic Republic of\)': 'Iran',
-                   'Viet Nam': 'Vietnam',
-                   'United Republic of Tanzania': 'Tanzania',
-                   'Republic of Ireland': 'Ireland',
-                   'Micronesia \(Federated States of\)': 'Micronesia, Federated States of'}
-        for key, value in cleaner.items():
-            Clean_CoR['Cleaned Country'] = Clean_CoR['Cleaned Country'].str.replace(key, value)
-        Clean_CoR = Clean_CoR[Clean_CoR['Cleaned Country'] != 'NR']
-        Clean_CoR.to_csv(os.path.abspath(
-                         os.path.join(data_path, 'catalog', 'synthetic',
-                                      'GWAScatalogue_CleanedCountry.tsv')),
-                         sep='\t',
-                         index=False)
-        return Clean_CoR
-        diversity_logger.info('Clean of the raw Country datasets: Complete')
-    except Exception as e:
-        diversity_logger.debug(f'Clean of the raw Country datasets: Failed -- {e}')
+        req_base = ['DATE', 'PUBMEDID', 'COUNTRY OF RECRUITMENT']
+        missing = [c for c in req_base if c not in Cat_Anc.columns]
+        if missing:
+            raise KeyError(f"Cat_Anc missing columns: {missing}")
+
+        df = Cat_Anc[req_base].copy()
+
+        # N: accept 'N' (synthetic) or 'NUMBER OF INDIVDUALS' (raw)
+        if 'N' in Cat_Anc.columns:
+            df['N'] = pd.to_numeric(Cat_Anc['N'], errors='coerce')
+        elif 'NUMBER OF INDIVDUALS' in Cat_Anc.columns:
+            df['N'] = pd.to_numeric(Cat_Anc['NUMBER OF INDIVDUALS'], errors='coerce')
+        else:
+            df['N'] = pd.NA
+        df['N'] = df['N'].fillna(0)
+
+        # Standardize delimiters then select first usable token
+        s = (df['COUNTRY OF RECRUITMENT'].astype(str)
+                                      .str.replace('[;|]', ',', regex=True))
+
+        def first_token(x: str) -> str:
+            for t in x.split(','):
+                t = t.strip()
+                if t and t != 'NR':
+                    return t
+            return ''
+
+        df['Cleaned Country'] = s.apply(first_token)
+        df = df[df['Cleaned Country'] != '']
+
+        # Harmonize common variants
+        repl = {
+            'U.S.': 'United States',
+            'U.K.': 'United Kingdom',
+            'Gambia': 'Gambia, The',
+            'Republic of Korea': 'Korea, South',
+            'Czech Republic': 'Czechia',
+            'Russian Federation': 'Russia',
+            r'Iran \(Islamic Republic of\)': 'Iran',
+            'Viet Nam': 'Vietnam',
+            'United Republic of Tanzania': 'Tanzania',
+            'Republic of Ireland': 'Ireland',
+            r'Micronesia \(Federated States of\)': 'Micronesia, Federated States of',
+        }
+        for k, v in repl.items():
+            df['Cleaned Country'] = df['Cleaned Country'].str.replace(k, v, regex=True)
+
+        # Persist (same schema/paths as before)
+        out_csv = os.path.join(data_path, 'catalog', 'synthetic', 'ancestry_CoR.csv')
+        df[['DATE', 'PUBMEDID', 'N', 'Cleaned Country']].rename(columns={'DATE': 'Date'}).to_csv(out_csv, index=False)
+
+        out_tsv = os.path.join(data_path, 'catalog', 'synthetic', 'GWAScatalogue_CleanedCountry.tsv')
+        df[['DATE', 'PUBMEDID', 'N', 'Cleaned Country']].rename(columns={'DATE': 'Date'}).to_csv(out_tsv, sep='\t', index=False)
+
+        # Return with 'Date' column name for downstream
+        return df.rename(columns={'DATE': 'Date'})
+
+    except Exception:
+        diversity_logger.exception('Clean of the raw Country datasets: Failed')
+
+
+
+def _safe_filename(resp, fallback):
+    """
+    Extract filename from Content-Disposition if present; otherwise use fallback.
+    Handles both filename= and RFC5987 filename*=
+    """
+    cd = resp.headers.get('Content-Disposition', '') or ''
+    try:
+        if 'filename*=' in cd:
+            # e.g. attachment; filename*=UTF-8''Cat_Stud.tsv
+            part = cd.split('filename*=', 1)[1].split(';', 1)[0].strip().strip('"')
+            name = part.split("''", 1)[-1]
+            return name or fallback
+        if 'filename=' in cd:
+            # e.g. attachment; filename="Cat_Stud.tsv"
+            part = cd.split('filename=', 1)[1].split(';', 1)[0].strip().strip('"')
+            return part or fallback
+    except Exception:
+        pass
+    return fallback
+
 
 def download_cat(data_path, ebi_download):
-    """ Downloads the data from the ebi main site and ftp"""
+    """Downloads GWAS Catalog files (robust to missing/odd headers)."""
     try:
-        r = requests.get(ebi_download + 'studies_alternative')
-        if r.status_code == 200:
-            catstud_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Stud.tsv'), 'wb') as tsvfile:
-                tsvfile.write(r.content)
-            diversity_logger.info(f'Download of {catstud_name}: Complete')
-        else:
-            diversity_logger.debug(f'Download of {catstud_name}: Failed')
-        r = requests.get(ebi_download + 'ancestry')
-        if r.status_code == 200:
-            catanc_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Anc.tsv'), 'wb') as tsvfile:
-                tsvfile.write(r.content)
-            diversity_logger.info(f'Download of {catanc_name}: Complete')
-        else:
-            diversity_logger.debug(f'Download of {catanc_name}: Failed')
-        r = requests.get(ebi_download + 'full')
-        if r.status_code == 200:
-            catfull_name = r.headers['Content-Disposition'].split('=')[1]
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Full.tsv'), 'wb') as tsvfile:
-                tsvfile.write(r.content)
-            diversity_logger.info(f'Download of {catfull_name}: Complete')
-        else:
-            diversity_logger.debug(f'Download of {catfull_name}: Failed')
+        raw_dir = os.path.join(data_path, 'catalog', 'raw')
+        os.makedirs(raw_dir, exist_ok=True)
+
+        http_endpoints = [
+            ('studies/v1.0.3.1', 'Cat_Stud.tsv'),
+            ('ancestry',         'Cat_Anc.tsv'),
+            ('full',             'Cat_Full.tsv'),
+        ]
+
+        for endpoint, fallback_name in http_endpoints:
+            url = ebi_download + endpoint
+            r = requests.get(url, timeout=60)
+            if r.ok:
+                server_name = _safe_filename(r, fallback_name)
+                out_path = os.path.join(raw_dir, fallback_name)
+                with open(out_path, 'wb') as fh:
+                    fh.write(r.content)
+                diversity_logger.info(
+                    f"Download of {endpoint}: Complete "
+                    f"(saved as {fallback_name}; server filename: {server_name})"
+                )
+            else:
+                diversity_logger.debug(f"Download of {endpoint}: Failed (HTTP {r.status_code})")
+
+        # FTP: trait mappings
         requests_ftp.monkeypatch_session()
         s = requests.Session()
-        ftpsite = 'ftp://ftp.ebi.ac.uk/'
+        ftpsite = 'ftp://ftp.ebi.ac.uk'
         subdom = '/pub/databases/gwas/releases/latest/'
         file = 'gwas-efo-trait-mappings.tsv'
-        r = s.get(ftpsite+subdom+file)
-        if r.status_code == 200:
-            with open(os.path.join(data_path, 'catalog', 'raw',
-                                   'Cat_Map.tsv'), 'wb') as tsvfile:
-                tsvfile.write(r.content)
-            diversity_logger.info(f'Download of efo-trait-mappings: Complete')
+        r = s.get(ftpsite + subdom + file, timeout=60)
+        if r.ok:
+            out_path = os.path.join(raw_dir, 'Cat_Map.tsv')
+            with open(out_path, 'wb') as fh:
+                fh.write(r.content)
+            diversity_logger.info('Download of efo-trait-mappings: Complete')
         else:
-            diversity_logger.debug(f'Download of efo-trait-mappings: Failed')
+            diversity_logger.debug(f'Download of efo-trait-mappings: Failed (HTTP {r.status_code})')
+
     except Exception as e:
-        diversity_logger.debug('Problem downloading Catalog data!' + str(e))
+        diversity_logger.debug('Problem downloading Catalog data! ' + str(e))
 
 
 def make_disease_list(df):
@@ -936,16 +1247,16 @@ def determine_year(day):
 
 def check_data(data_path):
 
-    static_files = ['catalog/raw/Anc.tsv',
-                   'catalog/raw/Full.tsv',
-                   'catalog/raw/Map.tsv',
-                   'catalog/raw/Stud.tsv',
-                   'catalog/synthetic/Anc_wB.tsv',
-                   'catalog/synthetic/Anc_wB_withParents.tsv',
-                   'catalog/synthetic/Disease_Mappings.tsv',
-                   'summary/uniq_broader.txt',
-                   'support/Country_Lookup.csv',
-                   'support/dict_replacer_broad.tsv']
+    static_files = ['catalog/raw/Cat_Anc.tsv',
+                    'catalog/raw/Cat_Full.tsv',
+                    'catalog/raw/Cat_Map.tsv',
+                    'catalog/raw/Cat_Stud.tsv',
+                    'catalog/synthetic/Cat_Anc_wBroader.tsv',
+                    'catalog/synthetic/Cat_Anc_wB_withParents.tsv',
+                    'catalog/synthetic/Disease_to_Parent_Mappings.tsv',
+                    'summary/uniq_broader.txt',
+                    'support/Country_Lookup.csv',
+                    'support/dict_replacer_broad.tsv']
 
     data_okay = os.path.exists(data_path)
 
@@ -976,6 +1287,7 @@ if __name__ == "__main__":
         clean_gwas_cat(data_path)
         make_bubbleplot_df(data_path)
         make_doughnut_df(data_path)
+        make_doughnut_df_old(data_path)
         tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                            'Cat_Anc_wBroader.tsv'),  sep='\t')
         make_timeseries_df(tsinput, data_path, 'ts1')

@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # docker container for GWAS data collection with cron scheduler
 
-FROM python:3.8-slim-buster
+FROM python:3.13-slim
 
 RUN apt-get update
 
