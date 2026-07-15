@@ -78,6 +78,103 @@ def json_converter(data_path):
     plot_path = os.path.join(data_path, 'toplot')
     os.makedirs(plot_path, exist_ok=True)
 
+    def broader_class(value):
+        return str(value or "").replace(" ", "-").replace("/", "-").replace(" ", "-").replace(" ", "-").lower()
+
+    def parentterm_class(value):
+        return str(value or "").replace(", ", ",").replace(" ", "-").replace(",", " ").lower()
+
+    def disease_clean(value):
+        return str(value or "").replace(">", "more than").replace("<", "less than")
+
+    def trait_clean(value):
+        return str(value or "").replace(" ", "-").replace(">", "more than").replace("<", "less than").replace("(", "").replace(")", "").lower()
+
+    def date_ms(value):
+        try:
+            return int(pd.to_datetime(value).timestamp() * 1000)
+        except Exception:
+            return None
+
+    def rows_from_stage(stage_obj):
+        if isinstance(stage_obj, list):
+            return stage_obj
+        return [stage_obj[key] for key in stage_obj.keys()]
+
+    def enrich_bubble_row(row):
+        enriched = dict(row)
+
+        try:
+            nnum = float(enriched.get("N", 0))
+        except Exception:
+            nnum = 0
+
+        enriched["__Nnum"] = nnum
+        enriched["__dateMS"] = date_ms(enriched.get("DATE"))
+        enriched["__class"] = broader_class(enriched.get("Broader")) + " " + parentterm_class(enriched.get("parentterm"))
+        enriched["__trait"] = trait_clean(enriched.get("DiseaseOrTrait"))
+        enriched["__DiseaseOrTraitClean"] = disease_clean(enriched.get("DiseaseOrTrait"))
+        enriched["__BroaderClass"] = broader_class(enriched.get("Broader"))
+        enriched["__ParentTermClass"] = parentterm_class(enriched.get("parentterm"))
+
+        return enriched
+
+    def encode_bubble_stage(rows, columns):
+        dicts = {}
+        codes = {}
+
+        for column in columns:
+            values = []
+            value_to_code = {}
+            column_codes = []
+
+            for row in rows:
+                value = row.get(column)
+                if isinstance(value, float) and math.isnan(value):
+                    value = None
+
+                key = json.dumps(value, ensure_ascii=False, sort_keys=True)
+
+                if key not in value_to_code:
+                    value_to_code[key] = len(values)
+                    values.append(value)
+
+                column_codes.append(value_to_code[key])
+
+            dicts[column] = values
+            codes[column] = column_codes
+
+        ns = [float(row.get("__Nnum") or 0) for row in rows]
+        dms = [row.get("__dateMS") for row in rows if row.get("__dateMS") is not None]
+
+        meta = {
+            "rowCount": len(rows),
+            "maxN": max(ns) if ns else 0,
+            "minDateMS": min(dms) if dms else None,
+            "maxDateMS": max(dms) if dms else None,
+            "minDate": datetime.datetime.utcfromtimestamp(min(dms) / 1000).strftime("%Y-%m-%d") if dms else None,
+            "maxDate": datetime.datetime.utcfromtimestamp(max(dms) / 1000).strftime("%Y-%m-%d") if dms else None,
+            "includePrecomputed": True,
+        }
+
+        return {
+            "columns": columns,
+            "dicts": dicts,
+            "codes": codes,
+            "meta": meta,
+        }
+
+    def encode_bubble_graph(data):
+        initial_rows = [enrich_bubble_row(row) for row in rows_from_stage(data["bubblegraph_initial"])]
+        replication_rows = [enrich_bubble_row(row) for row in rows_from_stage(data["bubblegraph_replication"])]
+        columns = sorted(set().union(*(row.keys() for row in initial_rows + replication_rows)))
+
+        return {
+            "__format": "dict_columnar_v2",
+            "bubblegraph_initial": encode_bubble_stage(initial_rows, columns),
+            "bubblegraph_replication": encode_bubble_stage(replication_rows, columns),
+        }
+
     # filename -> function (do NOT call here)
     tasks = [
         ('ancestries.json',         dl.getAncestriesList),
@@ -96,8 +193,13 @@ def json_converter(data_path):
         try:
             diversity_logger.info(f'json_converter: building {filename}')
             data = func()  # evaluate lazily here
-            with open(os.path.join(plot_path, filename), 'w') as fp:
-                json.dump(data, fp)
+            if filename == 'bubbleGraph.json':
+                data = encode_bubble_graph(data)
+                with open(os.path.join(plot_path, filename), 'w') as fp:
+                    json.dump(data, fp, ensure_ascii=False, separators=(',', ':'))
+            else:
+                with open(os.path.join(plot_path, filename), 'w') as fp:
+                    json.dump(data, fp)
         except Exception as e:
             diversity_logger.exception(f'json_converter: failed {filename}: {e}')
             # continue to next one
