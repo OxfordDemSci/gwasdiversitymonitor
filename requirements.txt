@@ -4,5 +4,5 @@ Flask==2.2.5
 libsass==0.21.0
 requests==2.31.0
 requests_ftp==0.3.1
-setuptools>=70
+setuptools==80.9.0
 legacy-cgi; python_version >= "3.13"

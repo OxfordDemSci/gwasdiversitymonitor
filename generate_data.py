@@ -399,9 +399,9 @@ def create_summarystats(data_path):
         sumstats['total_european'] = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'European']['N'].sum())
         sumstats['total_asian']    = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'Asian']['N'].sum())
         sumstats['total_african']  = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'] == 'African']['N'].sum())
-        sumstats['total_othermixed']   = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Other')]['N'].sum())
-        sumstats['total_afamafcam']    = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Cari')]['N'].sum())
-        sumstats['total_hisorlatinam'] = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Hispanic')]['N'].sum())
+        sumstats['total_othermixed']   = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Other', na=False)]['N'].sum())
+        sumstats['total_afamafcam']    = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Cari', na=False)]['N'].sum())
+        sumstats['total_hisorlatinam'] = pc(Cat_Anc_NoNR[Cat_Anc_NoNR['Broader'].str.contains('Hispanic', na=False)]['N'].sum())
 
         # Discovery stage
         anc_nonr_init = Cat_Anc_NoNR[Cat_Anc_NoNR['STAGE'] == 'initial']
@@ -414,9 +414,9 @@ def create_summarystats(data_path):
         disc_euro = anc_nonr_init[anc_nonr_init['Broader'] == 'European']
         disc_asia = anc_nonr_init[anc_nonr_init['Broader'] == 'Asian']
         disc_afri = anc_nonr_init[anc_nonr_init['Broader'] == 'African']
-        disc_othe = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Other')]
-        disc_cari = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Cari')]
-        disc_hisp = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Hispanic')]
+        disc_othe = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Other', na=False)]
+        disc_cari = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Cari', na=False)]
+        disc_hisp = anc_nonr_init[anc_nonr_init['Broader'].str.contains('Hispanic', na=False)]
 
         sumstats['discovery_participants_european']   = stage_pc(disc_euro)
         sumstats['discovery_participants_asian']      = stage_pc(disc_asia)
@@ -443,9 +443,9 @@ def create_summarystats(data_path):
         repl_euro = anc_nonr_repl[anc_nonr_repl['Broader'] == 'European']
         repl_asia = anc_nonr_repl[anc_nonr_repl['Broader'] == 'Asian']
         repl_afri = anc_nonr_repl[anc_nonr_repl['Broader'] == 'African']
-        repl_othe = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Other')]
-        repl_cari = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Cari')]
-        repl_hisp = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Hispanic')]
+        repl_othe = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Other', na=False)]
+        repl_cari = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Cari', na=False)]
+        repl_hisp = anc_nonr_repl[anc_nonr_repl['Broader'].str.contains('Hispanic', na=False)]
 
         sumstats['replication_participants_european']   = r_pc(repl_euro)
         sumstats['replication_participants_asian']      = r_pc(repl_asia)
