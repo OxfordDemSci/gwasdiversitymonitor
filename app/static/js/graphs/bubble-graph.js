@@ -735,9 +735,8 @@ function drawBubbleGraph(selector, data, replication) {
         }
     }
 
-    d3.select('#bubble-graph-controls').on('click', function () {
+    bindImageDownload('#bubble-graph-controls', selector, svg_id, function () {
         updateCanvasExportImage();
-        imagePopup('popup-download-image', selector, svg_id);
     });
 
     var svgs = bubbleGraph.find('svg');

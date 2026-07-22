@@ -81,7 +81,7 @@ function drawTimeSeries(json, id, studies, replication) {
     if (svgs.length > 1) {
         svgs[0].parentNode.removeChild(svgs[0].parentNode.childNodes[5]);
     }
-    d3.select('#time-series-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
+    bindImageDownload('#time-series-controls', selector, svg_id);
 }
 
 function addGrid(svg, width, tickMax, yAxis) {

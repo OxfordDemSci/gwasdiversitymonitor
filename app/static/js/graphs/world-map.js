@@ -436,7 +436,7 @@ function drawWorldMapChart(data, withMetric) {
     backRect.attr('width', width);
     backRect.attr('height', height);
 
-    d3.select('#world-map-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
+    bindImageDownload('#world-map-controls', selector, svg_id);
 
     function applyMobileSettings() {
         if (isMobile) {

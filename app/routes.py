@@ -2,8 +2,10 @@ from flask import render_template
 from flask import request
 from flask import Response
 from flask import send_file, jsonify
+from flask import abort
 from app import app
 from app import DataLoader
+import os
 
 @app.context_processor
 def inject_template_scope():
@@ -59,10 +61,24 @@ def additional():
 @app.route("/getCSV/<filename>")
 def getCSV(filename):
 
-    if filename == "heatmap" or filename == "timeseries" or filename == "gwasdiversitymonitor_download":
-        return send_file('data/todownload/'+filename+'.zip')
+    zip_downloads = {"heatmap", "timeseries", "gwasdiversitymonitor_download"}
+    csv_downloads = {"bubble_df", "choro_df", "doughnut_df"}
+    data_root = os.path.abspath('data')
 
-    with open('data/toplot/'+filename+'.csv') as fp:
+    if filename in zip_downloads:
+        path = os.path.join(data_root, 'todownload', filename + '.zip')
+        if not os.path.exists(path):
+            abort(404)
+        return send_file(path, as_attachment=True, download_name=filename + '.zip')
+
+    if filename not in csv_downloads:
+        abort(404)
+
+    path = os.path.join(data_root, 'toplot', filename + '.csv')
+    if not os.path.exists(path):
+        abort(404)
+
+    with open(path) as fp:
         csv = fp.read()
 
     return Response(

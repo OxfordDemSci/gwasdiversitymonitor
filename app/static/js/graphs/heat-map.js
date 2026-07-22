@@ -83,7 +83,7 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
         }
     }
 
-	d3.select('#heat-map-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
+	bindImageDownload('#heat-map-controls', selector, svg_id);
 
     function drawLogScaleColour(range, logColour_scale, maxValue) {
         let legend = svg.append('g').attr('class', 'log-colour-scale');

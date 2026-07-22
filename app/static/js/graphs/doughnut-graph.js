@@ -141,7 +141,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
         }
     });
 
-	d3.select('#doughnut-graph-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
+	bindImageDownload('#doughnut-graph-controls', selector, svg_id);
 
     associationSwitch.addEventListener('change', function() {
         let associationLabel = document.getElementById('associationLabel');
