@@ -63,8 +63,12 @@ function __dcSelectData(data, replication) {
     return Object.keys(data).map(function(k) { return data[k]; });
 }
 
+function __dcNormaliseClassValue(v) {
+    return String(v || "").trim().replace(/\s+/g, "-").replace(/\//g, "-").replace(/,/g, "").toLowerCase();
+}
+
 function __dcBroaderClass(v) {
-    return String(v || "").replace(' ', '-').replace('/', '-').replace(' ', '-').replace(' ', '-').replace(' ', '-').toLowerCase();
+    return __dcNormaliseClassValue(v);
 }
 
 function __dcParentTermClass(v) {
@@ -81,6 +85,60 @@ function __dcTrait(d) {
 
 function __dcDiseaseClean(d) {
     return d.__DiseaseOrTraitClean || String(d.DiseaseOrTrait || "").replace('>', 'more than').replace('<', 'less than');
+}
+
+function __dcCsvEscape(value) {
+    if (value === undefined || value === null) return "";
+
+    var text = String(value);
+    if (/[",\r\n]/.test(text)) {
+        return '"' + text.replace(/"/g, '""') + '"';
+    }
+
+    return text;
+}
+
+function __dcDownloadText(filename, text, mimeType) {
+    var blob = new Blob([text], { type: mimeType || "text/plain;charset=utf-8" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+}
+
+function __dcBubbleCsvValue(row, column) {
+    if (column === "cssclassname") return __dcClass(row);
+    if (column === "trait") return __dcTrait(row);
+    if (column === "N") return __dcN(row);
+    if (column === "DiseaseOrTrait") return __dcDiseaseClean(row);
+
+    return row[column];
+}
+
+function __dcDownloadBubbleCsv() {
+    var state = window.__bubbleCanvasState;
+    var points = state && state.points ? state.points : [];
+    var selectedTraits = state && state.selectedTraits ? state.selectedTraits : [];
+    var exportPoints = selectedTraits.length ? points.filter(function (p) { return p.traitOk; }) : points;
+    var columns = ["", "Broader", "N", "PUBMEDID", "AUTHOR", "parentterm", "STAGE", "DATE", "ACCESSION", "DiseaseOrTrait", "cssclassname", "trait"];
+    var lines = [columns.map(__dcCsvEscape).join(",")];
+
+    for (var i = 0; i < exportPoints.length; i++) {
+        var p = exportPoints[i];
+        var row = p.d;
+
+        lines.push(columns.map(function (column) {
+            if (column === "") return p.index;
+            return __dcCsvEscape(__dcBubbleCsvValue(row, column));
+        }).join(","));
+    }
+
+    __dcDownloadText("bubble_df.csv", lines.join("\n") + "\n", "text/csv;charset=utf-8");
 }
 
 function __dcN(d) {
@@ -391,7 +449,7 @@ function drawBubbleGraph(selector, data, replication) {
     }
 
     function normaliseFilterValue(v) {
-        return String(v || "").replace(/\s+/g, "-").replace(/\//g, "-").replace(/,/g, "").toLowerCase();
+        return __dcNormaliseClassValue(v);
     }
 
     function rowMatchesParent(d, parentFilter) {
@@ -403,14 +461,12 @@ function drawBubbleGraph(selector, data, replication) {
         if (!ancestryFilters || ancestryFilters.length === 0) return true;
 
         var broader = d.__BroaderClass || __dcBroaderClass(d.Broader);
-        var cls = __dcClass(d);
-
         for (var i = 0; i < ancestryFilters.length; i++) {
             var f = normaliseFilterValue(ancestryFilters[i]);
-            if (broader === f || cls.indexOf(f) !== -1) return true;
+            if (broader === f) return false;
         }
 
-        return false;
+        return true;
     }
 
     function rowMatchesTrait(d, selectedTraits) {
@@ -480,6 +536,10 @@ function drawBubbleGraph(selector, data, replication) {
         var parentFilter = currentParentFilter();
         var ancestryFilters = currentAncestryFilters();
         var selectedTraits = getCurrentTraitSelection();
+
+        state.parentFilter = parentFilter;
+        state.ancestryFilters = ancestryFilters.slice();
+        state.selectedTraits = selectedTraits.slice();
 
         ctx.clearRect(0, 0, canvasW, canvasH);
         state.points = [];
@@ -737,6 +797,11 @@ function drawBubbleGraph(selector, data, replication) {
 
     bindImageDownload('#bubble-graph-controls', selector, svg_id, function () {
         updateCanvasExportImage();
+    });
+
+    $('#bubble-graph-controls .icon-download-data').closest('a').off('click.bubbleCsvDownload').on('click.bubbleCsvDownload', function (event) {
+        event.preventDefault();
+        __dcDownloadBubbleCsv();
     });
 
     var svgs = bubbleGraph.find('svg');
