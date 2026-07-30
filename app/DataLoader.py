@@ -241,7 +241,8 @@ class DataLoader:
     def filterTraits(self, search_trait):
         traits = self.getTraitsList()
         filtered_traits = []
-        for count, (trait_key, trait_value) in enumerate(traits.items()):
-            if search_trait in trait_key or search_trait in trait_value:
-                filtered_traits.append({"id": count, "text": trait_key})
+        search_trait = search_trait.lower()
+        for trait_key, trait_value in traits.items():
+            if search_trait in trait_key.lower() or search_trait in trait_value.lower():
+                filtered_traits.append({"id": trait_value, "text": trait_key})
         return filtered_traits

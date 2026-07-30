@@ -1,4 +1,10 @@
 
+svg.responsive-chart-svg {
+  height: auto;
+  max-height: none !important;
+  @include flex(none);
+}
+
 svg#bubbleSVG circle {
   opacity: .7;
   display: none;

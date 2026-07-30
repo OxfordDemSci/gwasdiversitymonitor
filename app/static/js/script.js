@@ -1,5 +1,21 @@
 // Menu
 
+function makeChartResponsive(svgSelection, width, height) {
+	if (!svgSelection || !svgSelection.node || !svgSelection.node()) return;
+
+	width = Number(width || svgSelection.attr('width'));
+	height = Number(height || svgSelection.attr('height'));
+
+	if (!width || !height) return;
+
+	svgSelection
+		.attr('width', width)
+		.attr('height', height)
+		.attr('viewBox', '0 0 ' + width + ' ' + height)
+		.attr('preserveAspectRatio', 'xMinYMin meet')
+		.classed('responsive-chart-svg', true);
+}
+
 var header = $('#header');
 var burger = header.find('#burger-menu');
 var nav = header.find('#nav-menu');

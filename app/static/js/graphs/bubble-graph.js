@@ -199,13 +199,18 @@ function __dcPatchGetYearAndDataMax() {
 }
 
 
-function drawBubbleGraph(selector, data, replication) {
+function drawBubbleGraph(selector, data, replication, preserveFilters) {
     __dcPatchGetYearAndDataMax();
 
     var rawPayload = data;
     data = __dcSelectData(data, replication);
 
     var bubbleGraph = $(selector);
+    if (window.__bubbleCanvasState && window.__bubbleCanvasState.resizeObserver) {
+        window.__bubbleCanvasState.resizeObserver.disconnect();
+    }
+    $(window).off("resize.canvasBubbleLayout");
+
     bubbleGraph.css("position", "relative");
     bubbleGraph.find("#bubbleCanvas").remove();
 
@@ -219,7 +224,7 @@ function drawBubbleGraph(selector, data, replication) {
         width = Math.max(320, bubbleGraph.width() - margin.left - margin.right - 260);
     }
 
-    sanitiseSVG(selector);
+    sanitiseSVG(selector, preserveFilters);
 
     let svg_id = 'bubbleSVG';
     let svg_selector = `#${svg_id}`;
@@ -230,6 +235,12 @@ function drawBubbleGraph(selector, data, replication) {
         .attr("class", "term-all canvas-backed")
         .attr("width", width + margin.left + margin.right)
         .attr("height", height + margin.top + margin.bottom);
+
+    makeChartResponsive(
+        mainSvg,
+        width + margin.left + margin.right,
+        height + margin.top + margin.bottom
+    );
 
     mainSvg.append('rect')
         .attr('class', 'white-rect')
@@ -339,9 +350,13 @@ function drawBubbleGraph(selector, data, replication) {
     function alignCanvasToPlot() {
         var leftRect = leftPanel.getBoundingClientRect();
         var svgRect = mainSvg.node().getBoundingClientRect();
+        var viewBox = mainSvg.node().viewBox.baseVal;
+        var scale = viewBox.width ? Math.min(svgRect.width / viewBox.width, svgRect.height / viewBox.height) : 1;
 
-        canvas.style.left = (svgRect.left - leftRect.left + margin.left - maxRadius) + "px";
-        canvas.style.top = (svgRect.top - leftRect.top + margin.top - maxRadius) + "px";
+        canvas.style.left = (svgRect.left - leftRect.left + (margin.left - maxRadius) * scale) + "px";
+        canvas.style.top = (svgRect.top - leftRect.top + (margin.top - maxRadius) * scale) + "px";
+        canvas.style.width = (canvasW * scale) + "px";
+        canvas.style.height = (canvasH * scale) + "px";
     }
 
     alignCanvasToPlot();
@@ -375,6 +390,32 @@ function drawBubbleGraph(selector, data, replication) {
 
     window.__bubbleCanvasState = state;
     window.__dictComboDebug.canvasFixedGeometry = true;
+
+    if (window.ResizeObserver) {
+        state.resizeObserver = new ResizeObserver(function() {
+            if (state.resizeFrame) cancelAnimationFrame(state.resizeFrame);
+            state.resizeFrame = requestAnimationFrame(alignCanvasToPlot);
+        });
+        state.resizeObserver.observe(mainSvg.node());
+    }
+
+    var initialPanelWidth = Math.round(bubbleGraph.find(".left").width());
+    var initialPixelRatio = window.devicePixelRatio || 1;
+    $(window).on("resize.canvasBubbleLayout", function() {
+        clearTimeout(state.resizeTimer);
+        state.resizeTimer = setTimeout(function() {
+            var nextPanelWidth = Math.round(bubbleGraph.find(".left").width());
+            var nextPixelRatio = window.devicePixelRatio || 1;
+
+            if (Math.abs(nextPanelWidth - initialPanelWidth) > 2 ||
+                Math.abs(nextPixelRatio - initialPixelRatio) > 0.01) {
+                drawBubbleGraph(selector, rawPayload, replication, true);
+                return;
+            }
+
+            alignCanvasToPlot();
+        }, 180);
+    });
 
     function cellKey(cx, cy) {
         return cx + "," + cy;
@@ -474,7 +515,7 @@ function drawBubbleGraph(selector, data, replication) {
         return selectedTraits.indexOf(__dcTrait(d)) !== -1;
     }
 
-    function computeFilteredMax(parentFilter, ancestryFilters) {
+    function computeFilteredMax(parentFilter, ancestryFilters, selectedTraits) {
         var m = 0;
 
         for (var i = 0; i < data.length; i++) {
@@ -482,6 +523,7 @@ function drawBubbleGraph(selector, data, replication) {
 
             if (!rowMatchesParent(d, parentFilter)) continue;
             if (!rowMatchesAncestry(d, ancestryFilters)) continue;
+            if (!rowMatchesTrait(d, selectedTraits)) continue;
 
             var n = __dcN(d);
             if (n > m) m = n;
@@ -545,14 +587,12 @@ function drawBubbleGraph(selector, data, replication) {
         state.points = [];
         state.grid = new Map();
 
-        var nonSelected = [];
-        var selected = [];
-
         for (var i = 0; i < data.length; i++) {
             var d = data[i];
 
             if (!rowMatchesParent(d, parentFilter)) continue;
             if (!rowMatchesAncestry(d, ancestryFilters)) continue;
+            if (!rowMatchesTrait(d, selectedTraits)) continue;
 
             var n = __dcN(d);
             var x = xScale(new Date(__dcDateValue(d))) + state.pad;
@@ -561,8 +601,6 @@ function drawBubbleGraph(selector, data, replication) {
 
             if (!isFinite(x) || !isFinite(y) || !isFinite(r)) continue;
 
-            var traitOk = rowMatchesTrait(d, selectedTraits);
-
             var p = {
                 index: i,
                 d: d,
@@ -570,31 +608,18 @@ function drawBubbleGraph(selector, data, replication) {
                 y: y,
                 r: r,
                 className: __dcClass(d),
-                traitOk: traitOk
+                traitOk: true
             };
 
             state.points.push(p);
             addToGrid(p);
-
-            if (selectedTraits.length > 0 && !traitOk) {
-                nonSelected.push(p);
-            } else {
-                selected.push(p);
-            }
-        }
-
-        for (var a = 0; a < nonSelected.length; a++) {
-            drawOnePoint(nonSelected[a], { disabled: true });
-        }
-
-        for (var b = 0; b < selected.length; b++) {
-            drawOnePoint(selected[b], { opaque: selectedTraits.length > 0 });
+            drawOnePoint(p, { opaque: selectedTraits.length > 0 });
         }
 
         if (state.selectedIndex !== null) {
-            for (var c = 0; c < state.points.length; c++) {
-                if (state.points[c].index === state.selectedIndex) {
-                    drawOnePoint(state.points[c], { selected: true });
+            for (var a = 0; a < state.points.length; a++) {
+                if (state.points[a].index === state.selectedIndex) {
+                    drawOnePoint(state.points[a], { selected: true });
                     break;
                 }
             }
@@ -640,8 +665,8 @@ function drawBubbleGraph(selector, data, replication) {
     function canvasPointFromEvent(evt) {
         var rect = canvas.getBoundingClientRect();
         return {
-            x: evt.clientX - rect.left,
-            y: evt.clientY - rect.top
+            x: (evt.clientX - rect.left) * canvasW / rect.width,
+            y: (evt.clientY - rect.top) * canvasH / rect.height
         };
     }
 
@@ -696,7 +721,8 @@ function drawBubbleGraph(selector, data, replication) {
     function updateYAxisAndRedraw() {
         var parentFilter = currentParentFilter();
         var ancestryFilters = currentAncestryFilters();
-        var maxFiltered = computeFilteredMax(parentFilter, ancestryFilters);
+        var selectedTraits = getCurrentTraitSelection();
+        var maxFiltered = computeFilteredMax(parentFilter, ancestryFilters, selectedTraits);
 
         yScale.domain([0, maxFiltered]);
         sizeScale.domain([0, maxFiltered]);
@@ -762,7 +788,7 @@ function drawBubbleGraph(selector, data, replication) {
         .on("change.canvasBubble", function() {
             clearSelected();
             state.selectedIndex = null;
-            rebuildPointsAndDraw();
+            updateYAxisAndRedraw();
         });
 
     $('#cb2')
@@ -1044,13 +1070,19 @@ function getDataMax(data, filters) {
     return Math.ceil(max / rounding)*rounding;
 }
 
-function sanitiseSVG(selector) {
-    $(selector).find(".filter select[name='trait']").val(null).trigger('change');
+function sanitiseSVG(selector, preserveFilters) {
+    if (!preserveFilters) {
+        $(selector).find(".filter select[name='trait']").val(null).trigger('change');
+    }
 
     $(selector + " svg").remove();
     clearSelected();
     $(selector).find(".filter .option").unbind();
-    $(selector).find(".filter .option").removeClass("active");
+    if (!preserveFilters) {
+        $(selector).find(".filter .option").removeClass("active");
+    }
     $(selector).find(".filter select").unbind();
-    $(selector).find(".filter select[name='parentTerms']").val("all");
+    if (!preserveFilters) {
+        $(selector).find(".filter select[name='parentTerms']").val("all");
+    }
 }

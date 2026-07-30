@@ -1,5 +1,6 @@
 .dashboard {
-  margin-top: 20px;
+  max-width: $max-breakpoint;
+  margin: 20px auto 0;
 
   .tile {
     margin-bottom: 20px;
@@ -156,6 +157,7 @@
             }
           }
         }
+
       }
 
       &#timeSeries {
@@ -822,4 +824,3 @@
     bottom: 10px;
   }
 }
-

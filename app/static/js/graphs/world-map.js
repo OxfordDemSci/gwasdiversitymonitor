@@ -115,6 +115,8 @@ function drawWorldMapChart(data, withMetric) {
         .attr("width", width)
         .attr("height", height);
 
+    makeChartResponsive(mainSvg, width, height);
+
     mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '850').attr('width', '1000');
 
     let svg = mainSvg.append('g').attr('class', 'map svg-container');
