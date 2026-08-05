@@ -364,6 +364,13 @@
             position: absolute;
             right: 10px;
             bottom: 10px;
+            @include flexbox;
+            @include align-items(center);
+
+            .world-map-zoom-controls {
+              margin-right: 10px;
+              @include flexbox;
+            }
           }
         }
 

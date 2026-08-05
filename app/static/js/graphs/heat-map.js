@@ -1,4 +1,4 @@
-function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
+function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedState) {
 
     window.withMetric = withMetric;
 
@@ -167,16 +167,14 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered) {
     function setUpSettings(key) {
         specificData = data[key];
         dataKeys = Object.keys(specificData);
-        currentYear = dataKeys[dataKeys.length-1];
+        var requestedYear = preservedState && String(preservedState.year);
+        currentYear = requestedYear && dataKeys.indexOf(requestedYear) !== -1 ?
+            requestedYear :
+            dataKeys[dataKeys.length-1];
     }
 
     function specificDataGraph(key) {
         specificData = data[key];
-
-        // Changing year
-        let dataKeys = Object.keys(specificData);
-        let currentYear = dataKeys[dataKeys.length-1];
-
         getGraphPerYear(specificData, currentYear);
     }
 

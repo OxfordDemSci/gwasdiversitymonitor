@@ -93,8 +93,14 @@ function setDescription() {
 function downloadImage(selector, svg_selector, png) {
 	let graph = $(selector);
 	let svg = graph.find(`#${svg_selector}`);
-	var width = svg.width();
-	var height = svg.height();
+	var sourceSvg = svg[0];
+	var sourceViewBox = sourceSvg && sourceSvg.viewBox ? sourceSvg.viewBox.baseVal : null;
+	var width = sourceViewBox && sourceViewBox.width ?
+		sourceViewBox.width :
+		parseFloat(svg.attr("width")) || svg.width();
+	var height = sourceViewBox && sourceViewBox.height ?
+		sourceViewBox.height :
+		parseFloat(svg.attr("height")) || svg.height();
 	var heightPos = height+100;
 
 	d3.select("#downloadShell svg").remove();
@@ -470,6 +476,17 @@ function downloadImage(selector, svg_selector, png) {
 	  .padding(10)
 	  .overflow(false)
 	  .render();
+
+	var finalWidth = parseFloat(downloadSvg.attr("width"));
+	var finalHeight = parseFloat(downloadSvg.attr("height"));
+
+	downloadSvg
+		.attr("viewBox", "0 0 " + finalWidth + " " + finalHeight)
+		.attr("preserveAspectRatio", "xMinYMin meet")
+		.style("width", finalWidth + "px")
+		.style("height", finalHeight + "px")
+		.style("max-height", "none")
+		.style("overflow", "visible");
 
 	var html = new XMLSerializer().serializeToString(downloadSvg.node());
 	var svgBlob = new Blob([html], {type: "image/svg+xml;charset=utf-8"});

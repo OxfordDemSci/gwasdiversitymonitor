@@ -579,6 +579,10 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         var ancestryFilters = currentAncestryFilters();
         var selectedTraits = getCurrentTraitSelection();
 
+        // The export preview belongs only to the current canvas frame. Leaving it
+        // in the live SVG makes old bubbles visible beneath the grid after filtering.
+        mainSvg.select("#canvasExportImage").remove();
+
         state.parentFilter = parentFilter;
         state.ancestryFilters = ancestryFilters.slice();
         state.selectedTraits = selectedTraits.slice();
@@ -791,13 +795,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
             updateYAxisAndRedraw();
         });
 
-    $('#cb2')
-        .off("change.canvasBubble")
-        .on("change.canvasBubble", function() {
-            $('.ancestry-filter .btn').removeClass('active');
-            clearSelected();
-            drawBubbleGraph(selector, rawPayload, $(this).is(":checked"));
-        });
+    $('#cb2').off("change.canvasBubble");
 
     function updateCanvasExportImage() {
         try {
@@ -863,7 +861,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         };
     }
 
-    rebuildPointsAndDraw();
+    updateYAxisAndRedraw();
 
     window.__bubbleCanvasGetFirstPoint = function() {
         if (!window.__bubbleCanvasState || !window.__bubbleCanvasState.points.length) return null;

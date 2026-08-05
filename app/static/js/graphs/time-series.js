@@ -66,12 +66,9 @@ function drawTimeSeries(json, id, studies, replication) {
         redrawTimeSeries(data, svg, width, height, tickMax, xScale);
     });
 
-    outsideFilters.off('change.timeSeries').on('change.timeSeries', function() {
-        var data = filterRecord(json, recordFilter, studies, replication);
-        recordFilter.prop('checked', false);
-        ancestriesFilter.val(ancestriesFilter.find('option:first').val());
-        redrawTimeSeries(data, svg, width, height, tickMax, xScale);
-    });
+    // Global Metric/Stage changes redraw this chart centrally. Do not clear its
+    // ancestry or "not recorded" controls while that redraw is in progress.
+    outsideFilters.off('change.timeSeries');
 
     var initialPanelWidth = Math.round(timeSeries.width());
     var initialPixelRatio = window.devicePixelRatio || 1;

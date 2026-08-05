@@ -1,4 +1,4 @@
-function drawDoughnutGraph(selector, data, withMetric, withStage) {
+function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState) {
     window.withMetric = withMetric;
     window.withStage = withStage;
 
@@ -35,6 +35,13 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
     let rectAssociation;
     let textAssociation;
     let noDataSpan;
+    let requestedYear = preservedState && String(preservedState.year);
+    let requestedParent = preservedState && preservedState.parentTerm;
+
+    if (requestedParent !== undefined && requestedParent !== null) {
+        $('#doughnutGraph').find(".filter select[name='parentTerms']").val(requestedParent);
+    }
+    selected = $('#doughnutGraph').find(".filter select[name='parentTerms']").find('option:selected');
 
     let associationDoughnut = d3.select("#doughnutGraph svg")
         .append('g')
@@ -145,7 +152,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
 
 	bindImageDownload('#doughnut-graph-controls', selector, svg_id);
 
-    associationSwitch.addEventListener('change', function() {
+    associationSwitch.onchange = function() {
         let associationLabel = document.getElementById('associationLabel');
         let arrowAsso = document.getElementById('associationArrow');
         let associationTitle = document.querySelector('.doughnut-graph-filter-association-title');
@@ -306,7 +313,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
                 });
             }
         }
-    });
+    };
 
     function drawDgOnYearChange() {
         if (selected && selected[0].label) {
@@ -484,18 +491,17 @@ function drawDoughnutGraph(selector, data, withMetric, withStage) {
     function specificDataGraph(type) {
         specificData = data[type];
         dataKeys = Object.keys(specificData);
-        currentYear = dataKeys[dataKeys.length-1];
+        currentYear = requestedYear && dataKeys.indexOf(requestedYear) !== -1 ?
+            requestedYear :
+            dataKeys[dataKeys.length-1];
 
-        if (!selected) {
-            let options = document.querySelectorAll(".filter select[name='parentTerms'] option");
-            if (options && options.length > 0) {
-                for (let i = 0, l = options.length; i < l; i++) {
-                    options[i].selected = options[i].defaultSelected;
-                }
-            }
+        var parentTerm = selected && selected.length ? selected[0].label : 'All parent terms';
+        if (parentTerm === 'All parent terms') parentTerm = 'All';
+
+        drawDoughnutPerYearPerAncestry(specificData, currentYear, parentTerm);
+        if (associationSwitch.checked) {
+            drawDoughnutAssociation(data['doughnut_associations'], currentYear, parentTerm);
         }
-
-        drawDoughnutPerYearPerAncestry(specificData, currentYear, 'All');
     }
 
     /**
