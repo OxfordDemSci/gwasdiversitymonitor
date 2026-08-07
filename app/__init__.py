@@ -1,7 +1,6 @@
 import os
 
 from flask import Flask, url_for
-from sassutils.wsgi import SassMiddleware
 
 app = Flask(__name__)
 app.config.from_object('config')
@@ -19,7 +18,3 @@ def versioned_static(filename):
     return url_for('static', filename=filename, v=version)
 
 from app import routes
-
-app.wsgi_app = SassMiddleware(app.wsgi_app, {
-    'app': ('static/sass', 'static/css', '/static/css', False)  # last arg = strip_extension
-})

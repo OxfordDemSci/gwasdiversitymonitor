@@ -15,6 +15,8 @@ import sys
 import warnings
 import zipfile
 import math
+import re
+import tempfile
 from app.DataLoader import DataLoader
 
 warnings.filterwarnings("ignore")
@@ -205,23 +207,188 @@ def json_converter(data_path):
             # continue to next one
 
 def setup_logging(logpath):
-    """ Set up the logging """
-    if os.path.exists(logpath) is False:
-        os.makedirs(logpath)
+    """Configure the generator's logger to write only to its log file."""
+    os.makedirs(logpath, exist_ok=True)
     logger = logging.getLogger('diversity_logger')
     logger.setLevel(logging.DEBUG)
-    fh = logging.FileHandler((os.path.abspath(
-        os.path.join(logpath, 'diversity_logger.log'))))
-    fh.setLevel(logging.DEBUG)
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.ERROR)
+    logger.propagate = False
+
+    # setup_logging can be called more than once by maintenance commands. Keep
+    # exactly one handler so records are neither duplicated nor sent to a stream.
+    for handler in logger.handlers[:]:
+        logger.removeHandler(handler)
+        handler.close()
+
+    file_handler = logging.FileHandler(os.path.abspath(
+        os.path.join(logpath, 'diversity_logger.log')
+    ))
+    file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    fh.setFormatter(formatter)
-    ch.setFormatter(formatter)
-    logger.addHandler(fh)
-    logger.addHandler(ch)
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
     return logger
+
+
+def summarize_catalog_pvalues(catalog_path, logger, chunksize=100_000,
+                              example_limit=10):
+    """Summarize only finite GWAS Catalog p-values in inclusive [0, 1].
+
+    The downloaded catalog remains untouched so upstream problems can still be
+    inspected. Invalid rows are excluded from all generated p-value summary
+    statistics and, when present, are recorded with bounded identifying
+    context in the generate-data log.
+    """
+    header = pd.read_csv(catalog_path, sep='\t', nrows=0)
+    if 'P-VALUE' not in header.columns:
+        raise KeyError(f'{catalog_path}: missing required column P-VALUE')
+
+    context_candidates = [
+        'PUBMEDID',
+        'FIRST AUTHOR',
+        'STUDY ACCESSION',
+        'DISEASE/TRAIT',
+        'MAPPED_TRAIT',
+        'SNPS',
+        'P-VALUE (TEXT)'
+    ]
+    context_columns = [
+        column for column in context_candidates if column in header.columns
+    ]
+    usecols = list(dict.fromkeys(context_columns + ['P-VALUE']))
+
+    total_count = 0
+    valid_count = 0
+    valid_sum = 0.0
+    threshold_count = 0
+    rejected_counts = {
+        'missing/blank': 0,
+        'unparseable': 0,
+        'non-finite': 0,
+        'below 0': 0,
+        'above 1': 0
+    }
+    rejected_examples = []
+    examples_collected = 0
+
+    reader = pd.read_csv(
+        catalog_path,
+        sep='\t',
+        usecols=usecols,
+        dtype=str,
+        keep_default_na=False,
+        quotechar='"',
+        on_bad_lines='skip',
+        chunksize=chunksize,
+        low_memory=False
+    )
+
+    for chunk in reader:
+        raw_pvalues = chunk['P-VALUE'].str.strip()
+        numeric_pvalues = pd.to_numeric(raw_pvalues, errors='coerce')
+        finite = pd.Series(
+            np.isfinite(numeric_pvalues.to_numpy()),
+            index=numeric_pvalues.index
+        )
+
+        missing = raw_pvalues.eq('')
+        unparseable = ~missing & numeric_pvalues.isna()
+        non_finite = numeric_pvalues.notna() & ~finite
+        below_zero = finite & numeric_pvalues.lt(0)
+        above_one = finite & numeric_pvalues.gt(1)
+        valid = finite & numeric_pvalues.between(0, 1, inclusive='both')
+
+        reason_masks = {
+            'missing/blank': missing,
+            'unparseable': unparseable,
+            'non-finite': non_finite,
+            'below 0': below_zero,
+            'above 1': above_one
+        }
+        for reason, mask in reason_masks.items():
+            rejected_counts[reason] += int(mask.sum())
+
+        total_count += len(chunk)
+        valid_values = numeric_pvalues.loc[valid]
+        valid_count += len(valid_values)
+        valid_sum += float(valid_values.sum())
+        threshold_count += int((valid_values < 5.0e-8).sum())
+
+        rejected = ~valid
+        remaining_examples = example_limit - examples_collected
+        if rejected.any() and remaining_examples > 0:
+            example_index = chunk.index[rejected][:remaining_examples]
+            example_columns = [
+                column for column in context_columns
+                if column != 'P-VALUE (TEXT)'
+            ] + ['P-VALUE']
+            if 'P-VALUE (TEXT)' in context_columns:
+                example_columns.append('P-VALUE (TEXT)')
+
+            examples = chunk.loc[example_index, example_columns].copy()
+            examples.insert(0, 'SOURCE ROW', example_index + 2)
+            reasons = pd.Series('', index=chunk.index, dtype=object)
+            for reason, mask in reason_masks.items():
+                reasons.loc[mask] = reason
+            examples['REASON'] = reasons.loc[example_index]
+
+            def clean_log_value(value):
+                cleaned = re.sub(r'\s+', ' ', str(value)).strip()
+                if not cleaned:
+                    return '<missing>'
+                if len(cleaned) > 160:
+                    return cleaned[:157] + '...'
+                return cleaned
+
+            text_columns = examples.columns.drop('SOURCE ROW')
+            examples[text_columns] = examples[text_columns].map(
+                clean_log_value
+            )
+            rejected_examples.append(examples)
+            examples_collected += len(examples)
+
+    if valid_count == 0:
+        raise ValueError(
+            f'{catalog_path}: no finite P-VALUE values in inclusive [0, 1]'
+        )
+
+    rejected_count = total_count - valid_count
+    if rejected_count:
+        examples = pd.concat(rejected_examples, ignore_index=True)
+        examples_text = examples.to_csv(
+            sep='\t', index=False, lineterminator='\n'
+        ).rstrip()
+        omitted_count = rejected_count - len(examples)
+        omitted_text = (
+            f'; {omitted_count} additional row(s) omitted from this log'
+            if omitted_count else ''
+        )
+        logger.info(
+            'Errant upstream p-values detected: rejected %d of %d GWAS '
+            'Catalog association rows; retained %d rows with finite P-VALUE '
+            'in inclusive [0, 1].\n'
+            'Rejected rows by reason: missing/blank=%d; unparseable=%d; '
+            'non-finite=%d; below 0=%d; above 1=%d.\n'
+            'Rejected upstream rows (%d shown%s):\n%s',
+            rejected_count,
+            total_count,
+            valid_count,
+            rejected_counts['missing/blank'],
+            rejected_counts['unparseable'],
+            rejected_counts['non-finite'],
+            rejected_counts['below 0'],
+            rejected_counts['above 1'],
+            len(examples),
+            omitted_text,
+            examples_text
+        )
+
+    return {
+        'average': valid_sum / valid_count,
+        'threshold_count': threshold_count,
+        'valid_count': valid_count,
+        'rejected_count': rejected_count
+    }
 
 
 def create_summarystats(data_path):
@@ -294,15 +461,9 @@ def create_summarystats(data_path):
         # cast types
         Cat_Stud['ASSOCIATION COUNT'] = pd.to_numeric(Cat_Stud['ASSOCIATION COUNT'], errors='coerce')
 
-        # --- Cat_Full (unchanged) ---
-        Cat_Full = pd.read_csv(
+        pvalue_summary = summarize_catalog_pvalues(
             os.path.join(data_path, 'catalog', 'raw', 'Cat_Full.tsv'),
-            sep='\t',
-            engine='python',
-            usecols=['P-VALUE'],
-            quotechar='"',
-            on_bad_lines="skip",
-            dtype={'P-VALUE': object}
+            diversity_logger
         )
 
         # --- Ancesty w/ Broader (unchanged) ---
@@ -368,8 +529,12 @@ def create_summarystats(data_path):
         )
         sumstats['noneuro_trait'] = str(noneuro_trait)
 
-        sumstats['average_pval'] = float(round(pd.to_numeric(Cat_Full['P-VALUE'], errors='coerce').mean(skipna=True), 10))
-        sumstats['threshold_pvals'] = int((pd.to_numeric(Cat_Full['P-VALUE'], errors='coerce') < 5.0e-8).sum())
+        sumstats['average_pval'] = float(round(
+            pvalue_summary['average'], 10
+        ))
+        sumstats['threshold_pvals'] = int(
+            pvalue_summary['threshold_count']
+        )
 
         # Big-N study info
         Cat_Anc_byN = Cat_Anc_wBroader[['STUDY ACCESSION', 'N']].copy()
@@ -576,15 +741,33 @@ def make_heatmap_dfs(data_path):
                                    'synthetic',
                                    'Cat_Anc_wBroader_withParents.tsv'),
                       sep='\t')
-        if len(merged[merged['parentterm'].isnull()]) > 0:
-            diversity_logger.debug('Wuhoh! There are some empty disease terms!')
-            pd.Series(merged[merged['parentterm'].
-                             isnull()]['DISEASE/TRAIT'].unique()).\
-                to_csv(os.path.join(data_path, 'unmapped',
-                                    'unmapped_diseases.txt'),
-                       index=False)
+        # A missing parent term is an upstream crosswalk miss; it does not
+        # imply that the study's disease/trait label itself is empty.
+        unmapped_mask = merged['parentterm'].isna()
+        if unmapped_mask.any():
+            unmapped_diseases = pd.Series(
+                merged.loc[unmapped_mask, 'DISEASE/TRAIT'].unique()
+            )
+            unmapped_path = os.path.join(
+                data_path, 'unmapped', 'unmapped_diseases.txt'
+            )
+            unmapped_diseases.to_csv(unmapped_path, index=False)
+            diversity_logger.info(
+                'GWAS Catalog parent-term mappings are unavailable for %d '
+                'unique disease/trait labels across %d studies; affected '
+                'labels were written to %s and are excluded from parent-term '
+                'visualisations.',
+                int(unmapped_diseases.notna().sum()),
+                int(merged.loc[
+                    unmapped_mask, 'STUDY ACCESSION'
+                ].nunique()),
+                unmapped_path
+            )
         else:
-            diversity_logger.info('No missing disease terms! Nice!')
+            diversity_logger.info(
+                'All GWAS Catalog disease/trait labels have parent-term '
+                'mappings.'
+            )
         merged = merged[merged["parentterm"].notnull()]
         merged = merged[merged["parentterm"]!='NR']
         merged["parentterm"] = merged["parentterm"].astype(str)
@@ -646,9 +829,16 @@ def make_choro_df(data_path):
             out = os.path.join(data_path, 'toplot', 'choro_df.csv')
             annual_df.to_csv(out, index=False)
 
-            # Sanity logs so you can see it in your logfile immediately
-            yrs = sorted(annual_df['Year'].unique())
-            diversity_logger.debug(f"choro_df years present: {yrs[:5]} … {yrs[-5:]}")
+            actual_years = {
+                int(year) for year in annual_df['Year'].dropna().unique()
+            }
+            expected_years = set(range(2008, final_year + 1))
+            missing_years = sorted(expected_years - actual_years)
+            if missing_years:
+                diversity_logger.warning(
+                    'Choropleth data are missing expected years: %s',
+                    missing_years
+                )
             diversity_logger.info('Build of the choropleth dataset: Complete')
         else:
             diversity_logger.warning('No choropleth data generated (no yearly data found)')
@@ -717,7 +907,7 @@ def make_timeseries_df(Cat_Ancestry, data_path, savename):
 
 
 def make_doughnut_df_old(data_path):
-    """ Make the doughnut chart dataframe for use in main.py"""
+    """Make the production-compatible doughnut dataframe for the app."""
     try:
         Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
@@ -750,97 +940,117 @@ def make_doughnut_df_old(data_path):
                           how='left', on='STUDY ACCESSION')
         merged["DATE"] = merged["DATE"].astype(str)
         cols = ['Broader', 'parentterm', 'Year', 'InitialN', 'InitialCount',
-               'ReplicationN', 'ReplicationCount', 'InitialAssociationSum']
+                'ReplicationN', 'ReplicationCount', 'InitialAssociationSum']
         doughnut_df = pd.DataFrame(index=[], columns=cols)
         merged = merged[merged['Broader'].notnull()]
         merged = merged[merged['parentterm'].notnull()]
+
+        # Preserve the legacy row order and calculations, but stop rebuilding the
+        # same full-dataframe masks for every metric in every output row.  Slicing
+        # hierarchically also preserves source-row order, so Series.sum() produces
+        # the same floating-point values as the original implementation.
+        ancestries = merged['Broader'].unique().tolist()
+        parents = merged['parentterm'].unique().tolist()
         counter = 0
         for year in range(2008, final_year+1):
-            for ancestry in merged['Broader'].unique().tolist():
+            year_df = merged[merged['DATE'].str.contains(str(year))]
+            initial_df = year_df[year_df['STAGE'] == 'initial']
+            replication_df = year_df[year_df['STAGE'] == 'replication']
+
+            initial_n_total = initial_df['N'].sum()
+            replication_n_total = replication_df['N'].sum()
+            initial_association_total = initial_df['ASSOCIATION COUNT'].sum()
+            initial_count_total = len(initial_df)
+            replication_count_total = len(replication_df)
+
+            parent_slices = {}
+            for parent in parents:
+                parent_initial = initial_df[initial_df['parentterm'] == parent]
+                parent_replication = replication_df[
+                    replication_df['parentterm'] == parent
+                ]
+                parent_slices[parent] = (
+                    parent_initial,
+                    parent_replication,
+                    parent_initial['N'].sum(),
+                    parent_replication['N'].sum(),
+                    parent_initial['ASSOCIATION COUNT'].sum(),
+                    len(parent_initial),
+                    len(parent_replication),
+                )
+
+            for ancestry in ancestries:
+                ancestry_initial = initial_df[
+                    initial_df['Broader'] == ancestry
+                ]
+                ancestry_replication = replication_df[
+                    replication_df['Broader'] == ancestry
+                ]
+
                 doughnut_df.at[counter, 'Broader'] = ancestry
                 doughnut_df.at[counter, 'parentterm'] = 'All'
                 doughnut_df.at[counter, 'Year'] = year
-                rep_anc = merged[(merged['STAGE'] == 'replication') &
-                                 (merged['Broader'] == ancestry) &
-                                 (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                rep_tot = merged[(merged['STAGE'] == 'replication') &
-                                 (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                init_anc =merged[(merged['STAGE'] == 'initial') &
-                                 (merged['Broader'] == ancestry) &
-                                 (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                init_tot = merged[(merged['STAGE'] == 'initial') &
-                                  (merged['DATE'].str.contains(str(year)))]['N'].sum()
-                doughnut_df.at[counter, 'ReplicationN'] = (rep_anc/rep_tot)*100
-                doughnut_df.at[counter, 'InitialN'] =  (init_anc/init_tot)*100
-                init_ass_anc = merged[(merged['STAGE'] == 'initial') &
-                                      (merged['Broader'] == ancestry) &
-                                      (merged['DATE'].str.contains(str(year)))]
-                init_ass_anc = init_ass_anc['ASSOCIATION COUNT'].sum()
-                init_ass_tot = merged[(merged['STAGE'] =='initial') &
-                                      (merged['DATE'].str.contains(str(year)))]
-                init_ass_tot = init_ass_tot['ASSOCIATION COUNT'].sum()
-                doughnut_df.at[counter, 'InitialAssociationSum'] = (init_ass_anc/init_ass_tot)*100
-                init_anc = len(merged[(merged['STAGE'] == 'initial') &
-                                      (merged['DATE'].str.contains(str(year))) &
-                                      (merged['Broader'] == ancestry)])
-                init_tot = len(merged[(merged['STAGE'] == 'initial') &
-                                      (merged['DATE'].str.contains(str(year)))])
-                rep_anc = len(merged[(merged['STAGE'] =='replication') &
-                                     (merged['DATE'].str.contains(str(year))) &
-                                     (merged['Broader'] == ancestry)])
-                rep_tot = len(merged[(merged['STAGE'] == 'replication') &
-                                     (merged['DATE'].str.contains(str(year)))])
-                doughnut_df.at[counter, 'InitialCount'] = (init_anc/init_tot)*100
-                doughnut_df.at[counter, 'ReplicationCount'] = (rep_anc/rep_tot)*100
+                doughnut_df.at[counter, 'ReplicationN'] = (
+                    ancestry_replication['N'].sum() / replication_n_total
+                ) * 100
+                doughnut_df.at[counter, 'InitialN'] = (
+                    ancestry_initial['N'].sum() / initial_n_total
+                ) * 100
+                doughnut_df.at[counter, 'InitialAssociationSum'] = (
+                    ancestry_initial['ASSOCIATION COUNT'].sum() /
+                    initial_association_total
+                ) * 100
+                doughnut_df.at[counter, 'InitialCount'] = (
+                    len(ancestry_initial) / initial_count_total
+                ) * 100
+                doughnut_df.at[counter, 'ReplicationCount'] = (
+                    len(ancestry_replication) / replication_count_total
+                ) * 100
                 counter = counter + 1
-                for parent in merged['parentterm'].unique().tolist():
+
+                for parent in parents:
                     try:
                         doughnut_df.at[counter, 'Broader'] = ancestry
                         doughnut_df.at[counter, 'parentterm'] = parent
                         doughnut_df.at[counter, 'Year'] = year
-                        rep_anc = merged[(merged['STAGE'] == 'replication') &
-                                         (merged['parentterm'] == parent) &
-                                         (merged['DATE'].str.contains(str(year))) &
-                                         (merged['Broader'] == ancestry)]['N'].sum()
-                        rep_tot = merged[(merged['STAGE'] == 'replication') &
-                                         (merged['DATE'].str.contains(str(year))) &
-                                         (merged['parentterm'] == parent)]['N'].sum()
-                        init_anc = merged[(merged['STAGE'] == 'initial') &
-                                          (merged['Broader'] == ancestry) &
-                                          (merged['DATE'].str.contains(str(year))) &
-                                          (merged['parentterm'] == parent)]['N'].sum()
-                        init_tot = merged[(merged['STAGE'] == 'initial') &
-                                          (merged['DATE'].str.contains(str(year))) &
-                                          (merged['parentterm'] == parent)]['N'].sum()
-                        doughnut_df.at[counter, 'ReplicationN'] = (rep_anc/rep_tot)*100
-                        doughnut_df.at[counter, 'InitialN'] = (init_anc/init_tot)*100
-                        init_ass_anc = merged[(merged['STAGE'] == 'initial') &
-                                              (merged['Broader'] == ancestry) &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['parentterm'] == parent)]
-                        init_ass_anc = init_ass_anc['ASSOCIATION COUNT'].sum()
-                        init_ass_tot = merged[(merged['STAGE'] == 'initial') &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['parentterm'] == parent)]
-                        init_ass_tot = init_ass_tot['ASSOCIATION COUNT'].sum()
-                        doughnut_df.at[counter, 'InitialAssociationSum'] = (init_ass_anc/init_ass_tot)*100
-                        rep_anc = len(merged[(merged['STAGE'] == 'replication') &
-                                             (merged['parentterm'] == parent) &
-                                             (merged['DATE'].str.contains(str(year))) &
-                                             (merged['Broader'] == ancestry)])
-                        rep_tot = len(merged[(merged['STAGE'] == 'replication') &
-                                             (merged['DATE'].str.contains(str(year))) &
-                                             (merged['parentterm'] == parent)])
-                        init_anc = len(merged[(merged['STAGE'] == 'initial') &
-                                              (merged['parentterm'] == parent) &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['Broader'] == ancestry)])
-                        init_tot = len(merged[(merged['STAGE'] == 'initial') &
-                                              (merged['DATE'].str.contains(str(year))) &
-                                              (merged['parentterm'] == parent)])
-                        doughnut_df.at[counter, 'ReplicationCount'] = (rep_anc/rep_tot)*100
-                        doughnut_df.at[counter,'InitialCount'] = (init_anc/init_tot)*100
+
+                        (parent_initial,
+                         parent_replication,
+                         parent_initial_n_total,
+                         parent_replication_n_total,
+                         parent_initial_association_total,
+                         parent_initial_count_total,
+                         parent_replication_count_total) = parent_slices[parent]
+                        ancestry_parent_initial = parent_initial[
+                            parent_initial['Broader'] == ancestry
+                        ]
+                        ancestry_parent_replication = parent_replication[
+                            parent_replication['Broader'] == ancestry
+                        ]
+
+                        doughnut_df.at[counter, 'ReplicationN'] = (
+                            ancestry_parent_replication['N'].sum() /
+                            parent_replication_n_total
+                        ) * 100
+                        doughnut_df.at[counter, 'InitialN'] = (
+                            ancestry_parent_initial['N'].sum() /
+                            parent_initial_n_total
+                        ) * 100
+                        doughnut_df.at[counter, 'InitialAssociationSum'] = (
+                            ancestry_parent_initial['ASSOCIATION COUNT'].sum() /
+                            parent_initial_association_total
+                        ) * 100
+                        doughnut_df.at[counter, 'ReplicationCount'] = (
+                            len(ancestry_parent_replication) /
+                            parent_replication_count_total
+                        ) * 100
+                        doughnut_df.at[counter, 'InitialCount'] = (
+                            len(ancestry_parent_initial) /
+                            parent_initial_count_total
+                        ) * 100
                     except ZeroDivisionError:
+                        # Retain the legacy blank-cell behaviour relied upon by
+                        # DataLoader and the doughnut graph's no-data handling.
                         doughnut_df.at[counter, 'InitialN'] = np.nan
                     counter = counter + 1
         doughnut_df['Broader'] = doughnut_df['Broader'].str.\
@@ -1107,6 +1317,345 @@ def make_bubbleplot_df(data_path):
         diversity_logger.debug(f'Build of the bubble datasets: Failed -- {e}')
 
 
+def update_static_bundle(bundle_path, source_path, archive_name, logger):
+    """Atomically replace one file in a ZIP, without duplicate members."""
+    if not os.path.isfile(bundle_path):
+        logger.warning('Static data bundle not found: %s', bundle_path)
+        return False
+
+    with open(source_path, 'rb') as source_file:
+        replacement = source_file.read()
+
+    with zipfile.ZipFile(bundle_path, 'r') as bundle:
+        matching = [item for item in bundle.infolist()
+                    if item.filename == archive_name]
+        if len(matching) == 1 and bundle.read(matching[0]) == replacement:
+            return False
+
+    bundle_directory = os.path.dirname(os.path.abspath(bundle_path))
+    descriptor, temporary_path = tempfile.mkstemp(
+        prefix='.data_static.', suffix='.zip', dir=bundle_directory
+    )
+    os.close(descriptor)
+
+    try:
+        with zipfile.ZipFile(bundle_path, 'r') as old_bundle, \
+                zipfile.ZipFile(temporary_path, 'w') as new_bundle:
+            new_bundle.comment = old_bundle.comment
+            replaced = False
+            for item in old_bundle.infolist():
+                if item.filename == archive_name:
+                    if not replaced:
+                        new_bundle.write(source_path, archive_name,
+                                         compress_type=item.compress_type)
+                        replaced = True
+                    continue
+
+                if item.is_dir():
+                    new_bundle.writestr(item, b'')
+                else:
+                    with old_bundle.open(item, 'r') as old_member, \
+                            new_bundle.open(item, 'w') as new_member:
+                        shutil.copyfileobj(old_member, new_member)
+
+            if not replaced:
+                new_bundle.write(source_path, archive_name,
+                                 compress_type=zipfile.ZIP_DEFLATED)
+
+        shutil.copymode(bundle_path, temporary_path)
+        os.replace(temporary_path, bundle_path)
+    except Exception:
+        if os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+        raise
+
+    logger.info('Updated %s in %s', archive_name, bundle_path)
+    return True
+
+
+def reconcile_broader_ancestry(Cat_Anc, dictionary_path, unmapped_path,
+                               logger, static_bundle_path=None):
+    """Apply and extend the existing broad-ancestry dictionary.
+
+    Existing unambiguous dictionary rows remain authoritative. Previously
+    unseen combinations are classified from their component terms, and only
+    Broader values already present in the dictionary can be emitted. Successful
+    inferences are persisted as exact mappings for auditability and reuse.
+    """
+    cleaner_broad = pd.read_csv(dictionary_path, sep='\t', header=0,
+                                index_col=False, dtype=str)
+    required = {'BROAD ANCESTRAL', 'Broader'}
+    missing = required - set(cleaner_broad.columns)
+    if missing:
+        raise KeyError(
+            f'{dictionary_path}: missing required columns: {sorted(missing)}'
+        )
+
+    aliases = {
+        'hispanic/latin american': 'Hispanic or Latin American',
+        'otheradmixed ancestry': 'Other admixed ancestry',
+        'unspecified': 'NR'
+    }
+
+    def normalize_term(term):
+        cleaned = re.sub(r'\s+', ' ', str(term).replace('\u00a0', ' ')).strip()
+        return aliases.get(cleaned.casefold(), cleaned)
+
+    def split_terms(value):
+        """Split top-level commas, preserving commas inside parentheses."""
+        if pd.isna(value) or not str(value).strip():
+            return ()
+        text = str(value).strip()
+        terms, start, depth = [], 0, 0
+        for index, character in enumerate(text):
+            if character == '(':
+                depth += 1
+            elif character == ')':
+                depth = max(0, depth - 1)
+            elif character == ',' and depth == 0:
+                term = normalize_term(text[start:index])
+                if term:
+                    terms.append(term)
+                start = index + 1
+        final_term = normalize_term(text[start:])
+        if final_term:
+            terms.append(final_term)
+        return tuple(terms)
+
+    def ordered_key(value):
+        return tuple(term.casefold() for term in split_terms(value))
+
+    def collect_dictionary_state(dictionary):
+        exact = {}
+        signatures = {}
+        components = {}
+        allowed = set()
+        for broad_ancestral, broader in dictionary[
+                ['BROAD ANCESTRAL', 'Broader']].itertuples(
+                    index=False, name=None):
+            if pd.isna(broad_ancestral) or pd.isna(broader):
+                continue
+            key = ordered_key(broad_ancestral)
+            broader = str(broader).strip()
+            if not key or not broader:
+                continue
+            signature = tuple(sorted(set(key)))
+            allowed.add(broader)
+            exact.setdefault(key, set()).add(broader)
+            signatures.setdefault(signature, set()).add(broader)
+            if len(signature) == 1:
+                components.setdefault(signature[0], set()).add(broader)
+        return exact, signatures, components, allowed
+
+    exact_candidates, signature_candidates, component_candidates, \
+        allowed_broader = collect_dictionary_state(cleaner_broad)
+    component_mappings = {
+        key: next(iter(values)) for key, values in component_candidates.items()
+        if len(values) == 1
+    }
+
+    def classification_result(broader, method, unknown_terms=()):
+        if broader not in allowed_broader:
+            return None, 'unresolved-output-not-configured', ()
+        return broader, method, unknown_terms
+
+    def classify_components(key, source_terms):
+        unknown_terms = tuple(dict.fromkeys(
+            term for term, component in zip(source_terms, key)
+            if component not in component_mappings
+        ))
+        if unknown_terms:
+            return None, 'unresolved-unknown-component', unknown_terms
+
+        not_recorded = 'In Part Not Recorded'
+        recorded_groups = {
+            component_mappings[component] for component in key
+        }
+        has_not_recorded = not_recorded in recorded_groups
+        recorded_groups.discard(not_recorded)
+
+        african_groups = {
+            'African', 'African American or Afro-Caribbean'
+        }
+        if ('African' in recorded_groups
+                and recorded_groups <= african_groups):
+            recorded_groups = {'African'}
+
+        if not recorded_groups:
+            return classification_result(not_recorded, 'rule-not-recorded')
+        if has_not_recorded and len(recorded_groups) == 1:
+            return classification_result(not_recorded,
+                                         'rule-partly-not-recorded')
+        if len(recorded_groups) == 1 and not has_not_recorded:
+            return classification_result(next(iter(recorded_groups)),
+                                         'rule-homogeneous')
+        return classification_result('Other/Mixed', 'rule-mixed')
+
+    dictionary_changed = False
+    conflict_repairs = {}
+    conflict_labels = {}
+    unresolved_conflicts = []
+    for key, values in exact_candidates.items():
+        if len(values) <= 1:
+            continue
+        result = classify_components(key, key)
+        if result[0] is None:
+            unresolved_conflicts.append(', '.join(key))
+        else:
+            conflict_repairs[key] = result[0]
+
+    if conflict_repairs:
+        repaired_rows = []
+        repaired_keys = set()
+        for _, row in cleaner_broad.iterrows():
+            key = ordered_key(row['BROAD ANCESTRAL'])
+            if key not in conflict_repairs:
+                repaired_rows.append(row)
+                continue
+            if key in repaired_keys:
+                continue
+            repaired_row = row.copy()
+            repaired_row['Broader'] = conflict_repairs[key]
+            repaired_rows.append(repaired_row)
+            repaired_keys.add(key)
+            conflict_labels[key] = str(row['BROAD ANCESTRAL']).strip()
+
+        cleaner_broad = pd.DataFrame(
+            repaired_rows, columns=cleaner_broad.columns
+        ).reset_index(drop=True)
+        dictionary_changed = True
+        logger.info(
+            'Permanently repaired %d conflicting ancestry dictionary '
+            'entries:\n%s',
+            len(conflict_repairs),
+            '\n'.join(
+                f'{conflict_labels[key]} -> {broader}'
+                for key, broader in conflict_repairs.items()
+            )
+        )
+
+        exact_candidates, signature_candidates, component_candidates, \
+            allowed_broader = collect_dictionary_state(cleaner_broad)
+        component_mappings = {
+            key: next(iter(values))
+            for key, values in component_candidates.items()
+            if len(values) == 1
+        }
+
+    if unresolved_conflicts:
+        logger.warning(
+            'Could not safely repair conflicting ancestry dictionary '
+            'entries: %s', '; '.join(sorted(unresolved_conflicts))
+        )
+
+    exact_mappings = {
+        key: next(iter(values)) for key, values in exact_candidates.items()
+        if len(values) == 1
+    }
+    signature_mappings = {
+        key: next(iter(values)) for key, values in signature_candidates.items()
+        if len(values) == 1
+    }
+    dictionary_keys = set(exact_candidates)
+
+    def classify(value):
+        key = ordered_key(value)
+        if not key:
+            return None, 'unresolved-empty', ()
+        if key in exact_mappings:
+            return classification_result(exact_mappings[key],
+                                         'dictionary-exact')
+
+        signature = tuple(sorted(set(key)))
+        if signature in signature_mappings:
+            return classification_result(signature_mappings[signature],
+                                         'dictionary-reordered')
+        return classify_components(key, split_terms(value))
+
+    Cat_Anc = Cat_Anc.copy()
+    source_column = 'BROAD ANCESTRAL'
+    Cat_Anc[source_column] = Cat_Anc[source_column].astype(str).str.strip()
+    unique_terms = Cat_Anc[source_column].drop_duplicates().tolist()
+    results = {term: classify(term) for term in unique_terms}
+    Cat_Anc['Broader'] = Cat_Anc[source_column].map(
+        lambda term: results[term][0]
+    )
+
+    inferred = [
+        (term, result[0], result[1])
+        for term, result in results.items()
+        if result[0] is not None and ordered_key(term) not in dictionary_keys
+    ]
+    if inferred:
+        additions = pd.DataFrame(
+            [(term, broader) for term, broader, _ in inferred],
+            columns=['BROAD ANCESTRAL', 'Broader']
+        ).sort_values('BROAD ANCESTRAL')
+        cleaner_broad = pd.concat(
+            [cleaner_broad, additions], ignore_index=True
+        ).drop_duplicates()
+        dictionary_changed = True
+        logger.info(
+            'Automatically added %d ancestry mappings to %s:\n%s',
+            len(additions), dictionary_path,
+            '\n'.join(
+                f'{term} -> {broader} ({method})'
+                for term, broader, method in sorted(inferred)
+            )
+        )
+
+    if dictionary_changed:
+        cleaner_broad.to_csv(dictionary_path, sep='\t', index=False)
+
+    if static_bundle_path:
+        try:
+            update_static_bundle(
+                static_bundle_path,
+                dictionary_path,
+                'support/dict_replacer_broad.tsv',
+                logger
+            )
+        except (OSError, zipfile.BadZipFile) as error:
+            logger.warning(
+                'Could not persist ancestry mappings to %s: %s',
+                static_bundle_path, error
+            )
+
+    unresolved = [
+        (term, result)
+        for term, result in results.items()
+        if result[0] is None
+    ]
+    unmapped_directory = os.path.dirname(unmapped_path)
+    if unmapped_directory:
+        os.makedirs(unmapped_directory, exist_ok=True)
+    pd.Series(
+        sorted(term for term, _ in unresolved),
+        name=source_column,
+        dtype='object'
+    ).to_csv(unmapped_path, index=False)
+
+    if unresolved:
+        logger.warning(
+            'Need to update dictionary terms; %d ancestry combinations could '
+            'not be classified safely:\n%s',
+            len(unresolved),
+            '\n'.join(
+                f'{term} ({result[1]}'
+                + (
+                    f": {', '.join(result[2])}"
+                    if result[2] else ''
+                )
+                + ')'
+                for term, result in sorted(unresolved)
+            )
+        )
+    else:
+        logger.info('No missing Broader terms! Nice!')
+
+    return Cat_Anc
+
+
 def clean_gwas_cat(data_path):
     """ Clean the catalog and do some general preprocessing """
     try:
@@ -1133,28 +1682,22 @@ def clean_gwas_cat(data_path):
         Cat_Anc_byN = pd.merge(Cat_Anc_byN,
                                Cat_Stud[['STUDY ACCESSION', 'DATE']],
                                how='left', on='STUDY ACCESSION')
-        cleaner_broad = pd.read_csv(os.path.join(data_path, 'support',
-                                                 'dict_replacer_broad.tsv'),
-                                    sep='\t',
-                                    header=0,
-                                    index_col=False)
-        Cat_Anc = pd.merge(Cat_Anc, cleaner_broad, how='left',
-                           on='BROAD ANCESTRAL')
+        dictionary_path = os.path.join(data_path, 'support',
+                                       'dict_replacer_broad.tsv')
+        unmapped_path = os.path.join(data_path, 'unmapped',
+                                     'unmapped_broader.txt')
+        static_bundle_path = os.path.join(
+            os.path.dirname(os.path.abspath(data_path)), 'data_static.zip'
+        )
+        Cat_Anc = reconcile_broader_ancestry(
+            Cat_Anc, dictionary_path, unmapped_path, diversity_logger,
+            static_bundle_path
+        )
         Cat_Anc['Dates'] = [pd.to_datetime(d) for d in Cat_Anc['DATE']]
         Cat_Anc['N'] = pd.to_numeric(Cat_Anc['N'], errors='coerce')
         Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
         Cat_Anc['N'] = Cat_Anc['N'].astype(int)
         Cat_Anc = Cat_Anc.sort_values(by='Dates')
-        if len(Cat_Anc[Cat_Anc['Broader'].isnull()]) > 0:
-            diversity_logger.debug('Need to update dictionary terms:\n' +
-                                   '\n'.join(Cat_Anc[Cat_Anc['Broader'].
-                                                     isnull()]['BROAD ANCESTRAL'].
-                                             unique()))
-            Cat_Anc[Cat_Anc['Broader'].
-                    isnull()]['BROAD ANCESTRAL'].\
-                to_csv(os.path.join(data_path, 'unmapped', 'unmapped_broader.txt'))
-        else:
-            diversity_logger.info('No missing Broader terms! Nice!')
         #Cat_Anc = Cat_Anc[Cat_Anc['Broader'].notnull()]
         #Cat_Anc = Cat_Anc[Cat_Anc['N'].notnull()]
         Cat_Anc.to_csv(os.path.join(data_path, 'catalog', 'synthetic', 'Cat_Anc_wBroader.tsv'),
@@ -1256,31 +1799,91 @@ def _safe_filename(resp, fallback):
 
 
 def download_cat(data_path, ebi_download):
-    """Downloads GWAS Catalog files (robust to missing/odd headers)."""
+    """Download and validate the current GWAS Catalog release files."""
     try:
         raw_dir = os.path.join(data_path, 'catalog', 'raw')
         os.makedirs(raw_dir, exist_ok=True)
 
         http_endpoints = [
-            ('studies/v1.0.3.1', 'Cat_Stud.tsv'),
-            ('ancestry',         'Cat_Anc.tsv'),
-            ('full',             'Cat_Full.tsv'),
+            ('studies/v1.0.3.1', 'Cat_Stud.tsv', {'STUDY ACCESSION'}),
+            ('ancestry', 'Cat_Anc.tsv', {'BROAD ANCESTRAL CATEGORY'}),
+            ('associations/v1.0?split=false', 'Cat_Full.tsv', {'P-VALUE'}),
         ]
 
-        for endpoint, fallback_name in http_endpoints:
+        for endpoint, fallback_name, required_headers in http_endpoints:
             url = ebi_download + endpoint
-            r = requests.get(url, timeout=60)
-            if r.ok:
+            with requests.get(url, timeout=(15, 300), stream=True) as r:
+                r.raise_for_status()
                 server_name = _safe_filename(r, fallback_name)
                 out_path = os.path.join(raw_dir, fallback_name)
-                with open(out_path, 'wb') as fh:
-                    fh.write(r.content)
-                diversity_logger.info(
-                    f"Download of {endpoint}: Complete "
-                    f"(saved as {fallback_name}; server filename: {server_name})"
+                descriptor, download_path = tempfile.mkstemp(
+                    prefix='.gwas_download.', dir=raw_dir
                 )
-            else:
-                diversity_logger.debug(f"Download of {endpoint}: Failed (HTTP {r.status_code})")
+                extracted_path = None
+                archive_member = None
+
+                try:
+                    with os.fdopen(descriptor, 'wb') as download_file:
+                        for chunk in r.iter_content(chunk_size=1024 * 1024):
+                            if chunk:
+                                download_file.write(chunk)
+
+                    candidate_path = download_path
+                    if zipfile.is_zipfile(download_path):
+                        with zipfile.ZipFile(download_path, 'r') as archive:
+                            tsv_members = [
+                                item for item in archive.infolist()
+                                if not item.is_dir()
+                                and item.filename.lower().endswith('.tsv')
+                            ]
+                            if len(tsv_members) != 1:
+                                raise ValueError(
+                                    f'{url}: expected one TSV in archive, '
+                                    f'found {len(tsv_members)}'
+                                )
+                            archive_member = tsv_members[0].filename
+                            extracted_descriptor, extracted_path = \
+                                tempfile.mkstemp(
+                                    prefix='.gwas_extracted.', dir=raw_dir
+                                )
+                            with os.fdopen(extracted_descriptor, 'wb') as \
+                                    extracted_file, \
+                                    archive.open(tsv_members[0], 'r') as \
+                                    archived_file:
+                                shutil.copyfileobj(archived_file,
+                                                   extracted_file)
+                            candidate_path = extracted_path
+
+                    with open(candidate_path, 'rb') as candidate_file:
+                        header = candidate_file.readline().decode(
+                            'utf-8-sig'
+                        ).rstrip('\r\n').split('\t')
+                    missing_headers = required_headers - set(header)
+                    if missing_headers:
+                        raise ValueError(
+                            f'{url}: downloaded file is missing columns '
+                            f'{sorted(missing_headers)}'
+                        )
+
+                    os.replace(candidate_path, out_path)
+                    if candidate_path == extracted_path:
+                        extracted_path = None
+                    else:
+                        download_path = None
+                finally:
+                    for temporary_path in (download_path, extracted_path):
+                        if temporary_path and os.path.exists(temporary_path):
+                            os.unlink(temporary_path)
+
+                archive_detail = (
+                    f'; archive member: {archive_member}'
+                    if archive_member else ''
+                )
+                diversity_logger.info(
+                    f'Download of {endpoint}: Complete '
+                    f'(saved as {fallback_name}; server filename: '
+                    f'{server_name}{archive_detail})'
+                )
 
         # FTP: trait mappings
         requests_ftp.monkeypatch_session()
@@ -1297,8 +1900,9 @@ def download_cat(data_path, ebi_download):
         else:
             diversity_logger.debug(f'Download of efo-trait-mappings: Failed (HTTP {r.status_code})')
 
-    except Exception as e:
-        diversity_logger.debug('Problem downloading Catalog data! ' + str(e))
+    except Exception:
+        diversity_logger.exception('Problem downloading Catalog data!')
+        raise
 
 
 def make_disease_list(df):
@@ -1372,11 +1976,8 @@ def check_data(data_path):
 if __name__ == "__main__":
     logpath = os.path.join(os.getcwd(), 'app', 'logging')
     diversity_logger = setup_logging(logpath)
-    logfile = diversity_logger.handlers[0].baseFilename
-    sys.stderr.write(f'Generating data. See logfile for details: {logfile}\n')
 
     data_path = os.path.join(os.getcwd(), 'data')
-    sys.stderr.write(f'Data path: {data_path}\n')
     diversity_logger.info('Data path: ' + str(data_path))
     if not check_data(data_path):
         zipfile.ZipFile('data_static.zip').extractall(data_path)
@@ -1388,7 +1989,9 @@ if __name__ == "__main__":
         download_cat(data_path, ebi_download)
         clean_gwas_cat(data_path)
         make_bubbleplot_df(data_path)
-        make_doughnut_df(data_path)
+        # This builder retains the index-bearing layout consumed positionally by
+        # DataLoader.  make_doughnut_df() produces a different transient layout
+        # that this production-compatible build would immediately overwrite.
         make_doughnut_df_old(data_path)
         tsinput = pd.read_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                            'Cat_Anc_wBroader.tsv'),  sep='\t')
@@ -1403,7 +2006,8 @@ if __name__ == "__main__":
                          os.path.join(data_path, 'todownload'))
         json_converter(data_path)
         diversity_logger.info('generate_data.py ran successfully!')
-    except Exception as e:
-        diversity_logger.debug(f'generate_data.py failed, uncaught error: {e}')
-        sys.stderr.write(f'generate_data.py failed, see the log for details: {logfile}\n')
+    except Exception:
+        diversity_logger.exception('generate_data.py failed with an uncaught error')
+        logging.shutdown()
+        sys.exit(1)
     logging.shutdown()
