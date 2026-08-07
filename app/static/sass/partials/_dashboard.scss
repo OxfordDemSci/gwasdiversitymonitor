@@ -1,5 +1,6 @@
 .dashboard {
-  margin-top: 20px;
+  max-width: $max-breakpoint;
+  margin: 20px auto 0;
 
   .tile {
     margin-bottom: 20px;
@@ -156,6 +157,7 @@
             }
           }
         }
+
       }
 
       &#timeSeries {
@@ -362,6 +364,13 @@
             position: absolute;
             right: 10px;
             bottom: 10px;
+            @include flexbox;
+            @include align-items(center);
+
+            .world-map-zoom-controls {
+              margin-right: 10px;
+              @include flexbox;
+            }
           }
         }
 
@@ -822,4 +831,3 @@
     bottom: 10px;
   }
 }
-

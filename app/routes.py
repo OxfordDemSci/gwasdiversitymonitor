@@ -2,8 +2,10 @@ from flask import render_template
 from flask import request
 from flask import Response
 from flask import send_file, jsonify
+from flask import abort
 from app import app
 from app import DataLoader
+import os
 
 @app.context_processor
 def inject_template_scope():
@@ -25,22 +27,28 @@ def inject_template_scope():
 @app.route('/')
 @app.route('/index')
 def index():
+    with DataLoader.published_data_lock() as published_path:
+        dataLoader = DataLoader.DataLoader(published_path)
 
-    dataLoader = DataLoader.DataLoader()
+        ancestries = dataLoader.getAncestriesList()
+        ancestriesOrdered = dataLoader.getAncestriesListOrder()
+        parentTerms = dataLoader.getTermsList()
+        traits = dataLoader.getTraitsList()
 
-    ancestries = dataLoader.getAncestriesList()
-    ancestriesOrdered = dataLoader.getAncestriesListOrder()
-    parentTerms = dataLoader.getTermsList()
-    traits = dataLoader.getTraitsList()
-    
-    summary = dataLoader.getSummaryStatistics()
-    bubbleGraph = dataLoader.getBubbleGraph()
-    tsPlot = dataLoader.getTSPlot()
-    chloroMap = dataLoader.getChloroMap()
-    heatMap = dataLoader.getHeatMap()
-    doughnutGraph = dataLoader.getDoughnutGraph(ancestriesOrdered)
+        summary = dataLoader.getSummaryStatistics()
+        bubbleGraph = dataLoader.getBubbleGraph()
+        tsPlot = dataLoader.getTSPlot()
+        chloroMap = dataLoader.getChloroMap()
+        heatMap = dataLoader.getHeatMap()
+        doughnutGraph = dataLoader.getDoughnutGraph(ancestriesOrdered)
 
-    return render_template('index.html', title='Home', switches='true', ancestries=ancestries, ancestriesOrdered=ancestriesOrdered, parentTerms=parentTerms, traits=traits, summary=summary, bubbleGraph=bubbleGraph, tsPlot=tsPlot, chloroMap=chloroMap, heatMap=heatMap, doughnutGraph=doughnutGraph)
+        return render_template(
+            'index.html', title='Home', switches='true',
+            ancestries=ancestries, ancestriesOrdered=ancestriesOrdered,
+            parentTerms=parentTerms, traits=traits, summary=summary,
+            bubbleGraph=bubbleGraph, tsPlot=tsPlot, chloroMap=chloroMap,
+            heatMap=heatMap, doughnutGraph=doughnutGraph
+        )
 
 @app.route('/privacy-policy')
 def privacy():
@@ -52,34 +60,56 @@ def qandas():
 
 @app.route('/additional-information')
 def additional():
-    dataLoader = DataLoader.DataLoader()
-    summary = dataLoader.getSummaryStatistics()
-    return render_template('pages/additional-information.html', summary=summary, title='Additional Information')
+    with DataLoader.published_data_lock() as published_path:
+        dataLoader = DataLoader.DataLoader(published_path)
+        summary = dataLoader.getSummaryStatistics()
+        return render_template(
+            'pages/additional-information.html', summary=summary,
+            title='Additional Information'
+        )
 
 @app.route("/getCSV/<filename>")
 def getCSV(filename):
 
-    if filename == "heatmap" or filename == "timeseries" or filename == "gwasdiversitymonitor_download":
-        return send_file('data/todownload/'+filename+'.zip')
+    zip_downloads = {"heatmap", "timeseries", "gwasdiversitymonitor_download"}
+    csv_downloads = {"bubble_df", "choro_df", "doughnut_df"}
+    with DataLoader.published_data_lock() as published_path:
+        if filename in zip_downloads:
+            path = os.path.join(
+                published_path, 'todownload', filename + '.zip'
+            )
+            if not os.path.exists(path):
+                abort(404)
+            return send_file(
+                path, as_attachment=True, download_name=filename + '.zip'
+            )
 
-    with open('data/toplot/'+filename+'.csv') as fp:
-        csv = fp.read()
+        if filename not in csv_downloads:
+            abort(404)
 
-    return Response(
-        csv,
-        mimetype="text/csv",
-        headers={"Content-disposition":
-                 "attachment; filename="+filename+".csv"})
+        path = os.path.join(published_path, 'toplot', filename + '.csv')
+        if not os.path.exists(path):
+            abort(404)
+
+        with open(path) as fp:
+            csv = fp.read()
+
+        return Response(
+            csv,
+            mimetype="text/csv",
+            headers={"Content-disposition":
+                     "attachment; filename="+filename+".csv"})
 
 
 @app.route("/json/<filename>")
 def getplotjson(filename):
-    with open(f'data/toplot/{filename}') as fp:
-        json = fp.read()
+    with DataLoader.published_data_lock() as published_path:
+        with open(os.path.join(published_path, 'toplot', filename)) as fp:
+            json = fp.read()
 
-        return Response(
-            json,
-            mimetype="application/json")
+            return Response(
+                json,
+                mimetype="application/json")
 
 
 @app.route("/api/traits", methods=['GET'])
@@ -87,5 +117,11 @@ def getFilterTraits():
     search = request.args.get("search")
     if search is None:
         search = ''
-    dataLoader = DataLoader.DataLoader()
-    return jsonify(results=dataLoader.filterTraits(search))
+    with DataLoader.published_data_lock() as published_path:
+        dataLoader = DataLoader.DataLoader(published_path)
+        return jsonify(results=dataLoader.filterTraits(search))
+
+
+@app.errorhandler(DataLoader.PublishedDataUnavailable)
+def published_data_unavailable(error):
+    return Response(str(error), status=503, mimetype='text/plain')

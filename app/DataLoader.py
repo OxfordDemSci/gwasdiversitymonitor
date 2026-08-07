@@ -1,10 +1,139 @@
+import contextlib
 import csv
+import fcntl
+import hashlib
 import json
+import os
 import time
+
+
+PUBLICATION_CONTROL_DIRECTORY = '.generate_data'
+PUBLICATION_LOCK_FILE = 'publication.lock'
+PUBLICATION_MARKER_FILE = 'publication-in-progress.json'
+PUBLICATION_FALLBACK_DIRECTORY = 'previous-release'
+GENERATION_STATE_FILE = '.generation_complete.json'
+
+TOPLOT_RUNTIME_FILES = (
+    'ancestries.json', 'ancestriesOrdered.json', 'bubbleGraph.json',
+    'bubble_df.csv', 'chloroMap.json', 'choro_df.csv',
+    'doughnutGraph.json', 'doughnut_df.csv', 'heatMap.json',
+    'heatmap_count_initial.csv', 'heatmap_count_replication.csv',
+    'heatmap_sum_initial.csv', 'heatmap_sum_replication.csv',
+    'parentTerms.json', 'summary.json', 'traits.json',
+    'ts1_initial_count.csv', 'ts1_initial_sum.csv',
+    'ts1_replication_count.csv', 'ts1_replication_sum.csv',
+    'ts2_initial_count.csv', 'ts2_initial_sum.csv',
+    'ts2_replication_count.csv', 'ts2_replication_sum.csv', 'tsPlot.json',
+)
+
+RUNTIME_DATA_FILES = (
+    'summary/uniq_broader.txt',
+    'summary/summary.json',
+    'summary/uniq_dis_trait.txt',
+    'summary/uniq_parent.txt',
+    *(f'toplot/{file_name}' for file_name in TOPLOT_RUNTIME_FILES),
+    'todownload/gwasdiversitymonitor_download.zip',
+    'todownload/heatmap.zip',
+    'todownload/timeseries.zip',
+)
+
+
+class PublishedDataUnavailable(RuntimeError):
+    """Raised when an interrupted publication has no safe fallback."""
+
+
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as file_handle:
+        for block in iter(lambda: file_handle.read(1024 * 1024), b''):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def runtime_release_ready(data_path):
+    """Check every app-consumed file against its published manifest."""
+    try:
+        with open(os.path.join(data_path, GENERATION_STATE_FILE),
+                  encoding='utf-8') as state_file:
+            state = json.load(state_file)
+        artifacts = state['artifact_fingerprints']
+        for relative_path in RUNTIME_DATA_FILES:
+            expected = artifacts[relative_path]
+            path = os.path.join(data_path, relative_path)
+            if not os.path.isfile(path):
+                return False
+            if os.path.getsize(path) != expected['size']:
+                return False
+            if _sha256_file(path) != expected['sha256']:
+                return False
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+        return False
+    return True
+
+
+@contextlib.contextmanager
+def published_data_lock(data_path='data', exclusive=False):
+    """Lock a coherent published release and yield the path to read.
+
+    A writer briefly takes the exclusive form at each release transition. If
+    it is killed between file replacements, the persistent publication marker
+    makes readers use the complete previous-release snapshot until recovery
+    finishes.
+    """
+    data_path = os.path.abspath(data_path)
+    control_path = os.path.join(data_path, PUBLICATION_CONTROL_DIRECTORY)
+    os.makedirs(control_path, exist_ok=True)
+    lock_path = os.path.join(control_path, PUBLICATION_LOCK_FILE)
+
+    with open(lock_path, 'a+', encoding='utf-8') as lock_file:
+        lock_mode = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+        fcntl.flock(lock_file.fileno(), lock_mode)
+        try:
+            published_path = data_path
+            marker_path = os.path.join(
+                control_path, PUBLICATION_MARKER_FILE
+            )
+            if not exclusive and os.path.isfile(marker_path):
+                try:
+                    with open(marker_path, encoding='utf-8') as marker_file:
+                        marker = json.load(marker_file)
+                    fallback_relative = marker.get('fallback_data')
+                    if not fallback_relative:
+                        raise PublishedDataUnavailable(
+                            'Data publication is being recovered'
+                        )
+                    fallback_path = os.path.abspath(os.path.join(
+                        data_path, fallback_relative
+                    ))
+                    expected_fallback_path = os.path.join(
+                        control_path, PUBLICATION_FALLBACK_DIRECTORY
+                    )
+                    if fallback_path != expected_fallback_path \
+                            or not os.path.isdir(fallback_path):
+                        raise PublishedDataUnavailable(
+                            'The previous published release is unavailable'
+                        )
+                    published_path = fallback_path
+                except (OSError, TypeError, ValueError, json.JSONDecodeError) \
+                        as error:
+                    raise PublishedDataUnavailable(
+                        'Data publication is being recovered'
+                    ) from error
+            yield published_path
+        finally:
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
 class DataLoader:
+    def __init__(self, data_path='data'):
+        self.data_path = data_path
+
+    def _path(self, *parts):
+        return os.path.join(self.data_path, *parts)
+
     def getAncestriesList(self):
         data = []
-        with open('data/summary/uniq_broader.txt') as file:
+        with open(self._path('summary', 'uniq_broader.txt')) as file:
             data = file.read().splitlines()
         ancestries = {}
         for ancestry in data:
@@ -12,7 +141,7 @@ class DataLoader:
         return ancestries
     def getAncestriesListOrder(self):
         data = []
-        with open('data/summary/uniq_broader.txt') as file:
+        with open(self._path('summary', 'uniq_broader.txt')) as file:
             data = file.read().splitlines()
         ancestries = {}
         i = 1
@@ -22,7 +151,7 @@ class DataLoader:
         return ancestries
     def getTermsList(self):
         data = []
-        with open('data/summary/uniq_parent.txt') as file:
+        with open(self._path('summary', 'uniq_parent.txt')) as file:
             data = file.read().splitlines()
         terms = {}
         for term in data:
@@ -30,7 +159,7 @@ class DataLoader:
         return terms
     def getTraitsList(self):
         data = []
-        with open('data/summary/uniq_dis_trait.txt') as file:
+        with open(self._path('summary', 'uniq_dis_trait.txt')) as file:
             data = file.read().splitlines()
         traits = {}
         for trait in data:
@@ -38,7 +167,7 @@ class DataLoader:
         return traits
     def getSummaryStatistics(self):
         summary = {}
-        with open('data/summary/summary.json') as json_file:
+        with open(self._path('summary', 'summary.json')) as json_file:
             data = json.load(json_file)
             for value in data:
                 summary[value] = data[value]
@@ -49,7 +178,7 @@ class DataLoader:
         dataInitial = {}
         dataReplication = {}
 
-        with open('data/toplot/bubble_df.csv') as csv_file:
+        with open(self._path('toplot', 'bubble_df.csv')) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
 
             line_count = 0
@@ -83,7 +212,7 @@ class DataLoader:
         dataReplicationStudies = {}
         dataReplicationParticipants = {}
         dataAssociations = {}
-        with open('data/toplot/doughnut_df.csv') as csv_file:
+        with open(self._path('toplot', 'doughnut_df.csv')) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             line_count = 0
             for row in csv_reader:
@@ -142,7 +271,7 @@ class DataLoader:
     def getHeatMapData(self, filename):
         data = {}
 
-        with open('data/toplot/'+filename) as csv_file:
+        with open(self._path('toplot', filename)) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
 
             line_count = 0
@@ -178,7 +307,7 @@ class DataLoader:
 
     def getChloroMap(self):
         data = {}
-        with open('data/toplot/choro_df.csv', newline='') as csv_file:
+        with open(self._path('toplot', 'choro_df.csv'), newline='') as csv_file:
             csv_reader = csv.reader(csv_file)
             next(csv_reader, None)  # skip header
 
@@ -217,7 +346,7 @@ class DataLoader:
 
     def getTSPlotData(self, filename):
         tsPlot = dict()
-        with open('data/toplot/'+filename) as csv_file:
+        with open(self._path('toplot', filename)) as csv_file:
             csv_reader = csv.reader(csv_file, delimiter=',')
             line_count = 0
             for row in csv_reader:
@@ -241,7 +370,8 @@ class DataLoader:
     def filterTraits(self, search_trait):
         traits = self.getTraitsList()
         filtered_traits = []
-        for count, (trait_key, trait_value) in enumerate(traits.items()):
-            if search_trait in trait_key or search_trait in trait_value:
-                filtered_traits.append({"id": count, "text": trait_key})
+        search_trait = search_trait.lower()
+        for trait_key, trait_value in traits.items():
+            if search_trait in trait_key.lower() or search_trait in trait_value.lower():
+                filtered_traits.append({"id": trait_value, "text": trait_key})
         return filtered_traits

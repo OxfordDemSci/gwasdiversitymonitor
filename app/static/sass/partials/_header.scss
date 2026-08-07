@@ -206,3 +206,12 @@
     }
   }
 }
+
+@media screen and (min-width: 2400px) {
+  #header .container {
+    box-sizing: border-box;
+    max-width: $max-breakpoint + 110px;
+    padding-left: 55px;
+    padding-right: 55px;
+  }
+}

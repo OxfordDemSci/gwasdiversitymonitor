@@ -56,6 +56,12 @@ $half-gutter-width: $flexboxgrid-gutter-width * .5;
   }
 }
 
+@media screen and (min-width: 2400px) {
+  .container.main {
+    min-height: 0;
+  }
+}
+
 .row {
   box-sizing: border-box;
   @include flexbox();

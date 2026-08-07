@@ -22,6 +22,17 @@
         </button>
     </div>
     <div class="world-map-header-actions">
+        <div class="world-map-zoom-controls">
+            <button class="three-icons icon" type="button" onclick="wmZoomIn()" aria-label="Zoom map in" title="Zoom in">
+                <i class="icon-zoom-out"></i>
+            </button>
+            <button class="three-icons icon" type="button" onclick="wmResetZoom()" aria-label="Reset map zoom" title="Reset zoom">
+                <i class="icon-full-screen"></i>
+            </button>
+            <button class="three-icons icon" type="button" onclick="wmZoomOut()" aria-label="Zoom map out" title="Zoom out">
+                <i class="icon-zoom-in"></i>
+            </button>
+        </div>
         {% with filename='choro_df', id='world-map-controls' %} {% include
         'components/three-icons.html' %} {% endwith %}
     </div>

@@ -1,5 +1,21 @@
 // Menu
 
+function makeChartResponsive(svgSelection, width, height) {
+	if (!svgSelection || !svgSelection.node || !svgSelection.node()) return;
+
+	width = Number(width || svgSelection.attr('width'));
+	height = Number(height || svgSelection.attr('height'));
+
+	if (!width || !height) return;
+
+	svgSelection
+		.attr('width', width)
+		.attr('height', height)
+		.attr('viewBox', '0 0 ' + width + ' ' + height)
+		.attr('preserveAspectRatio', 'xMinYMin meet')
+		.classed('responsive-chart-svg', true);
+}
+
 var header = $('#header');
 var burger = header.find('#burger-menu');
 var nav = header.find('#nav-menu');
@@ -25,8 +41,19 @@ $(window).scroll(function() {
 
 function imagePopup(id, container, svg_id) {
 	document.getElementById(id).classList.add('active');
-	d3.select('#button_svg').on('click', function () {downloadImage(container, svg_id, false); hidePopup(id); }).text(`${container.replace('#', '')}.svg`)
-	d3.select('#button_png').on('click', function () {downloadImage(container, svg_id, true); hidePopup(id); }).text(`${container.replace('#', '')}.png`)
+	d3.select('#button_svg').on('click', null).on('click', function () {downloadImage(container, svg_id, false); hidePopup(id); }).text(`${container.replace('#', '')}.svg`)
+	d3.select('#button_png').on('click', null).on('click', function () {downloadImage(container, svg_id, true); hidePopup(id); }).text(`${container.replace('#', '')}.png`)
+}
+
+function bindImageDownload(controlSelector, container, svg_id, beforeOpen) {
+	$(controlSelector).find('.icon-download-image').closest('button').off('click.imageDownload').on('click.imageDownload', function (event) {
+		event.preventDefault();
+		event.stopPropagation();
+		if (beforeOpen) {
+			beforeOpen();
+		}
+		imagePopup('popup-download-image', container, svg_id);
+	});
 }
 
 function launchPopup(id) {
@@ -66,8 +93,14 @@ function setDescription() {
 function downloadImage(selector, svg_selector, png) {
 	let graph = $(selector);
 	let svg = graph.find(`#${svg_selector}`);
-	var width = svg.width();
-	var height = svg.height();
+	var sourceSvg = svg[0];
+	var sourceViewBox = sourceSvg && sourceSvg.viewBox ? sourceSvg.viewBox.baseVal : null;
+	var width = sourceViewBox && sourceViewBox.width ?
+		sourceViewBox.width :
+		parseFloat(svg.attr("width")) || svg.width();
+	var height = sourceViewBox && sourceViewBox.height ?
+		sourceViewBox.height :
+		parseFloat(svg.attr("height")) || svg.height();
 	var heightPos = height+100;
 
 	d3.select("#downloadShell svg").remove();
@@ -78,7 +111,16 @@ function downloadImage(selector, svg_selector, png) {
 	downloadSvg
 		.attr("version", 1.1)
 		.attr("xmlns", "http://www.w3.org/2000/svg")
+		.attr("xmlns:xlink", "http://www.w3.org/1999/xlink")
 		.append("style").text(".heat-map-y-axis-legend-item { margin: 0;} svg { width: 100%; height: 100%; overflow: hidden; display: -webkit-box; display: -webkit-flex; display: -moz-flex; display: -ms-flexbox; display: flex; -webkit-box-flex: 1; -webkit-flex: 1; -moz-box-flex: 1; -moz-flex: 1; -ms-flex: 1; flex: 1; } svg .grid line { stroke-dasharray: 10; fill: none; stroke: #e9edee; stroke-width: 2px; } svg .line path { stroke-dasharray: 3; fill: none; stroke: #78909c; stroke-width: 2px; } svg .grid path, svg .grid-y path, svg .axis path, svg .axis-y path { stroke: none; } svg .axis-x .tick text, svg .axis-y .tick text { font-size: 13px; fill: #78909c; } svg .axis-x path, svg .axis-x .tick line { fill: none; stroke: #e9edee; stroke-width: 2px; } svg .axis-x .tick text { -moz-transform: translateY(8px); -o-transform: translateY(8px); -ms-transform: translateY(8px); -webkit-transform: translateY(8px); transform: translateY(8px); } svg .axis-x .tick:last-child line { stroke: none; } svg .axis-y .tick text { -moz-transform: translateX(-4px); -o-transform: translateX(-4px); -ms-transform: translateX(-4px); -webkit-transform: translateX(-4px); transform: translateX(-4px); } svg .axis-y .tick line { stroke: none; } svg .axis-y .tick:first-of-type text { display: none; } circle.african, .circle.african { fill: #f59c44; background: #f59c44; } circle.african-american-or-afro-caribbean, .circle.african-american-or-afro-caribbean { fill: #fece59; background: #fece59; } circle.asian, .circle.asian { fill: #489ed8; background: #489ed8; } circle.european, .circle.european { fill: #ed7892; background: #ed7892; } circle.hispanic-or-latin-american, .circle.hispanic-or-latin-american { fill: #9767ab; background: #9767ab; } circle.other-mixed, .circle.other-mixed { fill: #54bdbe; background: #54bdbe; } circle.in-part-not-recorded, .circle.in-part-not-recorded { fill: #78909c; background: #78909c; } .back-rect { fill: #d9dbdf; } svg#bubbleSVG .svg-container circle { opacity: .7; display: none; } svg#bubbleSVG circle.opaque { opacity: 1; } svg#bubbleSVG circle.disabled { fill: rgba(128, 128, 128, .4); pointer-events: none; } svg#bubbleSVG circle.selected { stroke: #78909c; stroke-width: 2; stroke-dasharray: 3; pointer-events: none; } svg#bubbleSVG.term-all circle, svg#bubbleSVG.term-other-measurement circle.other-measurement, svg#bubbleSVG.term-cardiovascular-measurement circle.cardiovascular-measurement, svg#bubbleSVG.term-neurological-disorder circle.neurological-disorder, svg#bubbleSVG.term-digestive-system-disorder circle.digestive-system-disorder, svg#bubbleSVG.term-cancer circle.cancer, svg#bubbleSVG.term-cardiovascular-disease circle.cardiovascular-disease, svg#bubbleSVG.term-metabolic-disorder circle.metabolic-disorder, svg#bubbleSVG.term-other-disease circle.other-disease, svg#bubbleSVG.term-biological-process circle.biological-process, svg#bubbleSVG.term-immune-system-disorder circle.immune-system-disorder, svg#bubbleSVG.term-response-to-drug circle.response-to-drug, svg#bubbleSVG.term-other-trait circle.other-trait, svg#bubbleSVG.term-body-measurement circle.body-measurement, svg#bubbleSVG.term-hematological-measurement circle.hematological-measurement, svg#bubbleSVG.term-lipid-or-lipoprotein-measurement circle.lipid-or-lipoprotein-measurement, svg#bubbleSVG.term-nflammatory-measurement circle.inflammatory-measurement, svg#bubbleSVG.term-liver-enzyme-measurement circle.liver-enzyme-measurement { display: block; } svg#bubbleSVG.ancestry-african .svg-container circle.african, svg#bubbleSVG.ancestry-african-american-or-afro-caribbean .svg-container circle.african-american-or-afro-caribbean, svg#bubbleSVG.ancestry-asian .svg-container circle.asian, svg#bubbleSVG.ancestry-european .svg-container circle.european, svg#bubbleSVG.ancestry-hispanic-or-latin-american .svg-container circle.hispanic-or-latin-american, svg#bubbleSVG.ancestry-other-mixed .svg-container circle.other-mixed { display: none; }");
+
+	downloadSvg.selectAll("image").each(function () {
+		var href = this.getAttribute("href");
+		if (href) {
+			this.removeAttribute("xlink:href");
+			this.removeAttributeNS("http://www.w3.org/1999/xlink", "href");
+		}
+	});
 
 	downloadSvg.append("g")
 		.attr("class", "title")
@@ -104,12 +146,30 @@ function downloadImage(selector, svg_selector, png) {
 	var offset = 0;
 	var parentTerm = graph.find('.gwas-select-container-single option:selected').attr('name');
 	var year = graph.find('[class*="-change-year"] span').text();
+	var isBubbleGraph = graph.attr('id') === 'bubbleGraph';
+	var bubbleClassNames = null;
+
+	if (isBubbleGraph && window.__bubbleCanvasState && window.__bubbleCanvasState.points) {
+		bubbleClassNames = window.__bubbleCanvasState.points.map(function (p) {
+			return p.className || "";
+		});
+	}
+
+	function hasLegendClass(className) {
+		if (bubbleClassNames) {
+			return bubbleClassNames.some(function (classes) {
+				return classes.split(/\s+/).indexOf(className) !== -1;
+			});
+		}
+
+		return graph.find("circle." + className).length > 0;
+	}
 
 	if(parentTerm == 'all') {
 		parentTerm = 'All parent terms'
 	}
 
-	if (graph.find("circle.european").length > 0) {
+	if (hasLegendClass("european")) {
 		var european = legend.append("g")
 			.attr("class", "european")
 			.attr("transform", "translate(0, " + offset + ")");
@@ -124,7 +184,7 @@ function downloadImage(selector, svg_selector, png) {
 		offset += 20;
 	}
 
-	if (graph.find("circle.african").length > 0) {
+	if (hasLegendClass("african")) {
 		var african = legend.append("g")
 			.attr("class", "african")
 			.attr("transform", "translate(0, " + offset + ")");
@@ -139,7 +199,7 @@ function downloadImage(selector, svg_selector, png) {
 		offset += 20;
 	}
 
-	if (graph.find("circle.african-american-or-afro-caribbean").length > 0) {
+	if (hasLegendClass("african-american-or-afro-caribbean")) {
 		var africanAmCaribbean = legend.append("g")
 			.attr("class", "african-american-or-afro-caribbean")
 			.attr("transform", "translate(0, " + offset + ")");
@@ -154,7 +214,7 @@ function downloadImage(selector, svg_selector, png) {
 		offset += 20;
 	}
 
-	if (graph.find("circle.other-mixed").length > 0) {
+	if (hasLegendClass("other-mixed")) {
 		var otherMixed = legend.append("g")
 			.attr("class", "other-mixed")
 			.attr("transform", "translate(0, " + offset + ")");
@@ -169,7 +229,7 @@ function downloadImage(selector, svg_selector, png) {
 		offset += 20;
 	}
 
-	if (graph.find("circle.asian").length > 0) {
+	if (hasLegendClass("asian")) {
 		var asian = legend.append("g")
 			.attr("class", "asian")
 			.attr("transform", "translate(0, " + offset + ")");
@@ -184,7 +244,7 @@ function downloadImage(selector, svg_selector, png) {
 		offset += 20;
 	}
 
-	if (graph.find("circle.hispanic-or-latin-american").length > 0) {
+	if (hasLegendClass("hispanic-or-latin-american")) {
 		var hispanicLatinAmerican = legend.append("g")
 			.attr("class", "hispanic-or-latin-american")
 			.attr("transform", "translate(0, " + offset + ")");
@@ -199,7 +259,7 @@ function downloadImage(selector, svg_selector, png) {
 		offset += 20;
 	}
 
-	if (graph.find("circle.in-part-not-recorded").length > 0) {
+	if (hasLegendClass("in-part-not-recorded")) {
 		var inPart = legend.append("g")
 			.attr("class", "in-part-not-recorded")
 			.attr("transform", "translate(0, " + offset + ")");
@@ -350,6 +410,24 @@ function downloadImage(selector, svg_selector, png) {
 		downloadSvg.select(".svg-container").attr("transform", "translate(50,100)");
 	}
 
+	if (isBubbleGraph) {
+		var bubbleExportImage = downloadSvg.select("#canvasExportImage");
+		var exportPad = (window.__bubbleCanvasState && window.__bubbleCanvasState.pad) || 0;
+		var bubbleExportX = 50;
+		var bubbleExportY = 125;
+
+		if (!bubbleExportImage.empty()) {
+			downloadSvg.select(".svg-container").attr("transform", "translate(" + bubbleExportX + "," + bubbleExportY + ")");
+
+			bubbleExportImage
+				.attr("x", bubbleExportX - exportPad)
+				.attr("y", bubbleExportY - exportPad);
+
+			downloadSvg.node().appendChild(bubbleExportImage.node());
+			downloadSvg.node().appendChild(legend.node());
+		}
+	}
+
 	let popup = $('#popup-footer p');
 	let citetexts = Array.from(popup.map(i => ({'text': popup[i].textContent})))
 
@@ -399,7 +477,18 @@ function downloadImage(selector, svg_selector, png) {
 	  .overflow(false)
 	  .render();
 
-	var html = downloadSvg.node().outerHTML;
+	var finalWidth = parseFloat(downloadSvg.attr("width"));
+	var finalHeight = parseFloat(downloadSvg.attr("height"));
+
+	downloadSvg
+		.attr("viewBox", "0 0 " + finalWidth + " " + finalHeight)
+		.attr("preserveAspectRatio", "xMinYMin meet")
+		.style("width", finalWidth + "px")
+		.style("height", finalHeight + "px")
+		.style("max-height", "none")
+		.style("overflow", "visible");
+
+	var html = new XMLSerializer().serializeToString(downloadSvg.node());
 	var svgBlob = new Blob([html], {type: "image/svg+xml;charset=utf-8"});
 	var svgUrl = URL.createObjectURL(svgBlob);
 	var downloadLink = document.createElement("a");
@@ -435,6 +524,11 @@ function downloadImage(selector, svg_selector, png) {
 		document.body.removeChild(downloadLink);
       };
 
+      img.onerror = function (error) {
+        URL.revokeObjectURL(svgUrl);
+        console.error("SVG to PNG export failed", error);
+      };
+
       img.src = svgUrl;
 	} else {
 		downloadLink.href = svgUrl;
@@ -445,4 +539,3 @@ function downloadImage(selector, svg_selector, png) {
 	}
 
 }
-

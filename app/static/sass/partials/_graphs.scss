@@ -1,4 +1,27 @@
 
+svg.responsive-chart-svg {
+  height: auto;
+  max-height: none !important;
+  @include flex(none);
+}
+
+#bubbleGraph {
+  > svg {
+    position: relative;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  .left {
+    z-index: 2;
+  }
+
+  .bubble-canvas {
+    z-index: 3;
+    pointer-events: auto;
+  }
+}
+
 svg#bubbleSVG circle {
   opacity: .7;
   display: none;

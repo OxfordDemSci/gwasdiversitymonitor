@@ -19,9 +19,11 @@ As a pre-requisite to running this locally, you will need a working Python 3 ins
 
 ### Running the Code
 
-This server is operating system independent (through the ``os`` module) and should work on Windows, Linux and macOS all the same. To run: clone this directory, ``cd`` into the directory, download the data with "python app/generate_data.py", and serve the project by simply calling the gwasdiversitymonitor.py file. "python gwasdiversitymonitor.py". This will serve the project to port 5000 on your localhost (via Flask).
+To run: clone this directory, ``cd`` into the directory, download the data with "python generate_data.py", and serve the project by calling "python gwasdiversitymonitor.py". The launcher starts the Flask application behind Gunicorn, using production WSGI workers rather than Flask's development server. By default it binds to port 8000; set `GWAS_HOST`, `GWAS_PORT`, `GWAS_WORKERS`, `GWAS_THREADS`, or `GWAS_TIMEOUT` to override the server settings.
 
-To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualsnv/) with `./virtualenv/bin/python gwasdiversitymonitor.py`.
+Data generation is staged under `data/.generate_data` and published only after every required raw, wrangled, JSON, and download artifact passes validation. If generation is interrupted after downloading the raw Catalog files, the next run reuses that validated raw snapshot and resumes the wrangling. Publication is coordinated with application reads, and a complete previous runtime snapshot remains available if publication itself is interrupted. A run is skipped as unchanged only when the raw-input fingerprints, generation parameters, implementation, static bundle, and complete published artifact manifest all match.
+
+To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualenv/) with `./virtualenv/bin/python gwasdiversitymonitor.py`.
 
 ### Structure
 
@@ -68,7 +70,7 @@ docker-compose down
 
 ### Versioning
 
-This dashboard is currently at Version 1.0.0 (with an article conditionally accepted Nature Genetics). Please note: although the library logs data updates, it could be that additional dictionary based classifications are required with regards to the ```/data/support/dict_replacer_broad.tsv``` file. Please raise an issue in this repo to alert us of any necessary entries, or any suggestions which you may have in general, although we will monitor this over time.
+This dashboard is currently at Version 1.0.0 (with an article conditionally accepted Nature Genetics). During data generation, previously unseen combinations of known ancestry terms are classified automatically, recorded in `/data/support/dict_replacer_broad.tsv`, and synchronized into `data_static.zip` for the next run. The classifier can only use the existing `Broader` values from that dictionary. A combination containing a genuinely unknown component is left unclassified in `/data/unmapped/unmapped_broader.txt` for manual review rather than creating or guessing a new `Broader` type.
 
 ### License
 

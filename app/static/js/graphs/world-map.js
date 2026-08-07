@@ -1,4 +1,4 @@
-function drawWorldMapChart(data, withMetric) {
+function drawWorldMapChart(data, withMetric, preservedState) {
 	let selector = "#worldMap"
 	let svg_id = 'worldMapSVG'
     let svg_selector = `#${svg_id}`
@@ -109,11 +109,15 @@ function drawWorldMapChart(data, withMetric) {
         .domain([1, 6, 11, 16, 21, 26, Infinity])
         .range(colorsForStudies.map(function(e) { return e.color }));
 
+    d3.select("#worldMap svg").remove();
+
     let mainSvg = d3.select("#worldMap")
         .append("svg")
         .attr('id', svg_id)
         .attr("width", width)
         .attr("height", height);
+
+    makeChartResponsive(mainSvg, width, height);
 
     mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '850').attr('width', '1000');
 
@@ -129,7 +133,10 @@ function drawWorldMapChart(data, withMetric) {
 
     // Changing year
     let dataKeys = Object.keys(dataWM);
-    let currentYear = dataKeys[dataKeys.length-1];
+    let requestedYear = preservedState && String(preservedState.year);
+    let currentYear = requestedYear && dataKeys.indexOf(requestedYear) !== -1 ?
+        requestedYear :
+        dataKeys[dataKeys.length-1];
     let dateSpan = document.querySelector('.world-map-change-year span');
     dateSpan.innerHTML = currentYear;
 
@@ -414,10 +421,27 @@ function drawWorldMapChart(data, withMetric) {
 
     // Set the zoom and Pan features: how much you can zoom, on which part, and what to do when there is a zoom
     let zoom = d3.zoom()
-        .scaleExtent([1, 20])  // This control how much you can unzoom (x0.5) and zoom (x20)
+        .scaleExtent([1, 20])
         .translateExtent([[0, 0], [width, height]])
         .extent([[0, 0], [width, height]])
+        .filter(function() {
+            return d3.event.type !== "wheel" &&
+                d3.event.type !== "dblclick" &&
+                !d3.event.button;
+        })
         .on("zoom", zoomed);
+
+    window.wmZoomIn = function() {
+        svg.transition().duration(200).call(zoom.scaleBy, 1.5);
+    };
+
+    window.wmZoomOut = function() {
+        svg.transition().duration(200).call(zoom.scaleBy, 1 / 1.5);
+    };
+
+    window.wmResetZoom = function() {
+        svg.transition().duration(200).call(zoom.transform, d3.zoomIdentity);
+    };
 
     let isMobile = window.innerWidth <= 800 && window.innerHeight <= 850;
 
@@ -425,9 +449,12 @@ function drawWorldMapChart(data, withMetric) {
 
     updateGraph(currentYear);
 
-    let svgs = document.querySelectorAll('#worldMap svg');
-    if (svgs.length > 1) {
-        document.querySelector('#worldMap').removeChild(document.querySelector('#worldMap').childNodes[5]);
+    if (!isMobile && preservedState && preservedState.zoom) {
+        var savedZoom = preservedState.zoom;
+        var restoredTransform = d3.zoomIdentity
+            .translate(savedZoom.x || 0, savedZoom.y || 0)
+            .scale(savedZoom.k || 1);
+        svg.call(zoom.transform, restoredTransform);
     }
 
     d3.select(window).on('resize', resize);
@@ -436,7 +463,7 @@ function drawWorldMapChart(data, withMetric) {
     backRect.attr('width', width);
     backRect.attr('height', height);
 
-    d3.select('#world-map-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
+    bindImageDownload('#world-map-controls', selector, svg_id);
 
     function applyMobileSettings() {
         if (isMobile) {

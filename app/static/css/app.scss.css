@@ -22,6 +22,10 @@
   @media screen and (min-width: 1800px) {
     .container {
       padding: 0 12%; } }
+@media screen and (min-width: 2400px) {
+  .container.main {
+    min-height: 0; } }
+
 .row {
   box-sizing: border-box;
   display: -webkit-box;
@@ -2862,6 +2866,13 @@ button, .btn {
   #header .container .add-info {
     margin-left: 5px; } }
 
+@media screen and (min-width: 2400px) {
+  #header .container {
+    box-sizing: border-box;
+    max-width: 1910px;
+    padding-left: 55px;
+    padding-right: 55px; } }
+
 .logo-footer {
   width: fit-content;
   color: #212c8f;
@@ -3027,6 +3038,13 @@ button, .btn {
       -ms-flex-preferred-size: 20%;
       flex-basis: 20%; }
 
+@media screen and (min-width: 2400px) {
+  #footer .container {
+    box-sizing: border-box;
+    max-width: 1910px;
+    padding-left: 55px;
+    padding-right: 55px; } }
+
 .cookie-consent {
   padding: 22px;
   width: 100%;
@@ -3093,7 +3111,8 @@ button, .btn {
       .cookie-consent:active {
         right: -400px; } }
 .dashboard {
-  margin-top: 20px; }
+  max-width: 1800px;
+  margin: 20px auto 0; }
   .dashboard .tile {
     margin-bottom: 20px;
     transition: all .3s ease-in-out; }
@@ -3465,7 +3484,24 @@ button, .btn {
           .dashboard .tile .box.world-map .world-map-header-actions {
             position: absolute;
             right: 10px;
-            bottom: 10px; }
+            bottom: 10px;
+            display: -webkit-box;
+            display: -webkit-flex;
+            display: -moz-flex;
+            display: -ms-flexbox;
+            display: flex;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
+            -webkit-align-items: center;
+            -moz-align-items: center;
+            align-items: center; }
+            .dashboard .tile .box.world-map .world-map-header-actions .world-map-zoom-controls {
+              margin-right: 10px;
+              display: -webkit-box;
+              display: -webkit-flex;
+              display: -moz-flex;
+              display: -ms-flexbox;
+              display: flex; }
         .dashboard .tile .box.world-map svg {
           -webkit-box-ordinal-group: 3;
           -webkit-order: 2;
@@ -3854,6 +3890,28 @@ button, .btn {
   width: calc(100% - 20px);
   position: absolute;
   bottom: 10px; }
+
+svg.responsive-chart-svg {
+  height: auto;
+  max-height: none !important;
+  -webkit-box-flex: none;
+  -webkit-flex: none;
+  -moz-box-flex: none;
+  -moz-flex: none;
+  -ms-flex: none;
+  flex: none; }
+
+#bubbleGraph > svg {
+  position: relative;
+  z-index: 1;
+  pointer-events: none; }
+
+#bubbleGraph .left {
+  z-index: 2; }
+
+#bubbleGraph .bubble-canvas {
+  z-index: 3;
+  pointer-events: auto; }
 
 svg#bubbleSVG circle {
   opacity: .7;

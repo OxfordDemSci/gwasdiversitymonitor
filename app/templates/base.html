@@ -14,17 +14,17 @@
         <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon" />
 
         <!--Javascript-->
-        <script src="{{ url_for('static', filename='js/imports/jquery-3.4.1.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/imports/d3.v4.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/imports/queue.v1.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/imports/topojson.v1.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/imports/d3-tip.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/imports/select2.min.js') }}"></script>
-        <script src="{{ url_for('static', filename='js/imports/d3plus-text.full.min.js') }}"></script>
+        <script src="{{ versioned_static('js/imports/jquery-3.4.1.min.js') }}"></script>
+        <script src="{{ versioned_static('js/imports/d3.v4.min.js') }}"></script>
+        <script src="{{ versioned_static('js/imports/queue.v1.min.js') }}"></script>
+        <script src="{{ versioned_static('js/imports/topojson.v1.min.js') }}"></script>
+        <script src="{{ versioned_static('js/imports/d3-tip.min.js') }}"></script>
+        <script src="{{ versioned_static('js/imports/select2.min.js') }}"></script>
+        <script src="{{ versioned_static('js/imports/d3plus-text.full.min.js') }}"></script>
 
         <!--Style-->
-        <link href="{{ url_for('static', filename='css/app.scss.css') }}" rel="stylesheet" type="text/css">
-        <link href="{{ url_for('static', filename='css/select2.min.css') }}" rel="stylesheet" type="text/css">
+        <link href="{{ versioned_static('css/app.scss.css') }}" rel="stylesheet" type="text/css">
+        <link href="{{ versioned_static('css/select2.min.css') }}" rel="stylesheet" type="text/css">
 
         <!--Google Analytics-->
         {% if cookies_check() %}
@@ -51,6 +51,6 @@
             {% include 'components/cookies.html' %}
         {% endif %}
 
-        <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+        <script src="{{ versioned_static('js/script.js') }}"></script>
     </body>
 </html>

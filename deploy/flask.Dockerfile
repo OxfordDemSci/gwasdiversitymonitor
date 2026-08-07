@@ -13,7 +13,6 @@ COPY deploy/gunicorn_config.py gunicorn_config.py
 COPY deploy/wsgi.py wsgi.py
 COPY requirements.txt requirements.txt
 
-RUN pip3 install gunicorn
 RUN pip3 install -r requirements.txt
 
 # CMD [ "gunicorn", "--config", "gunicorn_config.py", "wsgi:app"]

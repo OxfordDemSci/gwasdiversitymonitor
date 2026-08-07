@@ -6,28 +6,29 @@ let d3TooltipLineGraph = d3.select("body").append("div")
 
 function drawTimeSeries(json, id, studies, replication) {
     var timeSeries = $(id);
+    var ancestriesFilter = $('#ancestries-filter');
+    var recordFilter = $('#record-filter');
+    var insideFilters = $('.gwas-filter');
+    var outsideFilters = $('.gwas-switch');
     var margin = {top: 30, bottom: 30, left: 40, right: 30};
     var width = timeSeries.width() - margin.left - margin.right;
     var height = 340 - margin.top - margin.bottom;
     let selector = id
-	let svg_id = 'timeSeriesSVG'
+    let svg_id = 'timeSeriesSVG'
     let svg_selector = `#${svg_id}`
-    var mainSvg = d3.select(id).append('svg').attr('id', svg_id);
+    var svgWidth = width + margin.left + margin.right;
+    var svgHeight = height + margin.top + margin.bottom;
+    timeSeries.find('svg').remove();
+    var mainSvg = d3.select(id)
+        .append('svg')
+        .attr('id', svg_id)
+        .attr('width', svgWidth)
+        .attr('height', svgHeight);
+    makeChartResponsive(mainSvg, svgWidth, svgHeight);
     var tickMax = 6;
 
-    if(studies) {
-        if(replication) {
-            var data = JSON.parse(JSON.stringify(json.ts_recorded_replication_studies));
-        } else {
-            var data = JSON.parse(JSON.stringify(json.ts_recorded_discovery_studies));
-        }
-    } else {
-        if(replication) {
-            var data = JSON.parse(JSON.stringify(json.ts_recorded_replication_participants));
-        } else {
-            var data = JSON.parse(JSON.stringify(json.ts_recorded_discovery_participants));
-        }
-    }
+    var data = filterRecord(json, recordFilter, studies, replication);
+    filterAncestries(data, ancestriesFilter);
 
     mainSvg.append('rect').attr('class', 'white-rect').attr('fill', '#ffff').attr('style', 'fill: white;').attr('height', '550').attr('width', '700');
 
@@ -59,29 +60,32 @@ function drawTimeSeries(json, id, studies, replication) {
     addGraph(data, svg, width, yAxis, xScale);
 
     // Filters
-    var ancestriesFilter = $('#ancestries-filter');
-    var recordFilter = $('#record-filter');
-    var insideFilters = $('.gwas-filter');
-    var outsideFilters = $('.gwas-switch');
-
-    insideFilters.change(function() {
+    insideFilters.off('change.timeSeries').on('change.timeSeries', function() {
         var data = filterRecord(json, recordFilter, studies, replication);
         filterAncestries(data, ancestriesFilter);
         redrawTimeSeries(data, svg, width, height, tickMax, xScale);
     });
 
-    outsideFilters.change(function() {
-        var data = filterRecord(json, recordFilter, studies, replication);
-        recordFilter.prop('checked', false);
-        ancestriesFilter.val(ancestriesFilter.find('option:first').val());
-        redrawTimeSeries(data, svg, width, height, tickMax, xScale);
+    // Global Metric/Stage changes redraw this chart centrally. Do not clear its
+    // ancestry or "not recorded" controls while that redraw is in progress.
+    outsideFilters.off('change.timeSeries');
+
+    var initialPanelWidth = Math.round(timeSeries.width());
+    var initialPixelRatio = window.devicePixelRatio || 1;
+    $(window).off('resize.timeSeriesLayout').on('resize.timeSeriesLayout', function() {
+        clearTimeout(window.__timeSeriesResizeTimer);
+        window.__timeSeriesResizeTimer = setTimeout(function() {
+            var nextPanelWidth = Math.round(timeSeries.width());
+            var nextPixelRatio = window.devicePixelRatio || 1;
+
+            if (Math.abs(nextPanelWidth - initialPanelWidth) > 2 ||
+                Math.abs(nextPixelRatio - initialPixelRatio) > 0.01) {
+                drawTimeSeries(json, id, studies, replication);
+            }
+        }, 180);
     });
 
-    var svgs = timeSeries.find('svg');
-    if (svgs.length > 1) {
-        svgs[0].parentNode.removeChild(svgs[0].parentNode.childNodes[5]);
-    }
-    d3.select('#time-series-controls').on('click', function () {imagePopup('popup-download-image', selector, svg_id)});
+    bindImageDownload('#time-series-controls', selector, svg_id);
 }
 
 function addGrid(svg, width, tickMax, yAxis) {
