@@ -21,6 +21,8 @@ As a pre-requisite to running this locally, you will need a working Python 3 ins
 
 To run: clone this directory, ``cd`` into the directory, download the data with "python generate_data.py", and serve the project by calling "python gwasdiversitymonitor.py". The launcher starts the Flask application behind Gunicorn, using production WSGI workers rather than Flask's development server. By default it binds to port 8000; set `GWAS_HOST`, `GWAS_PORT`, `GWAS_WORKERS`, `GWAS_THREADS`, or `GWAS_TIMEOUT` to override the server settings.
 
+Data generation is staged under `data/.generate_data` and published only after every required raw, wrangled, JSON, and download artifact passes validation. If generation is interrupted after downloading the raw Catalog files, the next run reuses that validated raw snapshot and resumes the wrangling. Publication is coordinated with application reads, and a complete previous runtime snapshot remains available if publication itself is interrupted. A run is skipped as unchanged only when the raw-input fingerprints, generation parameters, implementation, static bundle, and complete published artifact manifest all match.
+
 To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualenv/) with `./virtualenv/bin/python gwasdiversitymonitor.py`.
 
 ### Structure

@@ -2,9 +2,7 @@ import os
 import sys
 
 from app import app
-
-
-REQUIRED_DATA_FILE = 'data/toplot/chloroMap.json'
+from app import DataLoader
 
 
 def _int_from_env(name, default):
@@ -20,10 +18,17 @@ def _int_from_env(name, default):
 
 
 def _check_required_data():
-    if os.path.exists(REQUIRED_DATA_FILE):
-        return
+    try:
+        with DataLoader.published_data_lock() as published_path:
+            if DataLoader.runtime_release_ready(published_path):
+                return
+    except (OSError, DataLoader.PublishedDataUnavailable):
+        pass
 
-    sys.stderr.write('Missing required data files. Please run python3 ./generate_data.py!\n')
+    sys.stderr.write(
+        'The complete published data manifest is missing or invalid. '
+        'Please run python3 ./generate_data.py!\n'
+    )
     sys.exit(1)
 
 
