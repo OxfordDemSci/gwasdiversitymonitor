@@ -1,4 +1,5 @@
 data
+backups/
 /config.py
 *.log
 

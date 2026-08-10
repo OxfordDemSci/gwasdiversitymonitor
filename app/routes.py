@@ -14,13 +14,9 @@ def inject_template_scope():
     browser = request.user_agent.browser
     injections.update(browser=browser)
 
-    def cookies_check():
-        value = request.cookies.get('cookie_consent')
-        return value == 'true'
-    injections.update(cookies_check=cookies_check)
-
-    if "GA_KEY" in app.config :
-        injections.update(key=app.config["GA_KEY"])
+    injections.update(
+        goatcounter_url=app.config.get("GOATCOUNTER_URL", "").rstrip("/")
+    )
 
     return injections
 
@@ -52,7 +48,7 @@ def index():
 
 @app.route('/privacy-policy')
 def privacy():
-    return render_template('pages/privacy-policy.html', title='Privacy Policy', alwaysShowCookies=1)
+    return render_template('pages/privacy-policy.html', title='Privacy Policy')
 
 @app.route('/qandas')
 def qandas():

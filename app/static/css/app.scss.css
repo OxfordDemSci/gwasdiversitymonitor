@@ -3045,71 +3045,6 @@ button, .btn {
     padding-left: 55px;
     padding-right: 55px; } }
 
-.cookie-consent {
-  padding: 22px;
-  width: 100%;
-  background: #5c6bc0;
-  position: fixed;
-  bottom: 0;
-  right: -500px;
-  z-index: 100;
-  -moz-box-shadow: 0 11px 15px -7px rgba(0, 0, 0, 0.2), 0 9px 46px 8px rgba(0, 0, 0, 0.12), 0 24px 38px 3px rgba(0, 0, 0, 0.14);
-  -webkit-box-shadow: 0 11px 15px -7px rgba(0, 0, 0, 0.2), 0 9px 46px 8px rgba(0, 0, 0, 0.12), 0 24px 38px 3px rgba(0, 0, 0, 0.14);
-  box-shadow: 0 11px 15px -7px rgba(0, 0, 0, 0.2), 0 9px 46px 8px rgba(0, 0, 0, 0.12), 0 24px 38px 3px rgba(0, 0, 0, 0.14);
-  -o-transition: all 1s ease;
-  -ms-transition: all 1s ease;
-  -moz-transition: all 1s ease;
-  -webkit-transition: all 1s ease;
-  transition: all 1s ease; }
-  .cookie-consent.active {
-    right: 0; }
-  .cookie-consent * {
-    color: white; }
-  .cookie-consent .message,
-  .cookie-consent .buttons {
-    width: 100%; }
-  .cookie-consent .message {
-    text-align: center;
-    margin-bottom: 20px;
-    font-weight: lighter; }
-    .cookie-consent .message,
-    .cookie-consent .message a {
-      font-size: 13px;
-      line-height: 18px; }
-    .cookie-consent .message a {
-      font-weight: bold;
-      cursor: pointer; }
-      .cookie-consent .message a,
-      .cookie-consent .message a * {
-        -o-transition: all 0.25s ease;
-        -ms-transition: all 0.25s ease;
-        -moz-transition: all 0.25s ease;
-        -webkit-transition: all 0.25s ease;
-        transition: all 0.25s ease; }
-        .cookie-consent .message a:hover,
-        .cookie-consent .message a *:hover {
-          color: rgba(255, 255, 255, 0.8); }
-  .cookie-consent .buttons {
-    margin-top: 10px;
-    display: -webkit-box;
-    display: -webkit-flex;
-    display: -moz-flex;
-    display: -ms-flexbox;
-    display: flex;
-    -webkit-box-pack: justify;
-    -ms-flex-pack: justify;
-    -webkit-justify-content: space-between;
-    -moz-justify-content: space-between;
-    justify-content: space-between; }
-    .cookie-consent .buttons button, .cookie-consent .buttons .btn {
-      min-width: 110px;
-      cursor: pointer;
-      margin-top: 0; }
-  @media screen and (min-width: 480px) {
-    .cookie-consent {
-      width: 300px; }
-      .cookie-consent:active {
-        right: -400px; } }
 .dashboard {
   max-width: 1800px;
   margin: 20px auto 0; }
@@ -4662,5 +4597,3 @@ select {
     display: -moz-flex;
     display: -ms-flexbox;
     display: flex; }
-
-/*# sourceMappingURL=app.scss.css.map */

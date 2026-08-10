@@ -1,5 +1,5 @@
-# docker compose containers for flask app, nginx reverse proxy, and cron data collector with a shared data volume.
-version: '3.1'
+# Docker Compose services for the Flask app, nginx reverse proxy, data
+# collector, and self-hosted analytics.
 
 services:
 
@@ -15,6 +15,7 @@ services:
       - my-network
     depends_on:
       - flask
+      - goatcounter
     restart: unless-stopped
 
   flask:
@@ -26,10 +27,23 @@ services:
     volumes:
       - ./:/var/www
       - ./data:/app/data
+    environment:
+      GOATCOUNTER_URL: ${GOATCOUNTER_URL-https://stats.gwasdiversitymonitor.com}
     networks:
       my-network:
         aliases:
           - flask-app
+    restart: unless-stopped
+
+  goatcounter:
+    container_name: gwas_goatcounter
+    image: arp242/goatcounter:2.7.0
+    environment:
+      GOATCOUNTER_LISTEN: ":8080"
+    volumes:
+      - goatcounter-data:/home/goatcounter/goatcounter-data
+    networks:
+      - my-network
     restart: unless-stopped
 
   data:
@@ -47,3 +61,6 @@ services:
 networks:
   my-network:
 
+volumes:
+  goatcounter-data:
+    name: gwas_goatcounter_data

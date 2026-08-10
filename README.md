@@ -30,7 +30,7 @@ To do this run "python -m venv virtualenv" from the root of the project. This wi
 The root of the folder contains routes.py, which is the main file which runs the application. This file registers paths inside the application, creates appropriate variables, and passes them into templates (html files) which renders the page. This is our Controller in an MVC framework.
 
 Each call to @app.route('path') defines a path and almost all of these just return templates for pages. The exception is @app.route("/getCSV/<filename>") which is handling the data download for all cases and returns a file response.
-The other exception in this file is, at the top, @app.context_processor. This injects some functionality into our flask templates for us. It is used to give us a user_agent checker (check what device/browser is accessing the application) check the state of the cookie policy, and inject the google analytics key from the config file.
+The other exception in this file is, at the top, @app.context_processor. This injects shared functionality into the Flask templates, including browser information and the optional self-hosted GoatCounter URL.
 
 The other important file here is DataLoader.py. This is a simple file containing a series of helper functions that route.py uses to load and reshape the data from the wrangled csv's into a shape that is workable with d3.
 
@@ -44,10 +44,13 @@ Each graph js file contains a function, which is then called from the global tem
 
 To launch the app using the Docker deployment, you must first install [Docker Compose](https://docs.docker.com/compose/install/).
 
-The Docker deployment for this application uses three containers that are defined in `docker-compose.yml`:  
+The Docker deployment for this application uses four containers that are defined in `docker-compose.yml`:
 1. **gwas_nginx:** An nginx web server
 2. **gwas_flask:** The Flask web application running behind a gunicorn WSGI server (see `./deploy/flask.Dockerfile`)
-3. **gwas_cron:** A cron scheduler to generate new data daily (see `./deploy/cron.Dockerfile`)
+3. **gwas_data:** The data-generation job (see `./deploy/data.Dockerfile`)
+4. **gwas_goatcounter:** A self-hosted, cookie-free GoatCounter analytics service with a persistent SQLite volume
+
+Production sets `GOATCOUNTER_URL` to `https://stats.gwasdiversitymonitor.com` by default. Set it to an empty value to disable analytics. The complete account creation, Lightsail distribution, DNS/TLS, deployment, backup, upgrade, and rollback procedure is in [deploy/GOATCOUNTER.md](deploy/GOATCOUNTER.md).
 
 To launch the Docker containers from the command line: 
 ```angular2html

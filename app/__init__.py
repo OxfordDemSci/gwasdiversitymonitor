@@ -5,8 +5,11 @@ from flask import Flask, url_for
 app = Flask(__name__)
 app.config.from_object('config')
 
-# specify the Google Analytics key here
-app.config["GA_KEY"] = ''
+# Leave analytics disabled unless a deployment explicitly provides the base URL
+# of its self-hosted GoatCounter instance.
+app.config["GOATCOUNTER_URL"] = os.environ.get(
+    "GOATCOUNTER_URL", app.config.get("GOATCOUNTER_URL", "")
+).rstrip("/")
 
 @app.template_global()
 def versioned_static(filename):

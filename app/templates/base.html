@@ -26,15 +26,10 @@
         <link href="{{ versioned_static('css/app.scss.css') }}" rel="stylesheet" type="text/css">
         <link href="{{ versioned_static('css/select2.min.css') }}" rel="stylesheet" type="text/css">
 
-        <!--Google Analytics-->
-        {% if cookies_check() %}
-            <script async src="https://www.googletagmanager.com/gtag/js?id={{ key }}"></script>
-            <script>
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '{{ key }}');
-            </script>
+        {% if goatcounter_url %}
+            <!-- Privacy-friendly, cookie-free analytics hosted on our server. -->
+            <script data-goatcounter="{{ goatcounter_url }}/count"
+                    async src="{{ goatcounter_url }}/count.js"></script>
         {% endif %}
     </head>
     <body class="body-{{ browser }}">
@@ -46,10 +41,6 @@
         </div>
 
         {% include 'partials/footer.html' %}
-
-        {% if not cookies_check() or alwaysShowCookies %}
-            {% include 'components/cookies.html' %}
-        {% endif %}
 
         <script src="{{ versioned_static('js/script.js') }}"></script>
     </body>
