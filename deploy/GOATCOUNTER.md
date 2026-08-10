@@ -48,23 +48,79 @@ You need:
 - an email address for the first GoatCounter administrator;
 - Docker Engine and Docker Compose v2 (already used by this repository).
 
+## 0. Publish the code and snapshot production
+
+The production instance cannot pull these changes until they have been
+committed, pushed, reviewed, and merged into `origin/main`. Complete that Git
+workflow first.
+
+The repository protects `main`, so a direct `git push origin main:main` is
+expected to fail with `GH006`. Do not force-push or weaken the branch rule.
+From the development checkout, preserve the local commit on a feature branch,
+commit this runbook's final edits, and push that branch:
+
+```bash
+git status -sb
+git switch -c agent/goatcounter-production-deployment
+git add .gitignore README.md app deploy docker-compose.yml tests
+git commit -m "Complete GoatCounter production deployment guide"
+git push -u origin agent/goatcounter-production-deployment
+```
+
+The new branch starts at the current local `main`, so any commit that GitHub
+rejected is retained. If `git commit` reports that there is nothing to commit,
+continue with the push; all changes are already in the branch.
+
+Open
+[the GitHub comparison page](https://github.com/OxfordDemSci/gwasdiversitymonitor/compare/main...agent/goatcounter-production-deployment?expand=1),
+create a pull request into `main`, and use **Replace Google Analytics with
+self-hosted GoatCounter** as its title. Merge it only after the repository
+checks pass and the review is complete. The production commands below must be
+run after that merge, not merely after the feature branch is pushed.
+
+Before changing the instance, open the AWS Lightsail console, select the GWAS
+Diversity Monitor instance, open **Snapshots**, and create a manual snapshot.
+Wait until it is available before continuing.
+
 ## 1. Prepare and start GoatCounter
 
-Take a Lightsail instance snapshot before changing production. Then connect to
-the instance and update the checkout:
+Connect to the instance and update the checkout:
 
 ```bash
 cd ~/gwasdiversitymonitor
 git status --short
-git pull --ff-only
+git fetch origin
+git pull --ff-only origin main
 docker compose config --quiet
 docker compose pull goatcounter nginx
-docker compose up -d --build flask goatcounter nginx
-docker compose ps
+docker compose up -d goatcounter
+docker compose ps goatcounter
+docker compose logs --tail=100 goatcounter
 ```
 
 Do not continue if `git status` shows production-only edits that would be
 overwritten by the update. Preserve and reconcile them first.
+
+Validate the updated nginx configuration while GoatCounter is available on the
+Docker network:
+
+```bash
+docker compose exec nginx nginx -t
+```
+
+If the existing nginx container is not running, use:
+
+```bash
+docker compose run --rm --no-deps nginx nginx -t
+```
+
+Do not continue unless nginx reports that its syntax and configuration test
+are successful. Then deploy Flask and nginx:
+
+```bash
+docker compose up -d --build flask nginx
+docker compose ps
+```
 
 The Compose deployment does the following:
 
@@ -256,6 +312,22 @@ cd ~/gwasdiversitymonitor
 docker compose ps
 docker compose logs --tail=100 goatcounter nginx flask
 ```
+
+Clear the existing website distribution's cached HTML so that it cannot serve
+the retired analytics markup: in Lightsail, open the existing website
+distribution, choose **Cache**, select **Reset cache**, and confirm.
+
+Finally, simulate a browser that still has the old consent cookie and ensure
+Google's scripts remain absent:
+
+```bash
+curl --fail --show-error --silent \
+  --header 'Cookie: cookie_consent=true' \
+  https://www.gwasdiversitymonitor.com/ \
+  | grep -E 'googletagmanager|gtag\('
+```
+
+The command should print nothing. A match means the cutover is not complete.
 
 After the cutover is verified, export any Google Analytics history that must be
 retained, then disable or delete the old GA data stream/property according to
