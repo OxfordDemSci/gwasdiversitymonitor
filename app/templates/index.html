@@ -2,6 +2,8 @@
 
 {% block content %}
 
+    {% include 'components/funder-toolbar.html' %}
+
     <div class="dashboard row">
 
         <div class="loader">Loader</div>
@@ -63,35 +65,244 @@
 		let mapData;
 		let doughnutData;
 		let bubbleData;
+			let baseDashboardData = {};
+			let activeFunder = null;
+			let activeSummaryData = null;
+			let funderRequest = null;
+			let baseDashboardReady = false;
+
+		function markBaseDashboardReady() {
+			let required = [
+				'tsPlot', 'heatMap', 'chloroMap', 'doughnutGraph',
+				'bubbleGraph', 'summary'
+			];
+			baseDashboardReady = required.every(function(key) {
+				return !!baseDashboardData[key];
+			}) && !!ancestriesData;
+			if (baseDashboardReady) {
+				$('#funder-filter').prop('disabled', false);
+				updateSummaryFromFunder(baseDashboardData.summary);
+			}
+		}
 
         $(document).ready(function() {
 			setDescription();
+			initFunderFilter();
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
+				if (error) return;
 				timeseriesData = data;
+				baseDashboardData.tsPlot = data;
 				drawTimeSeries(timeseriesData, '#timeSeries');
+				markBaseDashboardReady();
 			});
 			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
+				if (error) return;
 				heatData = data;
+				baseDashboardData.heatMap = data;
 				d3.json("{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}", (error, adata) => {
+					if (error) return;
 					ancestriesData = adata;
 					drawHeatMap(heatData, false, false, ancestriesData);
+					markBaseDashboardReady();
 				})
 			});
 			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
+				if (error) return;
 				mapData = data;
+				baseDashboardData.chloroMap = data;
 				drawWorldMapChart(mapData);
+				markBaseDashboardReady();
 			});
 			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
+				if (error) return;
 				doughnutData = data;
+				baseDashboardData.doughnutGraph = data;
 				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
+				markBaseDashboardReady();
 			});
 
 			d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
+				if (error) return;
 				bubbleData = data;
+				baseDashboardData.bubbleGraph = data;
 				drawBubbleGraph("#bubbleGraph", bubbleData);
+				markBaseDashboardReady();
+        });
+
+			d3.json("{{ url_for('getplotjson', filename='summary.json') }}", (error, data) => {
+				if (error) return;
+				baseDashboardData.summary = data;
+				markBaseDashboardReady();
 			});
         });
+
+        function captureDashboardState() {
+            let mapNode = d3.select('#worldMap .svg-container').node();
+            let mapZoom = mapNode ? d3.zoomTransform(mapNode) : d3.zoomIdentity;
+            return {
+                heatMap: { year: $('.heat-map-change-year span').text() },
+                worldMap: {
+                    year: $('.world-map-change-year span').text(),
+                    zoom: {x: mapZoom.x, y: mapZoom.y, k: mapZoom.k}
+                },
+                doughnut: {
+                    year: $('.doughnut-graph-change-year span').text(),
+                    parentTerm: $('#doughnutGraph .filter select[name="parentTerms"]').val()
+                }
+            };
+        }
+
+        function updateFunderActions(entry) {
+            let download = $('#funder-data-download');
+            let report = $('#funder-report-link');
+            if (!entry) {
+                download.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
+                report.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
+                return;
+            }
+            download.attr('href', '/download/funders/' + entry.id + '.zip')
+                .attr('aria-disabled', 'false').removeClass('is-disabled');
+            report.attr('href', '/reports/funders/' + entry.id)
+                .attr('aria-disabled', 'false').removeClass('is-disabled');
+        }
+
+        function summaryPercentages(summary, metric, stage) {
+            if (!summary) return null;
+            let mode = (stage ? 'replication' : 'discovery') +
+                (metric ? 'Studies' : 'Participants');
+            if (summary[mode]) return summary[mode];
+
+            let prefix = (stage ? 'replication' : 'discovery') + '_' +
+                (metric ? 'studies' : 'participants') + '_';
+            let keys = [
+                'european', 'asian', 'african', 'afamafcam',
+                'hisorlatinam', 'othermixed'
+            ];
+            let flat = {};
+            let hasFlatMode = keys.some(function(key) {
+                return summary[prefix + key] !== undefined;
+            });
+            if (hasFlatMode) {
+                keys.forEach(function(key) { flat[key] = summary[prefix + key] || 0; });
+                return flat;
+            }
+
+            if (summary.overallParticipants) return summary.overallParticipants;
+            let hasLegacyTotals = keys.some(function(key) {
+                return summary['total_' + key] !== undefined;
+            });
+            if (!hasLegacyTotals) return null;
+            keys.forEach(function(key) { flat[key] = summary['total_' + key] || 0; });
+            return flat;
+        }
+
+        function updateSummaryFromFunder(summary, metric, stage) {
+            if (metric === undefined) metric = document.getElementById('cb1').checked;
+            if (stage === undefined) stage = document.getElementById('cb2').checked;
+            let percentages = summaryPercentages(summary, metric, stage);
+            let classes = {
+                european: 'european',
+                asian: 'asian',
+                african: 'african',
+                afamafcam: 'african-american-or-afro-caribbean',
+                hisorlatinam: 'hispanic-or-latin-american',
+                othermixed: 'other-mixed'
+            };
+            if (!percentages) return;
+            Object.keys(classes).forEach(function(key) {
+                let value = +(percentages[key] || 0);
+                let tile = $('#summary .tile-numbers.' + classes[key]);
+                tile.find('.filling').css('height', value + '%');
+                tile.find('.percentage').text(Math.round(value * 100) / 100 + '%');
+            });
+        }
+
+        function redrawDashboardData(payload) {
+            let switches = {
+                metric: document.getElementById('cb1').checked,
+                stage: document.getElementById('cb2').checked
+            };
+            let state = captureDashboardState();
+
+            timeseriesData = payload.tsPlot;
+            heatData = payload.heatMap;
+            mapData = payload.chloroMap;
+            doughnutData = payload.doughnutGraph;
+            bubbleData = payload.bubbleGraph;
+			activeSummaryData = payload.summary;
+
+            drawWorldMapChart(mapData, switches.metric, state.worldMap);
+            drawTimeSeries(timeseriesData, '#timeSeries', switches.metric, switches.stage);
+            drawHeatMap(heatData, switches.metric, switches.stage, ancestriesData, state.heatMap);
+            drawDoughnutGraph('#doughnutGraph', doughnutData, switches.metric, switches.stage, state.doughnut);
+            drawBubbleGraph('#bubbleGraph', bubbleData, switches.stage, true);
+            updateSummaryFromFunder(payload.summary, switches.metric, switches.stage);
+            filtersTitle(switches.metric, switches.stage);
+            setDescription();
+        }
+
+        function selectFunder(slug) {
+            if (!baseDashboardReady) return;
+            let selected = $('#funder-filter').select2('data')[0] || null;
+            updateFunderActions(slug ? selected : null);
+
+            if (funderRequest && funderRequest.abort) funderRequest.abort();
+            if (!slug) {
+                activeFunder = null;
+                $('#funder-status').text('All published GWAS');
+                redrawDashboardData(baseDashboardData);
+                return;
+            }
+
+            $('#funder-status').text('Loading ' + selected.text + '...');
+            $('.funder-toolbar').addClass('is-loading');
+            funderRequest = $.getJSON('/json/funders/' + encodeURIComponent(slug) + '.json')
+                .done(function(payload) {
+                    activeFunder = payload.funder;
+                    redrawDashboardData(payload);
+                    $('#funder-status').text(
+                        payload.report.studyCount.toLocaleString() + ' linked publications; ' +
+                        payload.report.participantCount.toLocaleString() + ' participants'
+                    );
+                })
+                .fail(function(xhr, status) {
+                    if (status !== 'abort') {
+                        $('#funder-status').text('Could not load this funder');
+                    }
+                })
+                .always(function() {
+                    $('.funder-toolbar').removeClass('is-loading');
+                    funderRequest = null;
+                });
+        }
+
+        function initFunderFilter() {
+            let select = $('#funder-filter');
+            select.select2({
+                width: '100%',
+                placeholder: 'All funders',
+                allowClear: true,
+                ajax: {
+                    url: '/api/funders',
+                    dataType: 'json',
+					data: function(params) {
+						return {search: params.term || ''};
+					},
+                    processResults: function(data) { return {results: data.results}; }
+                },
+                templateResult: function(entry) {
+                    if (!entry.id) return entry.text;
+                    return $('<span class="funder-option"><strong></strong><small></small></span>')
+                        .find('strong').text(entry.text).end()
+                        .find('small').text(entry.studyCount + ' publications').end();
+                }
+            });
+            select.on('select2:select', function(event) {
+                selectFunder(event.params.data.id);
+            });
+            select.on('select2:clear', function() { selectFunder(''); });
+        }
 
         function highlight(box) {
             box.addClass('highlight');
@@ -103,27 +314,18 @@
         function redrawGraph(el) {
             let switchMetric = document.getElementById('cb1');
             let switchStage = document.getElementById('cb2');
-            let mapNode = d3.select('#worldMap .svg-container').node();
-            let mapZoom = mapNode ? d3.zoomTransform(mapNode) : d3.zoomIdentity;
-            let viewState = {
-                heatMap: {
-                    year: $('.heat-map-change-year span').text()
-                },
-                worldMap: {
-                    year: $('.world-map-change-year span').text(),
-                    zoom: {x: mapZoom.x, y: mapZoom.y, k: mapZoom.k}
-                },
-                doughnut: {
-                    year: $('.doughnut-graph-change-year span').text(),
-                    parentTerm: $('#doughnutGraph .filter select[name="parentTerms"]').val()
-                }
-            };
+            let viewState = captureDashboardState();
 
             // Redraw with Studies
             drawWorldMapChart(mapData, switchMetric.checked, viewState.worldMap);
             drawTimeSeries(timeseriesData, '#timeSeries', switchMetric.checked, switchStage.checked);
             drawHeatMap(heatData, switchMetric.checked, switchStage.checked, ancestriesData, viewState.heatMap);
             drawDoughnutGraph("#doughnutGraph", doughnutData, switchMetric.checked, switchStage.checked, viewState.doughnut);
+			updateSummaryFromFunder(
+				activeSummaryData || baseDashboardData.summary,
+				switchMetric.checked,
+				switchStage.checked
+			);
 
             // Change titles
             filtersTitle(switchMetric.checked, switchStage.checked);

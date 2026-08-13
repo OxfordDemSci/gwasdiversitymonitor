@@ -215,3 +215,264 @@
     padding-right: 55px;
   }
 }
+
+.funder-toolbar {
+  min-height: 54px;
+  margin: 0 0 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid $light-grey;
+  background: $white;
+  @include flexbox;
+  @include align-items(center);
+  gap: 12px;
+
+  &__field {
+    width: 280px;
+    @include flexbox;
+    @include align-items(center);
+    gap: 10px;
+
+    label {
+      color: $dark-purple;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    .select2-container {
+      min-width: 190px;
+    }
+  }
+
+  &__status {
+    color: $blue-grey;
+    font-size: $small-size;
+    line-height: 18px;
+  }
+
+  &__actions {
+    margin-left: auto;
+    @include flexbox;
+    @include align-items(center);
+    gap: 4px;
+  }
+
+  &__action {
+    min-width: 54px;
+    padding: 7px 8px;
+    color: $dark-purple;
+    cursor: pointer;
+    font-weight: bold;
+    text-align: center;
+
+    i {
+      margin-right: 4px;
+    }
+
+    &.is-disabled {
+      opacity: .35;
+      pointer-events: none;
+    }
+  }
+
+  &.is-loading {
+    opacity: .7;
+  }
+}
+
+.funder-option {
+  @include flexbox;
+  @include justify-content(space-between);
+  gap: 16px;
+
+  small {
+    color: $blue-grey;
+  }
+}
+
+.funder-report {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 32px 24px 48px;
+  color: $gwas-content-black;
+
+  &__header,
+  &__actions,
+  &__metrics,
+  &__ancestry,
+  &__traits li {
+    @include flexbox;
+  }
+
+  &__header {
+    @include align-items(flex-start);
+    @include justify-content(space-between);
+    padding-bottom: 20px;
+    border-bottom: 3px solid $primary;
+
+    h1 {
+      margin: 4px 0;
+      color: $dark-purple;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    p,
+    small {
+      margin: 0;
+      color: $blue-grey;
+    }
+  }
+
+  &__actions {
+    gap: 8px;
+
+    .btn {
+      border: 0;
+      background: $primary;
+      color: $white;
+      cursor: pointer;
+    }
+  }
+
+  &__metrics {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin: 24px 0 32px;
+    border: 1px solid $light-grey;
+
+    div {
+      min-width: 0;
+      padding: 18px 12px;
+      border-right: 1px solid $light-grey;
+
+      &:last-child {
+        border-right: 0;
+      }
+    }
+
+    strong,
+    span {
+      display: block;
+    }
+
+    strong {
+      overflow-wrap: anywhere;
+      color: $dark-purple;
+      font-size: 20px;
+    }
+
+    span {
+      margin-top: 4px;
+      color: $blue-grey;
+      font-size: $small-size;
+    }
+  }
+
+  &__section {
+    margin-top: 30px;
+
+    h2 {
+      color: $dark-purple;
+      font-size: 20px;
+      letter-spacing: 0;
+    }
+  }
+
+  &__ancestries {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 24px;
+  }
+
+  &__ancestry {
+    display: grid;
+    grid-template-columns: minmax(150px, 1fr) 2fr 56px;
+    @include align-items(center);
+    gap: 10px;
+
+    div {
+      height: 10px;
+      background: $light-grey;
+    }
+
+    i {
+      display: block;
+      height: 100%;
+      background: $primary;
+    }
+
+    strong {
+      text-align: right;
+    }
+  }
+
+  &__traits {
+    margin: 0;
+    padding: 0;
+    list-style-position: inside;
+
+    li {
+      @include justify-content(space-between);
+      gap: 20px;
+      padding: 8px 2px;
+      border-bottom: 1px solid $light-grey;
+    }
+  }
+
+  &__note {
+    margin-top: 36px;
+    padding-top: 14px;
+    border-top: 1px solid $light-grey;
+    color: $blue-grey;
+    font-size: $small-size;
+  }
+}
+
+@media screen and (max-width: $mobile-breakpoint) {
+  .funder-toolbar {
+    @include align-items(stretch);
+    flex-wrap: wrap;
+
+    &__field {
+      width: 100%;
+    }
+
+    &__actions {
+      margin-left: 0;
+    }
+  }
+
+  .funder-report {
+    &__header {
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    &__metrics,
+    &__ancestries {
+      grid-template-columns: 1fr;
+    }
+
+    &__metrics div {
+      border-right: 0;
+      border-bottom: 1px solid $light-grey;
+    }
+  }
+}
+
+@media print {
+  #header,
+  .funder-report__actions,
+  #footer {
+    display: none !important;
+  }
+
+  .container.main {
+    padding-top: 0 !important;
+  }
+
+  .funder-report {
+    max-width: none;
+    padding: 0;
+  }
+}

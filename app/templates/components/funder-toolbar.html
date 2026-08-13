@@ -1,0 +1,22 @@
+<section class="funder-toolbar" aria-label="Funder filter">
+    <div class="funder-toolbar__field">
+        <label for="funder-filter">Funder</label>
+        <select id="funder-filter" aria-label="Filter dashboard by funder" disabled>
+            <option value="">All funders</option>
+        </select>
+    </div>
+    <span id="funder-status" class="funder-toolbar__status" aria-live="polite">
+        All published GWAS
+    </span>
+    <div class="funder-toolbar__actions">
+        <a id="funder-data-download" class="funder-toolbar__action is-disabled"
+           aria-disabled="true" title="Download selected funder data">
+            <i class="icon-download-data" aria-hidden="true"></i>
+            <span>Data</span>
+        </a>
+        <a id="funder-report-link" class="funder-toolbar__action is-disabled"
+           aria-disabled="true" title="Open selected funder report">
+            <span>Report</span>
+        </a>
+    </div>
+</section>

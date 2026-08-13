@@ -5,6 +5,7 @@ from flask import send_file, jsonify
 from flask import abort
 from app import app
 from app import DataLoader
+from app.FunderData import FunderDataStore, FunderDataUnavailable
 import os
 
 @app.context_processor
@@ -118,6 +119,80 @@ def getFilterTraits():
         return jsonify(results=dataLoader.filterTraits(search))
 
 
+@app.route("/api/funders", methods=["GET"])
+def getFilterFunders():
+    search = (
+        request.args.get("search")
+        or request.args.get("term")
+        or ""
+    ).strip().casefold()
+    with DataLoader.published_data_lock() as published_path:
+        store = FunderDataStore(published_path)
+        return jsonify(results=[
+            {
+                "id": entry["slug"],
+                "text": entry["name"],
+                "studyCount": entry["studyCount"],
+            }
+            for entry in store.entries()
+            if not search or search in entry["name"].casefold()
+            or search in entry["slug"].casefold()
+        ])
+
+
+@app.route("/json/funders/<slug>.json")
+def getFunderDashboard(slug):
+    with DataLoader.published_data_lock() as published_path:
+        store = FunderDataStore(published_path)
+        try:
+            path = store.dashboard_path(slug)
+        except KeyError:
+            abort(404)
+        if not os.path.isfile(path):
+            abort(404)
+        return send_file(path, mimetype="application/json", conditional=True)
+
+
+@app.route("/download/funders/<slug>.zip")
+def getFunderDownload(slug):
+    with DataLoader.published_data_lock() as published_path:
+        store = FunderDataStore(published_path)
+        try:
+            entry = store.entry(slug)
+            path = store.download_path(slug)
+        except KeyError:
+            abort(404)
+        if not os.path.isfile(path):
+            abort(404)
+        return send_file(
+            path,
+            as_attachment=True,
+            download_name=f"gwas-funder-{slug}.zip",
+        )
+
+
+@app.route("/reports/funders/<slug>")
+def getFunderReport(slug):
+    with DataLoader.published_data_lock() as published_path:
+        store = FunderDataStore(published_path)
+        try:
+            dashboard = store.dashboard(slug)
+        except KeyError:
+            abort(404)
+        return render_template(
+            "pages/funder-report.html",
+            title=f"{dashboard['funder']['name']} report",
+            funder=dashboard["funder"],
+            report=dashboard["report"],
+            summary=dashboard["summary"]["overallParticipants"],
+        )
+
+
 @app.errorhandler(DataLoader.PublishedDataUnavailable)
 def published_data_unavailable(error):
     return Response(str(error), status=503, mimetype='text/plain')
+
+
+@app.errorhandler(FunderDataUnavailable)
+def funder_data_unavailable(error):
+    return Response(str(error), status=503, mimetype="text/plain")

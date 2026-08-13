@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block content %}
+<main class="funder-report">
+    <header class="funder-report__header">
+        <div>
+            <small>GWAS Diversity Monitor</small>
+            <h1>{{ funder.name }}</h1>
+            <p>Funding-linked diversity report</p>
+        </div>
+        <div class="funder-report__actions">
+            <a class="btn" href="{{ url_for('getFunderDownload', slug=funder.slug) }}">
+                <i class="icon-download-data" aria-hidden="true"></i>
+                Data
+            </a>
+            <button class="btn" type="button" onclick="window.print()">Print / PDF</button>
+        </div>
+    </header>
+
+    <section class="funder-report__metrics" aria-label="Report summary">
+        <div><strong>{{ "{:,}".format(report.studyCount) }}</strong><span>Publications</span></div>
+        <div><strong>{{ "{:,}".format(report.participantCount) }}</strong><span>Participants</span></div>
+        <div><strong>{{ "{:,}".format(report.ancestryRecordCount) }}</strong><span>Ancestry records</span></div>
+        <div><strong>{{ report.firstStudyDate or "Not available" }}</strong><span>First study</span></div>
+        <div><strong>{{ report.latestStudyDate or "Not available" }}</strong><span>Latest study</span></div>
+    </section>
+
+    <section class="funder-report__section">
+        <h2>Participant ancestry distribution</h2>
+        <div class="funder-report__ancestries">
+            {% for label, key in [
+                ('European', 'european'),
+                ('Asian', 'asian'),
+                ('African', 'african'),
+                ('African American or Afro-Caribbean', 'afamafcam'),
+                ('Hispanic or Latin American', 'hisorlatinam'),
+                ('Other/Mixed', 'othermixed')
+            ] %}
+            <div class="funder-report__ancestry">
+                <span>{{ label }}</span>
+                <div><i style="width: {{ summary[key] }}%"></i></div>
+                <strong>{{ "%.2f"|format(summary[key]) }}%</strong>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="funder-report__section">
+        <h2>Most represented diseases and traits</h2>
+        <ol class="funder-report__traits">
+            {% for trait in report.topTraits %}
+            <li><span>{{ trait.name }}</span><strong>{{ trait.studies }}</strong></li>
+            {% endfor %}
+        </ol>
+    </section>
+
+    <footer class="funder-report__note">
+        Funding links are derived from PubMed grant metadata and may not capture
+        every source of support acknowledged by each publication.
+    </footer>
+</main>
+{% endblock %}

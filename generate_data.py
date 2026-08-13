@@ -26,11 +26,12 @@ from app.DataLoader import (
     TOPLOT_RUNTIME_FILES,
     published_data_lock,
 )
+import funder_pipeline
 
 warnings.filterwarnings("ignore")
 
 
-GENERATION_STATE_VERSION = 2
+GENERATION_STATE_VERSION = 3
 GENERATION_STATE_FILE = '.generation_complete.json'
 GENERATION_CONTROL_DIRECTORY = '.generate_data'
 GENERATION_WORKSPACE_DIRECTORY = 'workspace'
@@ -2210,8 +2211,16 @@ def _implementation_fingerprints(repository_path):
     implementation_files = (
         'generate_data.py',
         'app/DataLoader.py',
+        'funder_pipeline.py',
+        'funder_data/funder_cleaner.json',
     )
     return _fingerprint_files(repository_path, implementation_files)
+
+
+def _expected_published_files(data_path):
+    return PUBLISHED_DATA_FILES + funder_pipeline.funder_artifact_files(
+        data_path
+    )
 
 
 def _validate_raw_inputs(data_path):
@@ -2377,10 +2386,12 @@ def validate_generated_release(data_path, static_bundle_path):
                 'The ancestry dictionary and data_static.zip member differ'
             )
 
+    funder_files = funder_pipeline.validate_funder_artifacts(data_path)
+    published_files = PUBLISHED_DATA_FILES + funder_files
     return {
         'raw_fingerprints': raw_fingerprints,
         'artifact_fingerprints': _fingerprint_files(
-            data_path, PUBLISHED_DATA_FILES
+            data_path, published_files
         ),
         'static_bundle_fingerprint': _file_fingerprint(static_bundle_path),
     }
@@ -2409,7 +2420,7 @@ def _completion_state_valid(data_path, repository_path=None,
                 state.get('input_static_bundle_fingerprint'), dict):
             return False
         artifacts = state.get('artifact_fingerprints', {})
-        if set(artifacts) != set(PUBLISHED_DATA_FILES):
+        if set(artifacts) != set(_expected_published_files(data_path)):
             return False
         if not _fingerprints_match(data_path, artifacts):
             return False
@@ -2679,6 +2690,30 @@ def _run_wrangling(data_path, static_bundle_path, timeupdated=None,
     )
 
 
+def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
+    """Build funder outputs in the staged release, reusing its PubMed cache."""
+    funder_root = os.path.join(data_path, 'funders')
+    cache_path = os.path.join(funder_root, 'pubmed_grants.json')
+    previous_cache = os.path.join(
+        previous_data_path or '', 'funders', 'pubmed_grants.json'
+    )
+    os.makedirs(funder_root, exist_ok=True)
+    if not os.path.isfile(cache_path) and os.path.isfile(previous_cache):
+        shutil.copy2(previous_cache, cache_path)
+        diversity_logger.info('Reused the previous PubMed funding cache.')
+
+    cache = funder_pipeline.collect_pubmed_grants(data_path, cache_path)
+    index = funder_pipeline.build_funder_artifacts(
+        repository_path,
+        data_path,
+        cache,
+        os.path.join(repository_path, 'funder_data', 'funder_cleaner.json'),
+    )
+    diversity_logger.info(
+        'Build of %d funder dashboards: Complete', len(index['funders'])
+    )
+
+
 def _build_completion_state(repository_path, validation,
                             input_static_bundle_fingerprint=None):
     if input_static_bundle_fingerprint is None:
@@ -2750,7 +2785,8 @@ def _staged_state_valid(paths, repository_path=None):
         if raw_fingerprints != _workspace_raw_fingerprints(paths):
             return False
         artifacts = state.get('artifact_fingerprints', {})
-        if set(artifacts) != set(PUBLISHED_DATA_FILES):
+        if set(artifacts) != set(
+                _expected_published_files(paths['workspace_data'])):
             return False
         if not _fingerprints_match(paths['workspace_data'], artifacts):
             return False
@@ -2804,6 +2840,15 @@ def _verified_previous_runtime_fingerprints(repository_path, data_path):
         return None
 
 
+def _verified_previous_funder_fingerprints(data_path):
+    """Return trusted funder files when the live release already has them."""
+    try:
+        relative_paths = funder_pipeline.validate_funder_artifacts(data_path)
+        return _fingerprint_files(data_path, relative_paths)
+    except Exception:
+        return {}
+
+
 def _create_previous_release_snapshot(repository_path, data_path, paths):
     """Snapshot the coherent runtime release before live publication."""
     if os.path.isdir(paths['fallback_data']):
@@ -2819,7 +2864,11 @@ def _create_previous_release_snapshot(repository_path, data_path, paths):
         return None
 
     try:
-        for relative_path in RUNTIME_DATA_FILES:
+        snapshot_fingerprints = dict(runtime_fingerprints)
+        snapshot_fingerprints.update(
+            _verified_previous_funder_fingerprints(data_path)
+        )
+        for relative_path in snapshot_fingerprints:
             source_path = os.path.join(data_path, relative_path)
             target_path = os.path.join(paths['fallback_data'], relative_path)
             os.makedirs(os.path.dirname(target_path), exist_ok=True)
@@ -2856,7 +2905,7 @@ def _create_previous_release_snapshot(repository_path, data_path, paths):
         )
 
         if not _fingerprints_match(
-                paths['fallback_data'], runtime_fingerprints):
+                paths['fallback_data'], snapshot_fingerprints):
             raise ValueError(
                 'Previous release snapshot differs from its live manifest'
             )
@@ -2922,7 +2971,12 @@ def _publish_staged_release(repository_path, data_path, paths):
                 'fallback_data': fallback_data,
             })
 
-    for relative_path in PUBLISHED_DATA_FILES:
+    artifact_paths = list(state['artifact_fingerprints'])
+    funder_index = 'funders/index.json'
+    if funder_index in artifact_paths:
+        artifact_paths.remove(funder_index)
+        artifact_paths.append(funder_index)
+    for relative_path in artifact_paths:
         _atomic_copy(
             os.path.join(paths['workspace_data'], relative_path),
             os.path.join(data_path, relative_path),
@@ -3048,6 +3102,9 @@ def generate_and_publish(repository_path, ebi_download,
             _run_wrangling(
                 paths['workspace_data'], paths['workspace_bundle'],
                 timeupdated, previous_data_path
+            )
+            _run_funder_wrangling(
+                repository_path, paths['workspace_data'], previous_data_path
             )
             validation = validate_generated_release(
                 paths['workspace_data'], paths['workspace_bundle']
