@@ -9,6 +9,7 @@ import pandas as pd
 
 from app import app as flask_app
 from app.FunderData import FunderDataStore, FunderDataUnavailable
+from app.DashboardFilters import DashboardFilterStore, split_cohorts
 from funder_pipeline import (
     _promote_funder_artifacts,
     build_heat_map,
@@ -84,6 +85,88 @@ class FunderSummaryTests(unittest.TestCase):
 
         self.assertEqual(list(heatmap), ["2024"])
         self.assertEqual(heatmap["2024"]["1"]["value"], "0.0")
+
+
+class DatasetFilterTests(unittest.TestCase):
+    def test_cohort_values_are_split_into_individual_datasets(self):
+        self.assertEqual(split_cohorts("UKB| CHIMGEN |"), ["UKB", "CHIMGEN"])
+        self.assertEqual(split_cohorts(None), [])
+
+    def test_dataset_and_funder_selection_is_an_intersection(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        store._dataset_entries = [
+            {"id": "ukb", "name": "UKB", "studyCount": 2}
+        ]
+        store._dataset_accessions = {"ukb": frozenset({"A", "B"})}
+        store._funder_pmids = {"wellcome": frozenset({"2", "3"})}
+        store._funder_entries = {
+            "wellcome": {"slug": "wellcome", "name": "Wellcome"}
+        }
+        studies = pd.DataFrame([
+            {"STUDY ACCESSION": "A", "PUBMEDID": "1"},
+            {"STUDY ACCESSION": "B", "PUBMEDID": "2"},
+            {"STUDY ACCESSION": "C", "PUBMEDID": "3"},
+        ])
+        ancestry = pd.DataFrame([
+            {"STUDY ACCESSION": accession} for accession in ("A", "B", "C")
+        ])
+        bubbles = pd.DataFrame([
+            {"ACCESSION": accession} for accession in ("A", "B", "C")
+        ])
+        store._sources = (studies, ancestry, pd.DataFrame(), bubbles,
+                          pd.DataFrame())
+
+        _, _, selected, selected_ancestry, selected_bubbles, _, _ = \
+            store._selection("ukb", "wellcome")
+
+        self.assertEqual(selected["STUDY ACCESSION"].tolist(), ["B"])
+        self.assertEqual(selected_ancestry["STUDY ACCESSION"].tolist(), ["B"])
+        self.assertEqual(selected_bubbles["ACCESSION"].tolist(), ["B"])
+
+    def test_each_selector_can_be_constrained_by_the_other(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        store._dataset_entries = [
+            {"id": "ukb", "name": "UKB", "studyCount": 2},
+            {"id": "other", "name": "Other", "studyCount": 1},
+        ]
+        store._dataset_accessions = {
+            "ukb": frozenset({"A", "B"}),
+            "other": frozenset({"C"}),
+        }
+        store._funder_pmids = {
+            "wellcome": frozenset({"2"}), "another": frozenset({"3"})
+        }
+        store._funder_entries = {}
+        studies = pd.DataFrame([
+            {"STUDY ACCESSION": "A", "PUBMEDID": "1"},
+            {"STUDY ACCESSION": "B", "PUBMEDID": "2"},
+            {"STUDY ACCESSION": "C", "PUBMEDID": "3"},
+        ])
+        store._sources = (
+            studies, pd.DataFrame(), pd.DataFrame(), pd.DataFrame(),
+            pd.DataFrame()
+        )
+
+        self.assertEqual(
+            [entry["id"] for entry in store.datasets("", "wellcome")],
+            ["ukb"],
+        )
+        self.assertEqual(store.funders_for_dataset("ukb"), {"wellcome"})
+
+    def test_dataset_list_remains_complete_and_alphabetical(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        store._dataset_entries = [
+            {"id": f"dataset-{index}", "name": f"Dataset {index}",
+             "studyCount": index}
+            for index in range(25)
+        ]
+        store._dataset_accessions = {}
+
+        results = store.datasets()
+
+        self.assertEqual(len(results), 25)
+        self.assertEqual(results[0]["name"], "Dataset 0")
+        self.assertEqual(results[-1]["name"], "Dataset 24")
 
 
 class FunderArtifactTests(unittest.TestCase):
@@ -248,6 +331,78 @@ class FunderRouteTests(unittest.TestCase):
             [entry["text"] for entry in results],
             ["World Health Organization"],
         )
+
+    def test_dataset_search_splits_cohort_membership(self):
+        response = self.client.get("/api/datasets?search=CHIMGEN")
+        results = response.get_json()["results"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("CHIMGEN", [entry["text"] for entry in results])
+
+    def test_filtered_dashboard_route_passes_both_selections(self):
+        with tempfile.TemporaryDirectory() as directory:
+            dashboard_path = Path(directory) / "dashboard.json"
+            dashboard_path.write_text('{"selection":{"studyCount":1}}')
+            store = mock.Mock()
+            store.dashboard_path.return_value = str(dashboard_path)
+            with mock.patch(
+                    "app.routes.get_dashboard_filter_store",
+                    return_value=store):
+                response = self.client.get(
+                    "/json/filtered-dashboard.json"
+                    "?dataset=ukb&funder=wellcome-trust"
+                )
+
+        self.assertEqual(response.status_code, 200)
+        store.dashboard_path.assert_called_once_with(
+            "ukb", "wellcome-trust"
+        )
+        response.close()
+
+    def test_dataset_download_and_report_keep_the_selection(self):
+        report_payload = {
+            "selection": {
+                "dataset": {"id": "ukb", "name": "UKB"},
+                "funder": None,
+                "studyCount": 1,
+            },
+            "report": {
+                "studyCount": 1, "participantCount": 10,
+                "ancestryRecordCount": 1, "firstStudyDate": "2020-01-01",
+                "latestStudyDate": "2020-01-01", "topTraits": [],
+            },
+            "summary": {"overallParticipants": {
+                "european": 100, "asian": 0, "african": 0,
+                "afamafcam": 0, "hisorlatinam": 0, "othermixed": 0,
+            }},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "ukb.zip"
+            with zipfile.ZipFile(archive, "w") as output:
+                output.writestr("selection.json", "{}")
+            store = mock.Mock()
+            store.dataset.return_value = {"id": "ukb", "name": "UKB"}
+            store.download_path.return_value = str(archive)
+            store.dashboard.return_value = report_payload
+            with mock.patch(
+                    "app.routes.get_dashboard_filter_store",
+                    return_value=store):
+                download = self.client.get(
+                    "/download/filtered-dashboard.zip?dataset=ukb"
+                )
+                report = self.client.get(
+                    "/reports/filtered-dashboard?dataset=ukb"
+                )
+
+        self.assertEqual(download.status_code, 200)
+        self.assertIn(
+            "gwas-selection-ukb.zip",
+            download.headers["Content-Disposition"],
+        )
+        self.assertEqual(report.status_code, 200)
+        self.assertIn(b"Dataset diversity report", report.data)
+        self.assertIn(b"UKB", report.data)
+        download.close()
 
 
 if __name__ == "__main__":

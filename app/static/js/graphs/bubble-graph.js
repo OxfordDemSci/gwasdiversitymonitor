@@ -199,6 +199,25 @@ function __dcPatchGetYearAndDataMax() {
 }
 
 
+function __dcDestroyBubbleGraph(selector) {
+    var previous = window.__bubbleCanvasState;
+
+    if (previous) {
+        previous.destroyed = true;
+        if (previous.resizeObserver) previous.resizeObserver.disconnect();
+        if (previous.resizeTimer) clearTimeout(previous.resizeTimer);
+        if (previous.resizeFrame) cancelAnimationFrame(previous.resizeFrame);
+        if (previous.alignFrame) cancelAnimationFrame(previous.alignFrame);
+    }
+
+    $(window).off("resize.canvasBubbleLayout");
+    $(selector).find("canvas.bubble-canvas").remove();
+
+    if (window.__bubbleCanvasState === previous) {
+        window.__bubbleCanvasState = null;
+    }
+}
+
 function drawBubbleGraph(selector, data, replication, preserveFilters) {
     __dcPatchGetYearAndDataMax();
 
@@ -206,13 +225,9 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     data = __dcSelectData(data, replication);
 
     var bubbleGraph = $(selector);
-    if (window.__bubbleCanvasState && window.__bubbleCanvasState.resizeObserver) {
-        window.__bubbleCanvasState.resizeObserver.disconnect();
-    }
-    $(window).off("resize.canvasBubbleLayout");
+    __dcDestroyBubbleGraph(selector);
 
     bubbleGraph.css("position", "relative");
-    bubbleGraph.find("#bubbleCanvas").remove();
 
     var tickMax = 8;
     var graphHeight = ($(window).width() < 480) ? 300 : 360;
@@ -257,20 +272,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     var minYear = yearExtent.minYear;
     var maxYear = yearExtent.maxYear;
 
-    const xScale = d3.scaleTime()
-        .domain([minYear, maxYear])
-        .range([0, width]);
-
-    svg.append("g")
-        .attr('class', 'axis-x')
-        .attr("transform", "translate(0," + height + ")")
-        .call(d3.axisBottom(xScale).ticks(6));
-
     var max = getDataMax(data);
-
-    const yScale = d3.scaleLinear()
-        .domain([0, max])
-        .range([height, 0]);
 
     var sizeScale = d3.scalePow()
         .exponent(2)
@@ -278,6 +280,19 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         .range([5, 40]);
 
     var maxRadius = Math.ceil(sizeScale(max)) + 4;
+
+    const xScale = d3.scaleTime()
+        .domain([minYear, maxYear])
+        .range([maxRadius, width - maxRadius]);
+
+    svg.append("g")
+        .attr('class', 'axis-x')
+        .attr("transform", "translate(0," + height + ")")
+        .call(d3.axisBottom(xScale).ticks(6));
+
+    const yScale = d3.scaleLinear()
+        .domain([0, max])
+        .range([height - maxRadius, maxRadius]);
 
     svg.append('g')
         .attr('class', 'grid')
@@ -330,8 +345,8 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     var ctx = canvas.getContext("2d", { alpha: true });
     var dpr = window.devicePixelRatio || 1;
 
-    var canvasW = width + 2 * maxRadius;
-    var canvasH = height + 2 * maxRadius;
+    var canvasW = width;
+    var canvasH = height;
 
     canvas.style.position = "absolute";
     canvas.style.width = canvasW + "px";
@@ -347,20 +362,25 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
 
     leftPanel.appendChild(canvas);
 
+    function isCurrentState() {
+        return !state.destroyed &&
+            window.__bubbleCanvasState === state &&
+            state.canvas.isConnected;
+    }
+
     function alignCanvasToPlot() {
+        if (!isCurrentState()) return;
+
         var leftRect = leftPanel.getBoundingClientRect();
         var svgRect = mainSvg.node().getBoundingClientRect();
         var viewBox = mainSvg.node().viewBox.baseVal;
         var scale = viewBox.width ? Math.min(svgRect.width / viewBox.width, svgRect.height / viewBox.height) : 1;
 
-        canvas.style.left = (svgRect.left - leftRect.left + (margin.left - maxRadius) * scale) + "px";
-        canvas.style.top = (svgRect.top - leftRect.top + (margin.top - maxRadius) * scale) + "px";
+        canvas.style.left = (svgRect.left - leftRect.left + margin.left * scale) + "px";
+        canvas.style.top = (svgRect.top - leftRect.top + margin.top * scale) + "px";
         canvas.style.width = (canvasW * scale) + "px";
         canvas.style.height = (canvasH * scale) + "px";
     }
-
-    alignCanvasToPlot();
-    requestAnimationFrame(alignCanvasToPlot);
 
     var state = {
         selector: selector,
@@ -373,7 +393,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         width: width,
         height: height,
         margin: margin,
-        pad: maxRadius,
+        pad: 0,
         canvasW: canvasW,
         canvasH: canvasH,
         canvas: canvas,
@@ -385,16 +405,27 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         cellSize: Math.max(56, maxRadius * 2),
         selectedIndex: null,
         drawCount: 0,
-        visibleCount: 0
+        visibleCount: 0,
+        destroyed: false
     };
 
     window.__bubbleCanvasState = state;
     window.__dictComboDebug.canvasFixedGeometry = true;
 
+    alignCanvasToPlot();
+    state.alignFrame = requestAnimationFrame(function() {
+        state.alignFrame = null;
+        alignCanvasToPlot();
+    });
+
     if (window.ResizeObserver) {
         state.resizeObserver = new ResizeObserver(function() {
+            if (!isCurrentState()) return;
             if (state.resizeFrame) cancelAnimationFrame(state.resizeFrame);
-            state.resizeFrame = requestAnimationFrame(alignCanvasToPlot);
+            state.resizeFrame = requestAnimationFrame(function() {
+                state.resizeFrame = null;
+                alignCanvasToPlot();
+            });
         });
         state.resizeObserver.observe(mainSvg.node());
     }
@@ -404,6 +435,9 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     $(window).on("resize.canvasBubbleLayout", function() {
         clearTimeout(state.resizeTimer);
         state.resizeTimer = setTimeout(function() {
+            state.resizeTimer = null;
+            if (!isCurrentState()) return;
+
             var nextPanelWidth = Math.round(bubbleGraph.find(".left").width());
             var nextPixelRatio = window.devicePixelRatio || 1;
 
@@ -575,6 +609,8 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     }
 
     function rebuildPointsAndDraw() {
+        if (!isCurrentState()) return;
+
         var parentFilter = currentParentFilter();
         var ancestryFilters = currentAncestryFilters();
         var selectedTraits = getCurrentTraitSelection();
@@ -723,6 +759,8 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     });
 
     function updateYAxisAndRedraw() {
+        if (!isCurrentState()) return;
+
         var parentFilter = currentParentFilter();
         var ancestryFilters = currentAncestryFilters();
         var selectedTraits = getCurrentTraitSelection();

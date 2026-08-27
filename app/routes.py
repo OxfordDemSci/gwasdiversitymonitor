@@ -6,6 +6,10 @@ from flask import abort
 from app import app
 from app import DataLoader
 from app.FunderData import FunderDataStore, FunderDataUnavailable
+from app.DashboardFilters import (
+    DashboardSelectionUnavailable,
+    get_dashboard_filter_store,
+)
 import os
 
 @app.context_processor
@@ -126,8 +130,17 @@ def getFilterFunders():
         or request.args.get("term")
         or ""
     ).strip().casefold()
+    dataset_id = (request.args.get("dataset") or "").strip()
     with DataLoader.published_data_lock() as published_path:
         store = FunderDataStore(published_path)
+        allowed_funders = None
+        if dataset_id:
+            try:
+                allowed_funders = get_dashboard_filter_store(
+                    published_path
+                ).funders_for_dataset(dataset_id)
+            except KeyError:
+                abort(404)
         return jsonify(results=[
             {
                 "id": entry["slug"],
@@ -135,9 +148,114 @@ def getFilterFunders():
                 "studyCount": entry["studyCount"],
             }
             for entry in store.entries()
-            if not search or search in entry["name"].casefold()
-            or search in entry["slug"].casefold()
+            if (allowed_funders is None or entry["slug"] in allowed_funders)
+            and (not search or search in entry["name"].casefold()
+                 or search in entry["slug"].casefold())
         ])
+
+
+@app.route("/api/datasets", methods=["GET"])
+def getFilterDatasets():
+    search = (
+        request.args.get("search")
+        or request.args.get("term")
+        or ""
+    ).strip()
+    funder_slug = (request.args.get("funder") or "").strip() or None
+    page = max(request.args.get("page", default=1, type=int), 1)
+    page_size = 50
+    with DataLoader.published_data_lock() as published_path:
+        store = get_dashboard_filter_store(published_path)
+        try:
+            entries = store.datasets(search, funder_slug)
+        except KeyError:
+            abort(404)
+        start = (page - 1) * page_size
+        page_entries = entries[start:start + page_size]
+        return jsonify(results=[{
+            "id": entry["id"],
+            "text": entry["name"],
+            "studyCount": entry["studyCount"],
+        } for entry in page_entries], pagination={
+            "more": start + page_size < len(entries),
+        })
+
+
+@app.route("/json/filtered-dashboard.json")
+def getFilteredDashboard():
+    dataset_id = (request.args.get("dataset") or "").strip()
+    funder_slug = (request.args.get("funder") or "").strip() or None
+    if not dataset_id:
+        abort(400)
+    with DataLoader.published_data_lock() as published_path:
+        store = get_dashboard_filter_store(published_path)
+        try:
+            path = store.dashboard_path(dataset_id, funder_slug)
+        except KeyError:
+            abort(404)
+        return send_file(path, mimetype="application/json", conditional=True)
+
+
+@app.route("/download/filtered-dashboard.zip")
+def getFilteredDashboardDownload():
+    dataset_id = (request.args.get("dataset") or "").strip()
+    funder_slug = (request.args.get("funder") or "").strip() or None
+    if not dataset_id:
+        abort(400)
+    with DataLoader.published_data_lock() as published_path:
+        store = get_dashboard_filter_store(published_path)
+        try:
+            dataset = store.dataset(dataset_id)
+            path = store.download_path(dataset_id, funder_slug)
+        except KeyError:
+            abort(404)
+        selection = dataset_id
+        if funder_slug:
+            selection = f"{selection}-{funder_slug}"
+        return send_file(
+            path,
+            as_attachment=True,
+            download_name=f"gwas-selection-{selection}.zip",
+        )
+
+
+@app.route("/reports/filtered-dashboard")
+def getFilteredDashboardReport():
+    dataset_id = (request.args.get("dataset") or "").strip()
+    funder_slug = (request.args.get("funder") or "").strip() or None
+    if not dataset_id:
+        abort(400)
+    with DataLoader.published_data_lock() as published_path:
+        store = get_dashboard_filter_store(published_path)
+        try:
+            dashboard = store.dashboard(dataset_id, funder_slug)
+        except KeyError:
+            abort(404)
+
+        selection = dashboard["selection"]
+        dataset = selection["dataset"]
+        funder = selection["funder"]
+        report_title = dataset["name"]
+        report_subtitle = "Dataset diversity report"
+        if funder:
+            report_title = f"{dataset['name']} / {funder['name']}"
+            report_subtitle = "Dataset and funding-linked diversity report"
+        download_url = request.url_root.rstrip("/") + \
+            "/download/filtered-dashboard.zip?" + request.query_string.decode()
+        return render_template(
+            "pages/funder-report.html",
+            title=f"{report_title} report",
+            report_title=report_title,
+            report_subtitle=report_subtitle,
+            metric_label="Studies",
+            report=dashboard["report"],
+            summary=dashboard["summary"]["overallParticipants"],
+            download_url=download_url,
+            report_note=(
+                "This report reflects the selected dataset"
+                + (" and funder intersection." if funder else ".")
+            ),
+        )
 
 
 @app.route("/json/funders/<slug>.json")
@@ -182,9 +300,18 @@ def getFunderReport(slug):
         return render_template(
             "pages/funder-report.html",
             title=f"{dashboard['funder']['name']} report",
-            funder=dashboard["funder"],
+            report_title=dashboard["funder"]["name"],
+            report_subtitle="Funding-linked diversity report",
+            metric_label="Publications",
             report=dashboard["report"],
             summary=dashboard["summary"]["overallParticipants"],
+            download_url=request.url_root.rstrip("/")
+            + f"/download/funders/{slug}.zip",
+            report_note=(
+                "Funding links are derived from PubMed grant metadata and "
+                "may not capture every source of support acknowledged by "
+                "each publication."
+            ),
         )
 
 
@@ -196,3 +323,8 @@ def published_data_unavailable(error):
 @app.errorhandler(FunderDataUnavailable)
 def funder_data_unavailable(error):
     return Response(str(error), status=503, mimetype="text/plain")
+
+
+@app.errorhandler(DashboardSelectionUnavailable)
+def dashboard_selection_unavailable(error):
+    return jsonify(error=str(error)), 422

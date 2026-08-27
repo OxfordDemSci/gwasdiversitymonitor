@@ -2891,7 +2891,7 @@ button, .btn {
   align-items: center;
   gap: 12px; }
   .funder-toolbar__field {
-    width: 280px;
+    width: 260px;
     display: -webkit-box;
     display: -webkit-flex;
     display: -moz-flex;
@@ -2910,6 +2910,8 @@ button, .btn {
     .funder-toolbar__field .select2-container {
       min-width: 190px; }
   .funder-toolbar__status {
+    min-width: 0;
+    flex: 1;
     color: #78909c;
     font-size: 13px;
     line-height: 18px; }

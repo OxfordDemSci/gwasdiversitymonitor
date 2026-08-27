@@ -5,11 +5,11 @@
     <header class="funder-report__header">
         <div>
             <small>GWAS Diversity Monitor</small>
-            <h1>{{ funder.name }}</h1>
-            <p>Funding-linked diversity report</p>
+            <h1>{{ report_title }}</h1>
+            <p>{{ report_subtitle }}</p>
         </div>
         <div class="funder-report__actions">
-            <a class="btn" href="{{ url_for('getFunderDownload', slug=funder.slug) }}">
+            <a class="btn" href="{{ download_url }}">
                 <i class="icon-download-data" aria-hidden="true"></i>
                 Data
             </a>
@@ -18,7 +18,7 @@
     </header>
 
     <section class="funder-report__metrics" aria-label="Report summary">
-        <div><strong>{{ "{:,}".format(report.studyCount) }}</strong><span>Publications</span></div>
+        <div><strong>{{ "{:,}".format(report.studyCount) }}</strong><span>{{ metric_label }}</span></div>
         <div><strong>{{ "{:,}".format(report.participantCount) }}</strong><span>Participants</span></div>
         <div><strong>{{ "{:,}".format(report.ancestryRecordCount) }}</strong><span>Ancestry records</span></div>
         <div><strong>{{ report.firstStudyDate or "Not available" }}</strong><span>First study</span></div>
@@ -55,8 +55,7 @@
     </section>
 
     <footer class="funder-report__note">
-        Funding links are derived from PubMed grant metadata and may not capture
-        every source of support acknowledged by each publication.
+        {{ report_note }}
     </footer>
 </main>
 {% endblock %}

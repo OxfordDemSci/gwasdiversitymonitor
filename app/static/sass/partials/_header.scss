@@ -227,7 +227,7 @@
   gap: 12px;
 
   &__field {
-    width: 280px;
+    width: 260px;
     @include flexbox;
     @include align-items(center);
     gap: 10px;
@@ -244,6 +244,8 @@
   }
 
   &__status {
+    min-width: 0;
+    flex: 1;
     color: $blue-grey;
     font-size: $small-size;
     line-height: 18px;

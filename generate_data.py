@@ -101,7 +101,7 @@ RAW_REQUIRED_COLUMNS = {
     'catalog/raw/Cat_Anc.tsv': {'BROAD ANCESTRAL CATEGORY'},
     'catalog/raw/Cat_Full.tsv': {'P-VALUE'},
     'catalog/raw/Cat_Map.tsv': {'Disease trait', 'Parent term'},
-    'catalog/raw/Cat_Stud.tsv': {'STUDY ACCESSION'},
+    'catalog/raw/Cat_Stud.tsv': {'STUDY ACCESSION', 'COHORT'},
 }
 
 

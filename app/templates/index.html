@@ -67,8 +67,10 @@
 		let bubbleData;
 			let baseDashboardData = {};
 			let activeFunder = null;
+			let activeDataset = null;
 			let activeSummaryData = null;
-			let funderRequest = null;
+			let dashboardFilterRequest = null;
+			let dashboardFilterRevision = 0;
 			let baseDashboardReady = false;
 
 		function markBaseDashboardReady() {
@@ -81,6 +83,7 @@
 			}) && !!ancestriesData;
 			if (baseDashboardReady) {
 				$('#funder-filter').prop('disabled', false);
+				$('#dataset-filter').prop('disabled', false);
 				updateSummaryFromFunder(baseDashboardData.summary);
 			}
 		}
@@ -88,6 +91,7 @@
         $(document).ready(function() {
 			setDescription();
 			initFunderFilter();
+			initDatasetFilter();
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				if (error) return;
@@ -153,17 +157,31 @@
             };
         }
 
-        function updateFunderActions(entry) {
+        function updateSelectionActions(funderEntry, datasetEntry) {
             let download = $('#funder-data-download');
             let report = $('#funder-report-link');
-            if (!entry) {
+            if (!funderEntry && !datasetEntry) {
                 download.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 report.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 return;
             }
-            download.attr('href', '/download/funders/' + entry.id + '.zip')
+
+            let downloadUrl;
+            let reportUrl;
+            if (datasetEntry) {
+                let query = $.param({
+                    dataset: datasetEntry.id,
+                    funder: funderEntry ? funderEntry.id : ''
+                });
+                downloadUrl = '/download/filtered-dashboard.zip?' + query;
+                reportUrl = '/reports/filtered-dashboard?' + query;
+            } else {
+                downloadUrl = '/download/funders/' + funderEntry.id + '.zip';
+                reportUrl = '/reports/funders/' + funderEntry.id;
+            }
+            download.attr('href', downloadUrl)
                 .attr('aria-disabled', 'false').removeClass('is-disabled');
-            report.attr('href', '/reports/funders/' + entry.id)
+            report.attr('href', reportUrl)
                 .attr('aria-disabled', 'false').removeClass('is-disabled');
         }
 
@@ -242,38 +260,76 @@
             setDescription();
         }
 
-        function selectFunder(slug) {
+        function applyDashboardFilters() {
             if (!baseDashboardReady) return;
-            let selected = $('#funder-filter').select2('data')[0] || null;
-            updateFunderActions(slug ? selected : null);
+            let revision = ++dashboardFilterRevision;
+            let funderSlug = $('#funder-filter').val() || '';
+            let datasetId = $('#dataset-filter').val() || '';
+            let selectedFunder = funderSlug
+                ? ($('#funder-filter').select2('data')[0] || null)
+                : null;
+            let selectedDataset = datasetId
+                ? ($('#dataset-filter').select2('data')[0] || null)
+                : null;
+            updateSelectionActions(selectedFunder, selectedDataset);
 
-            if (funderRequest && funderRequest.abort) funderRequest.abort();
-            if (!slug) {
+            if (dashboardFilterRequest && dashboardFilterRequest.abort) {
+                dashboardFilterRequest.abort();
+            }
+            if (!funderSlug && !datasetId) {
                 activeFunder = null;
+                activeDataset = null;
                 $('#funder-status').text('All published GWAS');
                 redrawDashboardData(baseDashboardData);
                 return;
             }
 
-            $('#funder-status').text('Loading ' + selected.text + '...');
+            let labels = [];
+            if (selectedFunder) labels.push(selectedFunder.text);
+            if (selectedDataset) labels.push(selectedDataset.text);
+            $('#funder-status').text('Loading ' + labels.join(' / ') + '...');
             $('.funder-toolbar').addClass('is-loading');
-            funderRequest = $.getJSON('/json/funders/' + encodeURIComponent(slug) + '.json')
+            let requestUrl = datasetId
+                ? '/json/filtered-dashboard.json?' + $.param({
+                    dataset: datasetId,
+                    funder: funderSlug
+                })
+                : '/json/funders/' + encodeURIComponent(funderSlug) + '.json';
+            let request = $.getJSON(requestUrl);
+            dashboardFilterRequest = request;
+            request
                 .done(function(payload) {
-                    activeFunder = payload.funder;
+                    if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
+                    activeFunder = selectedFunder;
+                    activeDataset = selectedDataset;
                     redrawDashboardData(payload);
-                    $('#funder-status').text(
-                        payload.report.studyCount.toLocaleString() + ' linked publications; ' +
-                        payload.report.participantCount.toLocaleString() + ' participants'
-                    );
+                    if (datasetId) {
+                        $('#funder-status').text(
+                            payload.selection.studyCount.toLocaleString() +
+                            ' matching studies'
+                        );
+                    } else {
+                        $('#funder-status').text(
+                            payload.report.studyCount.toLocaleString() +
+                            ' linked publications; ' +
+                            payload.report.participantCount.toLocaleString() +
+                            ' participants'
+                        );
+                    }
                 })
                 .fail(function(xhr, status) {
+                    if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
                     if (status !== 'abort') {
-                        $('#funder-status').text('Could not load this funder');
+                        let message = xhr.responseJSON && xhr.responseJSON.error;
+                        $('#funder-status').text(
+                            message || 'Could not load this selection'
+                        );
                     }
                 })
                 .always(function() {
+                    if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
                     $('.funder-toolbar').removeClass('is-loading');
-                    funderRequest = null;
+                    dashboardFilterRequest = null;
                 });
         }
 
@@ -283,11 +339,14 @@
                 width: '100%',
                 placeholder: 'All funders',
                 allowClear: true,
-                ajax: {
-                    url: '/api/funders',
-                    dataType: 'json',
+				ajax: {
+					url: '/api/funders',
+					dataType: 'json',
 					data: function(params) {
-						return {search: params.term || ''};
+						return {
+							search: params.term || '',
+							dataset: $('#dataset-filter').val() || ''
+						};
 					},
                     processResults: function(data) { return {results: data.results}; }
                 },
@@ -298,10 +357,41 @@
                         .find('small').text(entry.studyCount + ' publications').end();
                 }
             });
-            select.on('select2:select', function(event) {
-                selectFunder(event.params.data.id);
+            select.on('select2:select select2:clear', applyDashboardFilters);
+        }
+
+        function initDatasetFilter() {
+            let select = $('#dataset-filter');
+            select.select2({
+                width: '100%',
+                placeholder: 'All datasets',
+                allowClear: true,
+                ajax: {
+                    url: '/api/datasets',
+                    dataType: 'json',
+                    delay: 150,
+                    data: function(params) {
+                        return {
+                            search: params.term || '',
+                            funder: $('#funder-filter').val() || '',
+                            page: params.page || 1
+                        };
+                    },
+                    processResults: function(data) {
+                        return {
+                            results: data.results,
+                            pagination: data.pagination
+                        };
+                    }
+                },
+                templateResult: function(entry) {
+                    if (!entry.id) return entry.text;
+                    return $('<span class="funder-option"><strong></strong><small></small></span>')
+                        .find('strong').text(entry.text).end()
+                        .find('small').text(entry.studyCount + ' studies').end();
+                }
             });
-            select.on('select2:clear', function() { selectFunder(''); });
+            select.on('select2:select select2:clear', applyDashboardFilters);
         }
 
         function highlight(box) {
