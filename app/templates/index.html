@@ -310,7 +310,8 @@
                         );
                     } else {
                         $('#funder-status').text(
-                            payload.report.studyCount.toLocaleString() +
+                            (payload.report.publicationCount ||
+                                payload.report.studyCount).toLocaleString() +
                             ' linked publications; ' +
                             payload.report.participantCount.toLocaleString() +
                             ' participants'

@@ -1,61 +1,321 @@
 {% extends "base.html" %}
 
+{% macro number(value) -%}
+    {{ "{:,}".format((value or 0)|int) }}
+{%- endmacro %}
+
+{% macro decimal(value) -%}
+    {{ "{:,.2f}".format((value or 0)|float) }}
+{%- endmacro %}
+
+{% macro metric(value, label, detail=None) -%}
+<div>
+    <strong>{{ value }}</strong>
+    <span>{{ label }}</span>
+    {% if detail %}<small>{{ detail }}</small>{% endif %}
+</div>
+{%- endmacro %}
+
+{% block body_class %}body-{{ browser }} report-page{% endblock %}
+{% block site_header %}{% endblock %}
+{% block site_footer %}{% endblock %}
+
 {% block content %}
 <main class="funder-report">
+<div class="funder-report__print-masthead" aria-hidden="true">
+    <img src="{{ url_for('static', filename='images/logo_white_rect.png') }}" alt="">
+    <span>GWAS diversity evidence report</span>
+</div>
+<table class="funder-report__print-layout" role="presentation">
+    <tbody>
+        <tr>
+            <td>
     <header class="funder-report__header">
-        <div>
-            <small>GWAS Diversity Monitor</small>
-            <h1>{{ report_title }}</h1>
-            <p>{{ report_subtitle }}</p>
-        </div>
-        <div class="funder-report__actions">
-            <a class="btn" href="{{ download_url }}">
-                <i class="icon-download-data" aria-hidden="true"></i>
-                Data
+        <div class="funder-report__identity">
+            <a class="funder-report__brand" href="{{ url_for('index') }}" aria-label="GWAS Diversity Monitor home">
+                <img src="{{ url_for('static', filename='images/logo_white_rect.png') }}" alt="GWAS Diversity Monitor">
             </a>
-            <button class="btn" type="button" onclick="window.print()">Print / PDF</button>
+            <span>Research reports</span>
+        </div>
+        <div class="funder-report__heading">
+            <div>
+                <small>GWAS diversity evidence report</small>
+                <h1>{{ report_title }}</h1>
+                <p>{{ report_subtitle }}</p>
+            </div>
+            <div class="funder-report__actions">
+                <a class="btn" href="{{ download_url }}">
+                    <i class="icon-download-data" aria-hidden="true"></i>
+                    Download data
+                </a>
+                <button class="btn" type="button" onclick="printGwasReport()">Print / save PDF</button>
+            </div>
         </div>
     </header>
+            </td>
+        </tr>
+        <tr>
+            <td>
 
-    <section class="funder-report__metrics" aria-label="Report summary">
-        <div><strong>{{ "{:,}".format(report.studyCount) }}</strong><span>{{ metric_label }}</span></div>
-        <div><strong>{{ "{:,}".format(report.participantCount) }}</strong><span>Participants</span></div>
-        <div><strong>{{ "{:,}".format(report.ancestryRecordCount) }}</strong><span>Ancestry records</span></div>
-        <div><strong>{{ report.firstStudyDate or "Not available" }}</strong><span>First study</span></div>
-        <div><strong>{{ report.latestStudyDate or "Not available" }}</strong><span>Latest study</span></div>
+    <section class="funder-report__section funder-report__section--first">
+        <h2>At a glance</h2>
+        <div class="funder-report__metrics" aria-label="Report summary">
+            {{ metric(number(report.get('studyCount', 0)), 'GWAS studies') }}
+            {{ metric(number(report.get('publicationCount', report.get('studyCount', 0))), 'Publications') }}
+            {{ metric(number(report.get('participantCount', 0)), 'Participants') }}
+            {{ metric(number(report.get('ancestryRecordCount', 0)), 'Ancestry records') }}
+            {{ metric(number(report.get('associationCount', 0)), 'Associations') }}
+            {{ metric(number(report.get('traitCount', 0)), 'Diseases and traits') }}
+            {{ metric(number(report.get('cohortCount', 0)), 'Named cohorts') }}
+            {{ metric(number(report.get('journalCount', 0)), 'Journals') }}
+        </div>
     </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
+
+    <section class="funder-report__section">
+        <h2>Publication and study profile</h2>
+        <div class="funder-report__metric-grid">
+            {{ metric(report.get('firstStudyDate') or 'Not available', 'First publication') }}
+            {{ metric(report.get('latestStudyDate') or 'Not available', 'Latest publication') }}
+            {{ metric(number(report.get('yearSpan', 0)), 'Years represented') }}
+            {{ metric(report.get('medianPublicationYear') or 'Not available', 'Median publication year') }}
+            {{ metric(number(report.get('recentPublicationCount', 0)), 'Publications in latest 5 years') }}
+            {{ metric(decimal(report.get('averageStudiesPerPublication', 0)), 'Mean studies per publication') }}
+            {{ metric(number(report.get('summaryStatisticsStudyCount', 0)), 'Studies with full summary statistics', decimal(report.get('summaryStatisticsPercentage', 0)) ~ '% of studies') }}
+            {{ metric(number(report.get('studiesWithTechnologyCount', 0)), 'Studies reporting technology', decimal(report.get('technologyReportingPercentage', 0)) ~ '% of studies') }}
+            {{ metric(number(report.get('studiesWithCohortCount', 0)), 'Studies naming a cohort', decimal(report.get('cohortReportingPercentage', 0)) ~ '% of studies') }}
+            {{ metric(number(report.get('studiesWithJournalCount', 0)), 'Studies with journal metadata', decimal(report.get('journalReportingPercentage', 0)) ~ '% of studies') }}
+            {{ metric(number(report.get('technologyCount', 0)), 'Technology categories') }}
+            {{ metric(number(report.get('recruitmentCountryCount', 0)), 'Recruitment countries') }}
+        </div>
+    </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
+
+    <section class="funder-report__section">
+        <h2>Participant and association profile</h2>
+        <div class="funder-report__metric-grid">
+            {{ metric(decimal(report.get('averageParticipantsPerStudy', 0)), 'Mean participants per study') }}
+            {{ metric(number(report.get('medianParticipantsPerStudy', 0)), 'Median participants per study') }}
+            {{ metric(number(report.get('largestStudyParticipantCount', 0)), 'Largest study', report.get('largestStudyAccession')) }}
+            {{ metric(decimal(report.get('averageAssociationsPerStudy', 0)), 'Mean associations per study') }}
+            {{ metric(decimal(report.get('medianAssociationsPerStudy', 0)), 'Median associations per study') }}
+            {{ metric(number(report.get('maximumAssociationsPerStudy', 0)), 'Maximum associations in one study') }}
+            {{ metric(number(report.get('recordedParticipantCount', 0)), 'Participants with recorded ancestry', decimal(report.get('ancestryReportingPercentage', 0)) ~ '% of participants') }}
+            {{ metric(number(report.get('unrecordedParticipantCount', 0)), 'Participants without recorded ancestry') }}
+            {{ metric(number(report.get('nonEuropeanParticipantCount', 0)), 'Non-European participants', decimal(report.get('nonEuropeanParticipantPercentage', 0)) ~ '% of ancestry-recorded participants') }}
+            {{ metric(number(report.get('ancestryGroupCount', 0)), 'Broad ancestry groups') }}
+        </div>
+    </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
+
+    <section class="funder-report__section">
+        <h2>Discovery and replication stages</h2>
+        <div class="funder-report__table-wrap">
+            <table class="funder-report__table">
+                <thead>
+                    <tr><th>Stage</th><th>Studies</th><th>Ancestry records</th><th>Participants</th><th>Participant share</th></tr>
+                </thead>
+                <tbody>
+                    {% for stage in report.get('stageBreakdown', []) %}
+                    <tr>
+                        <th scope="row">{{ stage.name }}</th>
+                        <td>{{ number(stage.studyCount) }}</td>
+                        <td>{{ number(stage.recordCount) }}</td>
+                        <td>{{ number(stage.participantCount) }}</td>
+                        <td>{{ decimal(stage.participantPercentage) }}%</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">No stage data available.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
 
     <section class="funder-report__section">
         <h2>Participant ancestry distribution</h2>
-        <div class="funder-report__ancestries">
-            {% for label, key in [
-                ('European', 'european'),
-                ('Asian', 'asian'),
-                ('African', 'african'),
-                ('African American or Afro-Caribbean', 'afamafcam'),
-                ('Hispanic or Latin American', 'hisorlatinam'),
-                ('Other/Mixed', 'othermixed')
+        <p class="funder-report__description">Percentages exclude participants whose ancestry was not recorded.</p>
+        <div class="funder-report__table-wrap">
+            <table class="funder-report__table funder-report__table--ancestry">
+                <thead>
+                    <tr>
+                        <th>Ancestry</th><th>Participants</th><th>Share</th>
+                        <th>Studies</th><th>Records</th><th>Discovery participants</th>
+                        <th>Replication participants</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for ancestry in report.get('ancestryBreakdown', []) %}
+                    <tr>
+                        <th scope="row">{{ ancestry.name }}</th>
+                        <td>{{ number(ancestry.participantCount) }}</td>
+                        <td>
+                            <span class="funder-report__bar"><i style="width: {{ ancestry.participantPercentage }}%"></i></span>
+                            {{ decimal(ancestry.participantPercentage) }}%
+                        </td>
+                        <td>{{ number(ancestry.studyCount) }}</td>
+                        <td>{{ number(ancestry.recordCount) }}</td>
+                        <td>{{ number(ancestry.discoveryParticipantCount) }}</td>
+                        <td>{{ number(ancestry.replicationParticipantCount) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="7">No ancestry data available.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
+
+    <section class="funder-report__section">
+        <h2>Leading research characteristics</h2>
+        <div class="funder-report__rankings">
+            {% for heading, rows in [
+                ('Diseases and traits', report.get('topTraits', [])),
+                ('Journals', report.get('topJournals', [])),
+                ('Cohorts', report.get('topCohorts', [])),
+                ('Genotyping technologies', report.get('topTechnologies', []))
             ] %}
-            <div class="funder-report__ancestry">
-                <span>{{ label }}</span>
-                <div><i style="width: {{ summary[key] }}%"></i></div>
-                <strong>{{ "%.2f"|format(summary[key]) }}%</strong>
-            </div>
+            <article class="funder-report__ranking">
+                <h3>{{ heading }}</h3>
+                <div class="funder-report__table-wrap">
+                    <table class="funder-report__table">
+                        <thead><tr><th>Name</th><th>Studies</th><th>Publications</th><th>Associations</th></tr></thead>
+                        <tbody>
+                            {% for row in rows %}
+                            <tr>
+                                <th scope="row">{{ row.name }}</th>
+                                <td>{{ number(row.studies) }}</td>
+                                <td>{{ number(row.publications) }}</td>
+                                <td>{{ number(row.associations) }}</td>
+                            </tr>
+                            {% else %}
+                            <tr><td colspan="4">No data available.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </article>
             {% endfor %}
         </div>
     </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
 
     <section class="funder-report__section">
-        <h2>Most represented diseases and traits</h2>
-        <ol class="funder-report__traits">
-            {% for trait in report.topTraits %}
-            <li><span>{{ trait.name }}</span><strong>{{ trait.studies }}</strong></li>
-            {% endfor %}
-        </ol>
+        <h2>Recruitment geography</h2>
+        <div class="funder-report__table-wrap">
+            <table class="funder-report__table">
+                <thead><tr><th>Country</th><th>Participants</th><th>Share</th><th>Studies</th><th>Records</th></tr></thead>
+                <tbody>
+                    {% for country in report.get('topCountries', []) %}
+                    <tr>
+                        <th scope="row">{{ country.name }}</th>
+                        <td>{{ number(country.participants) }}</td>
+                        <td>{{ decimal(country.participantPercentage) }}%</td>
+                        <td>{{ number(country.studies) }}</td>
+                        <td>{{ number(country.records) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">No recruitment-country data available.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
+
+    <section class="funder-report__section">
+        <h2>Funding metadata</h2>
+        <div class="funder-report__metric-grid funder-report__metric-grid--compact">
+            {{ metric(number(report.get('fundedPublicationCount', 0)), 'Publications linked to funding metadata', decimal(report.get('fundingCoveragePercentage', 0)) ~ '% of publications') }}
+            {{ metric(number(report.get('funderCount', 0)), 'Distinct funders represented') }}
+            {{ metric(number(report.get('grantRecordCount', 0)), 'Publication–funder links') }}
+        </div>
+        <div class="funder-report__table-wrap">
+            <table class="funder-report__table">
+                <thead><tr><th>Funder</th><th>Publications</th><th>Share of publications</th></tr></thead>
+                <tbody>
+                    {% for funder in report.get('topFunders', []) %}
+                    <tr><th scope="row">{{ funder.name }}</th><td>{{ number(funder.publications) }}</td><td>{{ decimal(funder.publicationPercentage) }}%</td></tr>
+                    {% else %}
+                    <tr><td colspan="3">No linked funding metadata available.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
+
+    <section class="funder-report__section">
+        <h2>Annual activity</h2>
+        <div class="funder-report__table-wrap">
+            <table class="funder-report__table">
+                <thead><tr><th>Year</th><th>Studies</th><th>Publications</th><th>Participants</th><th>Associations</th></tr></thead>
+                <tbody>
+                    {% for year in report.get('annualActivity', [])|reverse %}
+                    <tr>
+                        <th scope="row">{{ year.year }}</th>
+                        <td>{{ number(year.studyCount) }}</td>
+                        <td>{{ number(year.publicationCount) }}</td>
+                        <td>{{ number(year.participantCount) }}</td>
+                        <td>{{ number(year.associationCount) }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="5">No annual data available.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+            </td>
+        </tr>
+        <tr>
+            <td>
 
     <footer class="funder-report__note">
-        {{ report_note }}
+        <strong>About this report</strong>
+        <span>{{ report_note }} Counts can overlap where a study reports multiple cohorts,
+        technologies, ancestries, traits, or recruitment countries.</span>
     </footer>
+            </td>
+        </tr>
+    </tbody>
+</table>
 </main>
+
+<script>
+function printGwasReport() {
+    var originalTitle = document.title;
+    document.title = '';
+    window.addEventListener('afterprint', function restoreReportTitle() {
+        document.title = originalTitle;
+    }, {once: true});
+    window.print();
+}
+</script>
 {% endblock %}

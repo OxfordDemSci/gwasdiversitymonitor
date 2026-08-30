@@ -247,9 +247,7 @@ def getFilteredDashboardReport():
             title=f"{report_title} report",
             report_title=report_title,
             report_subtitle=report_subtitle,
-            metric_label="Studies",
             report=dashboard["report"],
-            summary=dashboard["summary"]["overallParticipants"],
             download_url=download_url,
             report_note=(
                 "This report reflects the selected dataset"
@@ -302,9 +300,7 @@ def getFunderReport(slug):
             title=f"{dashboard['funder']['name']} report",
             report_title=dashboard["funder"]["name"],
             report_subtitle="Funding-linked diversity report",
-            metric_label="Publications",
             report=dashboard["report"],
-            summary=dashboard["summary"]["overallParticipants"],
             download_url=request.url_root.rstrip("/")
             + f"/download/funders/{slug}.zip",
             report_note=(

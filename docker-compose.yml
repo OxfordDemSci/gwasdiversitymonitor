@@ -54,8 +54,16 @@ services:
     command: ["python3", "generate_data.py"]
     volumes:
       - ./data:/app/data
-    networks:
-      - my-network
+    environment:
+      GWAS_DEPLOYMENT_DOMAIN: ${GWAS_DEPLOYMENT_DOMAIN:-}
+      GWAS_LOCAL_MAIL_HOST: 127.0.0.1
+      GWAS_LOCAL_MAIL_PORT: 25
+      GWAS_FAILURE_EMAIL_FROM: ${GWAS_FAILURE_EMAIL_FROM:-alerts@mail.gwasdiversitymonitor.com}
+      GWAS_FAILURE_EMAIL_TO: ${GWAS_FAILURE_EMAIL_TO:-contact@gwasdiversitymonitor.com}
+      GWAS_FAILURE_EMAIL_COOLDOWN_SECONDS: ${GWAS_FAILURE_EMAIL_COOLDOWN_SECONDS:-21600}
+    # The production job reaches only the host's loopback-bound mail transfer
+    # agent. No SMTP account or credential is passed into the container.
+    network_mode: host
     restart: on-failure
 
 networks:

@@ -2958,57 +2958,135 @@ button, .btn {
   .funder-option small {
     color: #78909c; }
 
+.report-page {
+  background: #f4f6fb; }
+  .report-page .container.main {
+    min-height: 100vh;
+    padding: 0 15px 48px; }
+
 .funder-report {
-  max-width: 980px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 32px 24px 48px;
   color: #4a4a4a; }
-  .funder-report__header, .funder-report__actions, .funder-report__metrics, .funder-report__ancestry, .funder-report__traits li {
+  .funder-report__identity, .funder-report__heading, .funder-report__actions, .funder-report__metrics, .funder-report__ancestry, .funder-report__traits li {
     display: -webkit-box;
     display: -webkit-flex;
     display: -moz-flex;
     display: -ms-flexbox;
     display: flex; }
+  .funder-report__print-layout {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-spacing: 0; }
+    .funder-report__print-layout > tbody,
+    .funder-report__print-layout > tbody > tr,
+    .funder-report__print-layout > tbody > tr > td {
+      display: block;
+      width: 100%; }
+  .funder-report__print-masthead {
+    display: none; }
   .funder-report__header {
-    -webkit-box-align: start;
-    -ms-flex-align: start;
-    -webkit-align-items: flex-start;
-    -moz-align-items: flex-start;
-    align-items: flex-start;
+    overflow: hidden;
+    border-bottom: 5px solid #5c6bc0;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #0C145F 0%, #374282 68%, #5c6bc0 100%);
+    box-shadow: 0 1px 8px 0 rgba(0, 0, 0, 0.2), 0 3px 3px -2px rgba(0, 0, 0, 0.12), 0 3px 4px 0 rgba(0, 0, 0, 0.14); }
+    .funder-report__header h1 {
+      margin: 6px 0;
+      color: white;
+      font-size: 34px;
+      letter-spacing: 0;
+      line-height: 1.12; }
+    .funder-report__header p,
+    .funder-report__header small {
+      margin: 0;
+      color: rgba(255, 255, 255, 0.88); }
+    .funder-report__header small {
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 1.1px;
+      text-transform: uppercase; }
+  .funder-report__identity {
+    -webkit-box-align: center;
+    -ms-flex-align: center;
+    -webkit-align-items: center;
+    -moz-align-items: center;
+    align-items: center;
     -webkit-box-pack: justify;
     -ms-flex-pack: justify;
     -webkit-justify-content: space-between;
     -moz-justify-content: space-between;
     justify-content: space-between;
-    padding-bottom: 20px;
-    border-bottom: 3px solid #374282; }
-    .funder-report__header h1 {
-      margin: 4px 0;
-      color: #0C145F;
-      font-size: 30px;
-      letter-spacing: 0; }
-    .funder-report__header p,
-    .funder-report__header small {
-      margin: 0;
-      color: #78909c; }
+    padding: 14px 28px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.22); }
+    .funder-report__identity > span {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 13px;
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-transform: uppercase; }
+  .funder-report__brand {
+    display: inline-block;
+    width: 210px;
+    padding: 7px 10px;
+    border-radius: 3px;
+    background: white; }
+    .funder-report__brand img {
+      display: block;
+      width: 100%;
+      height: auto; }
+  .funder-report__heading {
+    -webkit-box-align: end;
+    -ms-flex-align: end;
+    -webkit-align-items: flex-end;
+    -moz-align-items: flex-end;
+    align-items: flex-end;
+    -webkit-box-pack: justify;
+    -ms-flex-pack: justify;
+    -webkit-justify-content: space-between;
+    -moz-justify-content: space-between;
+    justify-content: space-between;
+    gap: 28px;
+    padding: 28px; }
+    .funder-report__heading > div:first-child {
+      min-width: 0; }
   .funder-report__actions {
+    flex: 0 0 auto;
     gap: 8px; }
     .funder-report__actions .btn {
-      border: 0;
-      background: #374282;
-      color: white;
-      cursor: pointer; }
+      border: 1px solid rgba(255, 255, 255, 0.5);
+      background: white;
+      color: #0C145F;
+      cursor: pointer;
+      font-weight: bold;
+      white-space: nowrap; }
+      .funder-report__actions .btn i:before {
+        color: #0C145F; }
+      .funder-report__actions .btn:hover {
+        border-color: white;
+        background: #e9edee; }
   .funder-report__metrics {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    margin: 24px 0 32px;
-    border: 1px solid #e9edee; }
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: 12px 0 0; }
     .funder-report__metrics div {
+      position: relative;
       min-width: 0;
-      padding: 18px 12px;
-      border-right: 1px solid #e9edee; }
-      .funder-report__metrics div:last-child {
-        border-right: 0; }
+      overflow: hidden;
+      padding: 18px;
+      border: 1px solid #e9edee;
+      border-top: 3px solid #374282;
+      background: white;
+      box-shadow: 0 2px 7px rgba(12, 20, 95, 0.06); }
+    .funder-report__metrics div:nth-child(4n + 2) {
+      border-top-color: #54bdbe; }
+    .funder-report__metrics div:nth-child(4n + 3) {
+      border-top-color: #ed7892; }
+    .funder-report__metrics div:nth-child(4n + 4) {
+      border-top-color: #f59c44; }
     .funder-report__metrics strong,
     .funder-report__metrics span {
       display: block; }
@@ -3020,12 +3098,104 @@ button, .btn {
       margin-top: 4px;
       color: #78909c;
       font-size: 13px; }
+    .funder-report__metrics small {
+      display: block;
+      margin-top: 6px;
+      color: #78909c; }
   .funder-report__section {
     margin-top: 30px; }
+    .funder-report__section--first {
+      margin-top: 24px; }
     .funder-report__section h2 {
+      margin-bottom: 12px;
+      padding-left: 10px;
+      border-left: 4px solid #5c6bc0;
       color: #0C145F;
       font-size: 20px;
       letter-spacing: 0; }
+  .funder-report__description {
+    margin: -4px 0 14px;
+    color: #78909c;
+    font-size: 13px; }
+  .funder-report__metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px; }
+    .funder-report__metric-grid--compact {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-bottom: 18px; }
+    .funder-report__metric-grid div {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid #e9edee;
+      background: rgba(233, 237, 238, 0.22); }
+    .funder-report__metric-grid strong,
+    .funder-report__metric-grid span,
+    .funder-report__metric-grid small {
+      display: block; }
+    .funder-report__metric-grid strong {
+      overflow-wrap: anywhere;
+      color: #0C145F;
+      font-size: 18px; }
+    .funder-report__metric-grid span {
+      margin-top: 4px;
+      color: #4a4a4a;
+      font-size: 13px; }
+    .funder-report__metric-grid small {
+      margin-top: 6px;
+      color: #78909c; }
+  .funder-report__rankings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px; }
+  .funder-report__ranking {
+    min-width: 0; }
+    .funder-report__ranking h3 {
+      margin: 0 0 8px;
+      color: #374282;
+      font-size: 16px; }
+  .funder-report__table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid #e9edee; }
+  .funder-report__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px; }
+    .funder-report__table th,
+    .funder-report__table td {
+      padding: 9px 10px;
+      border-bottom: 1px solid #e9edee;
+      text-align: right;
+      vertical-align: top; }
+    .funder-report__table th:first-child,
+    .funder-report__table td:first-child {
+      text-align: left; }
+    .funder-report__table thead th {
+      background: rgba(233, 237, 238, 0.65);
+      color: #0C145F;
+      font-weight: bold;
+      white-space: nowrap; }
+    .funder-report__table tbody th {
+      color: #4a4a4a;
+      font-weight: normal; }
+    .funder-report__table tbody tr:last-child th,
+    .funder-report__table tbody tr:last-child td {
+      border-bottom: 0; }
+    .funder-report__table--ancestry {
+      min-width: 920px; }
+  .funder-report__bar {
+    display: inline-block;
+    width: 64px;
+    height: 7px;
+    margin-right: 6px;
+    overflow: hidden;
+    background: #e9edee;
+    vertical-align: middle; }
+    .funder-report__bar i {
+      display: block;
+      height: 100%;
+      background: #374282; }
   .funder-report__ancestries {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3063,10 +3233,18 @@ button, .btn {
       border-bottom: 1px solid #e9edee; }
   .funder-report__note {
     margin-top: 36px;
-    padding-top: 14px;
-    border-top: 1px solid #e9edee;
+    padding: 16px 18px;
+    border-left: 4px solid #5c6bc0;
+    background: rgba(233, 237, 238, 0.45);
     color: #78909c;
     font-size: 13px; }
+    .funder-report__note strong,
+    .funder-report__note span {
+      display: block; }
+    .funder-report__note strong {
+      margin-bottom: 4px;
+      color: #0C145F;
+      font-size: 16px; }
 
 @media screen and (max-width: 480px) {
   .funder-toolbar {
@@ -3080,25 +3258,138 @@ button, .btn {
       width: 100%; }
     .funder-toolbar__actions {
       margin-left: 0; }
-  .funder-report__header {
-    flex-direction: column;
-    gap: 16px; }
-  .funder-report__metrics, .funder-report__ancestries {
-    grid-template-columns: 1fr; }
-  .funder-report__metrics div {
-    border-right: 0;
-    border-bottom: 1px solid #e9edee; } }
+  .funder-report {
+    padding-right: 0;
+    padding-left: 0; }
+    .funder-report__heading {
+      flex-direction: column;
+      -webkit-box-align: start;
+      -ms-flex-align: start;
+      -webkit-align-items: flex-start;
+      -moz-align-items: flex-start;
+      align-items: flex-start;
+      gap: 16px; }
+    .funder-report__identity {
+      padding-right: 20px;
+      padding-left: 20px; }
+      .funder-report__identity > span {
+        display: none; }
+    .funder-report__brand {
+      width: 180px; }
+    .funder-report__actions {
+      flex-wrap: wrap; }
+    .funder-report__metrics, .funder-report__metric-grid, .funder-report__rankings, .funder-report__ancestries {
+      grid-template-columns: 1fr; }
+    .funder-report__metrics div {
+      border-right: 1px solid #e9edee; } }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 0; }
+  html,
+  body.report-page {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: white !important; }
   #header,
   .funder-report__actions,
   #footer {
     display: none !important; }
-  .container.main {
-    padding-top: 0 !important; }
+  .report-page .container.main {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0 !important; }
   .funder-report {
     max-width: none;
-    padding: 0; } }
+    padding: 0;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact; }
+    .funder-report__print-layout {
+      display: table;
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed; }
+      .funder-report__print-layout > tbody {
+        display: table-row-group; }
+      .funder-report__print-layout > tbody > tr {
+        display: table-row; }
+      .funder-report__print-layout > tbody > tr > td {
+        display: table-cell;
+        width: auto;
+        border: 0; }
+      .funder-report__print-layout > tbody > tr {
+        break-inside: avoid-page;
+        page-break-inside: avoid; }
+      .funder-report__print-layout > tbody > tr > td {
+        padding: 0 12mm; }
+      .funder-report__print-layout > tbody > tr:first-child > td {
+        padding-top: 17mm; }
+      .funder-report__print-layout > tbody > tr:last-child > td {
+        padding-bottom: 0; }
+    .funder-report__print-masthead {
+      display: block;
+      position: fixed;
+      z-index: 10;
+      top: 2mm;
+      right: 12mm;
+      width: 36mm;
+      height: auto;
+      padding: 0;
+      background: white; }
+      .funder-report__print-masthead img {
+        display: block;
+        width: 100%;
+        height: auto; }
+      .funder-report__print-masthead span {
+        display: none; }
+    .funder-report__header {
+      overflow: visible;
+      border-bottom: 1mm solid #374282;
+      border-radius: 0;
+      background: white;
+      box-shadow: none; }
+      .funder-report__header h1 {
+        color: #0C145F;
+        font-size: 24pt; }
+      .funder-report__header p,
+      .funder-report__header small {
+        color: #78909c; }
+    .funder-report__identity {
+      display: none; }
+    .funder-report__heading {
+      display: block;
+      padding: 0 0 4mm; }
+    .funder-report__section {
+      margin-top: 4mm;
+      padding-top: 4mm;
+      break-inside: avoid-page;
+      page-break-inside: avoid; }
+      .funder-report__section h2 {
+        margin-bottom: 3mm; }
+    .funder-report__metrics, .funder-report__metric-grid {
+      gap: 3mm; }
+    .funder-report__metrics div, .funder-report__metric-grid div {
+      padding: 3mm;
+      box-shadow: none; }
+    .funder-report__table-wrap {
+      overflow: visible; }
+    .funder-report__table {
+      font-size: 8.5pt; }
+      .funder-report__table th,
+      .funder-report__table td {
+        padding: 2mm; }
+      .funder-report__table--ancestry {
+        min-width: 0;
+        font-size: 7.5pt; }
+    .funder-report__note {
+      margin-top: 5mm;
+      padding: 4mm 42mm 4mm 4mm;
+      break-inside: avoid-page;
+      page-break-inside: avoid; }
+    .funder-report__ranking, .funder-report__metric-grid div, .funder-report__metrics div {
+      break-inside: avoid; } }
 
 .logo-footer {
   width: fit-content;
@@ -3564,9 +3855,17 @@ button, .btn {
                     .dashboard .tile .box#bubbleGraph .right .details .row > div.first a:hover,
                     .dashboard .tile .box#bubbleGraph .right .details .row > div.first a *:hover {
                       color: #212c8f; }
+              .dashboard .tile .box#bubbleGraph .right .details .row > div .metadata-line {
+                display: block;
+                line-height: 1.25;
+                margin-top: 2px;
+                overflow-wrap: anywhere;
+                word-break: break-word; }
+                .dashboard .tile .box#bubbleGraph .right .details .row > div .metadata-line strong {
+                  font-weight: bold; }
               .dashboard .tile .box#bubbleGraph .right .details .row > div .last-inside {
-                width: 80%;
-                margin-left: auto;
+                width: 100%;
+                padding-left: 8px;
                 border-bottom: 1px solid rgba(120, 144, 156, 0.4); }
           .dashboard .tile .box#bubbleGraph .right .ancestry-filter {
             padding: 20px 10px;

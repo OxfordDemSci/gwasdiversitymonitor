@@ -2,6 +2,8 @@
 
 import pandas as pd
 import traceback
+import smtplib
+import socket
 import json
 import numpy as np
 import logging
@@ -20,6 +22,7 @@ import zipfile
 import math
 import re
 import tempfile
+from email.message import EmailMessage
 from app.DataLoader import (
     DataLoader,
     RUNTIME_DATA_FILES,
@@ -41,6 +44,13 @@ GENERATION_PUBLICATION_FILE = 'publication-in-progress.json'
 GENERATION_LOCK_FILE = 'generate_data.lock'
 GENERATION_FALLBACK_DIRECTORY = 'previous-release'
 GENERATION_RAW_FAILURE_LIMIT = 2
+FAILURE_NOTIFICATION_STATE_FILE = 'failure-email-notification.json'
+FAILURE_EMAIL_RECIPIENT = 'contact@gwasdiversitymonitor.com'
+FAILURE_EMAIL_SENDER = 'alerts@mail.gwasdiversitymonitor.com'
+FAILURE_EMAIL_COOLDOWN_SECONDS = 6 * 60 * 60
+FAILURE_EMAIL_PRODUCTION_DOMAIN = 'gwasdiversitymonitor.com'
+FAILURE_EMAIL_LOCAL_RELAY = '127.0.0.1'
+FAILURE_EMAIL_LOCAL_RELAY_PORT = 25
 
 RAW_INPUT_FILES = (
     'catalog/raw/Cat_Anc.tsv',
@@ -311,6 +321,204 @@ def setup_logging(logpath):
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
     return logger
+
+
+def _failure_notification_state_path(repository_path):
+    return os.path.join(
+        repository_path,
+        'data',
+        GENERATION_CONTROL_DIRECTORY,
+        FAILURE_NOTIFICATION_STATE_FILE,
+    )
+
+
+def _failure_email_recipients(value):
+    recipients = [address.strip() for address in value.split(',')]
+    return [address for address in recipients if address]
+
+
+def _failure_signature(error):
+    description = '{}.{}\n{}'.format(
+        type(error).__module__, type(error).__name__, str(error)
+    )
+    return hashlib.sha256(description.encode('utf-8')).hexdigest()
+
+
+def _failure_notification_is_throttled(state_path, signature, timestamp,
+                                       cooldown_seconds):
+    if cooldown_seconds <= 0 or not os.path.isfile(state_path):
+        return False
+    try:
+        state = _read_json(state_path)
+        return state.get('signature') == signature and \
+            timestamp - float(state['sent_timestamp']) < cooldown_seconds
+    except (KeyError, OSError, TypeError, ValueError,
+            json.JSONDecodeError):
+        return False
+
+
+def send_failure_notification(error, traceback_text, repository_path,
+                              exit_status=1, environ=None, now=None,
+                              logger=None):
+    """Email a bounded failure report through the host's local MTA.
+
+    Returns ``sent``, ``suppressed``, or ``not-production``.
+    Alerts fail closed unless this process is explicitly marked as the
+    canonical production deployment. Identical consecutive failures are
+    throttled using state stored in the persistent data volume so Docker's
+    restart policy cannot flood the recipient. The loopback relay is
+    deliberately unauthenticated: it must be a local, loopback-only MTA on
+    the production Lightsail host, not a public SMTP service.
+    """
+    environ = os.environ if environ is None else environ
+    deployment_domain = environ.get(
+        'GWAS_DEPLOYMENT_DOMAIN', ''
+    ).strip().lower().rstrip('.')
+    if deployment_domain != FAILURE_EMAIL_PRODUCTION_DOMAIN:
+        return 'not-production'
+
+    smtp_host = environ.get(
+        'GWAS_LOCAL_MAIL_HOST', FAILURE_EMAIL_LOCAL_RELAY
+    ).strip()
+    if smtp_host not in {'127.0.0.1', '::1', 'localhost'}:
+        raise ValueError(
+            'GWAS_LOCAL_MAIL_HOST must name a loopback interface'
+        )
+    smtp_port = int(environ.get(
+        'GWAS_LOCAL_MAIL_PORT', FAILURE_EMAIL_LOCAL_RELAY_PORT
+    ))
+    smtp_timeout = float(environ.get(
+        'GWAS_LOCAL_MAIL_TIMEOUT_SECONDS', 15
+    ))
+
+    recipients = _failure_email_recipients(
+        environ.get('GWAS_FAILURE_EMAIL_TO', FAILURE_EMAIL_RECIPIENT)
+    )
+    if not recipients:
+        raise ValueError('GWAS_FAILURE_EMAIL_TO has no recipient addresses')
+    sender = environ.get(
+        'GWAS_FAILURE_EMAIL_FROM', FAILURE_EMAIL_SENDER
+    ).strip()
+    if not sender:
+        raise ValueError('GWAS_FAILURE_EMAIL_FROM is empty')
+
+    cooldown_seconds = int(environ.get(
+        'GWAS_FAILURE_EMAIL_COOLDOWN_SECONDS',
+        FAILURE_EMAIL_COOLDOWN_SECONDS,
+    ))
+    now = now or datetime.datetime.now(datetime.timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=datetime.timezone.utc)
+    timestamp = now.timestamp()
+    signature = _failure_signature(error)
+    state_path = _failure_notification_state_path(repository_path)
+    if _failure_notification_is_throttled(
+            state_path, signature, timestamp, cooldown_seconds):
+        return 'suppressed'
+
+    hostname = socket.gethostname()
+    message = EmailMessage()
+    message['Subject'] = (
+        '[GWAS Diversity Monitor] generate_data.py failed on '
+        f'{hostname}'
+    )
+    message['From'] = sender
+    message['To'] = ', '.join(recipients)
+    bounded_traceback = (traceback_text or 'No traceback available.')[-30000:]
+    message.set_content(
+        'The GWAS Diversity Monitor data-generation job did not complete '
+        'successfully.\n\n'
+        f'Time (UTC): {now.astimezone(datetime.timezone.utc).isoformat()}\n'
+        f'Host: {hostname}\n'
+        f'Working directory: {os.path.abspath(repository_path)}\n'
+        f'Exit status: {exit_status}\n'
+        f'Error: {type(error).__name__}: {error}\n\n'
+        f'Traceback (last {len(bounded_traceback):,} characters):\n'
+        f'{bounded_traceback}\n'
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=smtp_timeout) as connection:
+        connection.ehlo()
+        connection.send_message(message)
+
+    try:
+        _atomic_write_json(state_path, {
+            'sent_at': now.astimezone(datetime.timezone.utc).isoformat(),
+            'sent_timestamp': timestamp,
+            'signature': signature,
+        })
+    except OSError:
+        if logger is not None:
+            logger.exception(
+                'Failure email was sent, but its cooldown state could not be '
+                'recorded.'
+            )
+    return 'sent'
+
+
+def _clear_failure_notification_state(repository_path, logger=None):
+    state_path = _failure_notification_state_path(repository_path)
+    try:
+        if os.path.isfile(state_path):
+            os.unlink(state_path)
+            _fsync_directory(os.path.dirname(state_path))
+    except OSError:
+        if logger is not None:
+            logger.exception(
+                'The previous failure-email cooldown state could not be '
+                'cleared after a successful run.'
+            )
+
+
+def _notify_generation_failure(error, repository_path, exit_status, logger):
+    try:
+        outcome = send_failure_notification(
+            error,
+            traceback.format_exc(),
+            repository_path,
+            exit_status=exit_status,
+            logger=logger,
+        )
+        if outcome == 'sent':
+            message = 'Failure notification email sent to %s.' % \
+                os.environ.get(
+                    'GWAS_FAILURE_EMAIL_TO', FAILURE_EMAIL_RECIPIENT
+                )
+            if logger is not None:
+                logger.info(message)
+            else:
+                print(message, file=sys.stderr)
+        elif outcome == 'suppressed':
+            message = (
+                'An identical failure notification was suppressed during '
+                'the configured cooldown period.'
+            )
+            if logger is not None:
+                logger.warning(message)
+            else:
+                print(message, file=sys.stderr)
+        elif outcome == 'not-production':
+            message = (
+                'Failure notification email was not sent because this '
+                'process is not marked as the canonical '
+                f'{FAILURE_EMAIL_PRODUCTION_DOMAIN} deployment.'
+            )
+            if logger is not None:
+                logger.info(message)
+            else:
+                print(message, file=sys.stderr)
+    except Exception:
+        if logger is not None:
+            logger.exception(
+                'Failure notification email could not be handed to the '
+                'loopback-only mail transfer agent on the production host.'
+            )
+        else:
+            print(
+                'Failure notification email could not be sent:\n'
+                + traceback.format_exc(),
+                file=sys.stderr,
+            )
 
 
 def summarize_catalog_pvalues(catalog_path, logger, chunksize=100_000,
@@ -1352,7 +1560,27 @@ def make_bubbleplot_df(data_path):
         Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
                                             'raw', 'Cat_Stud.tsv'),
                                sep='\t',
-                               usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT'])
+                               usecols=['STUDY ACCESSION', 'DISEASE/TRAIT',
+                                        'COHORT', 'JOURNAL'])
+        study_metadata = Cat_Stud[
+            ['STUDY ACCESSION', 'COHORT', 'JOURNAL']
+        ].copy()
+
+        def join_metadata(values):
+            unique_values = []
+            for value in values:
+                if pd.isna(value):
+                    continue
+                for item in str(value).split('|'):
+                    item = item.strip()
+                    if item and item not in unique_values:
+                        unique_values.append(item)
+            return ' | '.join(unique_values)
+
+        study_metadata = study_metadata.groupby(
+            'STUDY ACCESSION', as_index=False, sort=False
+        ).agg({'COHORT': join_metadata, 'JOURNAL': join_metadata})
+        Cat_Stud = Cat_Stud[['STUDY ACCESSION', 'DISEASE/TRAIT']]
         Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
                                            'raw', 'Cat_Map.tsv'),
                               sep='\t',
@@ -1388,6 +1616,13 @@ def make_bubbleplot_df(data_path):
         merged = merged.groupby(["Broader", "N", "PUBMEDID", "AUTHOR",
                                  "parentterm", "STAGE", "DATE","ACCESSION"])['DiseaseOrTrait'].\
             apply(', '.join).reset_index()
+        merged = pd.merge(
+            merged, study_metadata, how='left',
+            left_on='ACCESSION', right_on='STUDY ACCESSION'
+        ).drop(columns=['STUDY ACCESSION'])
+        merged[['COHORT', 'JOURNAL']] = merged[
+            ['COHORT', 'JOURNAL']
+        ].fillna('')
         merged = merged.sort_values(by='DATE', ascending=True)
         merged['DiseaseOrTrait'] = merged['DiseaseOrTrait'].\
             apply(lambda x: x.encode('ascii', 'ignore').decode('ascii'))
@@ -2212,7 +2447,7 @@ def _implementation_fingerprints(repository_path):
         'generate_data.py',
         'app/DataLoader.py',
         'funder_pipeline.py',
-        'funder_data/funder_cleaner.json',
+        'data/funders/funder_cleaner.json',
     )
     return _fingerprint_files(repository_path, implementation_files)
 
@@ -2291,7 +2526,8 @@ def validate_generated_release(data_path, static_bundle_path):
             'Broader', 'parentterm', 'STUDY ACCESSION'
         },
         'toplot/bubble_df.csv': {
-            'Broader', 'DiseaseOrTrait', 'STAGE'
+            'Broader', 'DiseaseOrTrait', 'STAGE', 'COHORT', 'JOURNAL',
+            'FUNDER'
         },
         'toplot/choro_df.csv': {'Cleaned Country', 'Year'},
         'toplot/doughnut_df.csv': {
@@ -2693,11 +2929,21 @@ def _run_wrangling(data_path, static_bundle_path, timeupdated=None,
 def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
     """Build funder outputs in the staged release, reusing its PubMed cache."""
     funder_root = os.path.join(data_path, 'funders')
+    cleaner_source = funder_pipeline.funder_cleaner_path(
+        os.path.join(repository_path, 'data')
+    )
+    cleaner_path = funder_pipeline.funder_cleaner_path(data_path)
     cache_path = os.path.join(funder_root, 'pubmed_grants.json')
     previous_cache = os.path.join(
         previous_data_path or '', 'funders', 'pubmed_grants.json'
     )
     os.makedirs(funder_root, exist_ok=True)
+    if not os.path.isfile(cleaner_source):
+        raise FileNotFoundError(
+            f'Missing funder normalization configuration: {cleaner_source}'
+        )
+    if os.path.abspath(cleaner_source) != os.path.abspath(cleaner_path):
+        shutil.copy2(cleaner_source, cleaner_path)
     if not os.path.isfile(cache_path) and os.path.isfile(previous_cache):
         shutil.copy2(previous_cache, cache_path)
         diversity_logger.info('Reused the previous PubMed funding cache.')
@@ -2707,8 +2953,25 @@ def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
         repository_path,
         data_path,
         cache,
-        os.path.join(repository_path, 'funder_data', 'funder_cleaner.json'),
+        cleaner_path,
     )
+    # Funder generation enriches bubble_df with the complete canonical funding
+    # list for each publication. Refresh the main compact payload and download
+    # archive so the unfiltered dashboard receives the same metadata as the
+    # funder- and dataset-filtered dashboards.
+    bubble_path = os.path.join(data_path, 'toplot', 'bubble_df.csv')
+    if os.path.isfile(bubble_path):
+        cleaner = funder_pipeline.load_funder_cleaner(cleaner_path)
+        funder_pipeline.write_bubble_funding_metadata(
+            data_path, cache, cleaner
+        )
+        json_converter(data_path)
+        zip_for_download(
+            os.path.join(data_path, 'toplot'),
+            os.path.join(data_path, 'todownload'),
+            os.path.join(previous_data_path, 'todownload')
+            if previous_data_path else None
+        )
     diversity_logger.info(
         'Build of %d funder dashboards: Complete', len(index['funders'])
     )
@@ -3124,35 +3387,55 @@ def generate_and_publish(repository_path, ebi_download,
         return 'published'
 
 
-if __name__ == "__main__":
+def main():
+    global diversity_logger, final_year
     repository_path = os.getcwd()
     logpath = os.path.join(repository_path, 'app', 'logging')
-    diversity_logger = setup_logging(logpath)
     ebi_download = 'https://www.ebi.ac.uk/gwas/api/search/downloads/'
-    final_year = determine_year(datetime.date.today())
-    diversity_logger.info(
-        'Data path: %s', os.path.join(repository_path, 'data')
-    )
-    diversity_logger.info('final year is being set to: %s', final_year)
+    active_logger = None
     try:
+        active_logger = setup_logging(logpath)
+        diversity_logger = active_logger
+        final_year = determine_year(datetime.date.today())
+        diversity_logger.info(
+            'Data path: %s', os.path.join(repository_path, 'data')
+        )
+        diversity_logger.info('final year is being set to: %s', final_year)
         result = generate_and_publish(repository_path, ebi_download)
         diversity_logger.info(
             'generate_data.py ran successfully; result=%s', result
         )
-    except KeyboardInterrupt:
-        diversity_logger.warning(
-            'generate_data.py was interrupted. Any in-progress publication '
-            'will continue serving its previous runtime snapshot and will be '
-            'recovered automatically on the next run.'
-        )
+        _clear_failure_notification_state(repository_path, diversity_logger)
+        return 0
+    except KeyboardInterrupt as error:
+        if active_logger is not None:
+            active_logger.warning(
+                'generate_data.py was interrupted. Any in-progress '
+                'publication will continue serving its previous runtime '
+                'snapshot and will be recovered automatically on the next '
+                'run.'
+            )
+        _notify_generation_failure(error, repository_path, 130, active_logger)
+        return 130
+    except Exception as error:
+        if active_logger is not None:
+            active_logger.exception(
+                'generate_data.py failed; the validated raw staging snapshot '
+                'was retained when possible, and no incomplete release was '
+                'marked complete. Any interrupted publication remains '
+                'recoverable.'
+            )
+        else:
+            print(
+                'generate_data.py failed before file logging was available:\n'
+                + traceback.format_exc(),
+                file=sys.stderr,
+            )
+        _notify_generation_failure(error, repository_path, 1, active_logger)
+        return 1
+    finally:
         logging.shutdown()
-        sys.exit(130)
-    except Exception:
-        diversity_logger.exception(
-            'generate_data.py failed; the validated raw staging snapshot was '
-            'retained when possible, and no incomplete release was marked '
-            'complete. Any interrupted publication remains recoverable.'
-        )
-        logging.shutdown()
-        sys.exit(1)
-    logging.shutdown()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

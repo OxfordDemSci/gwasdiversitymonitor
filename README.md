@@ -23,6 +23,32 @@ To run: clone this directory, ``cd`` into the directory, download the data with 
 
 Data generation is staged under `data/.generate_data` and published only after every required raw, wrangled, JSON, and download artifact passes validation. If generation is interrupted after downloading the raw Catalog files, the next run reuses that validated raw snapshot and resumes the wrangling. Publication is coordinated with application reads, and a complete previous runtime snapshot remains available if publication itself is interrupted. A run is skipped as unchanged only when the raw-input fingerprints, generation parameters, implementation, static bundle, and complete published artifact manifest all match.
 
+All funder resources live under `data/funders`. The hand-maintained `funder_cleaner.json` normalization map is version-controlled; `pubmed_grants.json`, `index.json`, `dashboards/`, and `downloads/` are generated. The cleaner is copied into each staged release and included in release validation and recovery snapshots.
+
+#### Data-generation failure email
+
+Failure email is disabled by default and fails closed. It is considered only when `GWAS_DEPLOYMENT_DOMAIN` is set to exactly `gwasdiversitymonitor.com`, which must be done only in the ignored `.env` file on the canonical production server. Local, development, staging, test, cloned, and otherwise unmarked copies never open a mail connection.
+
+On the canonical production server, an exception or interruption in `generate_data.py` emails a timestamped error and bounded traceback to `contact@gwasdiversitymonitor.com`. The data container hands the message, without authentication, to a loopback-only Postfix service on the Lightsail host. There is no email username, password, API key, or other mail secret in the application, Docker Compose, or `.env`.
+
+Install the local mail transfer agent once on the production Lightsail instance:
+
+```bash
+sudo ./deploy/configure_failure_mail.sh
+```
+
+Then copy the example deployment marker, set `GWAS_DEPLOYMENT_DOMAIN=gwasdiversitymonitor.com`, and recreate the data service:
+
+```bash
+cp .env.example .env
+chmod 600 .env
+docker-compose up -d --build --force-recreate data
+```
+
+This is credential-free, but it is not anonymous: receiving systems need a verifiable sending host. Lightsail limits outbound port 25 by default. Attach a static IP, add an `A` record from `mail.gwasdiversitymonitor.com` to that IP, and ask AWS Support to remove the outbound mail quota and set matching reverse DNS, following the [Lightsail reverse-DNS procedure](https://docs.aws.amazon.com/lightsail/latest/userguide/amazon-lightsail-configuring-reverse-dns.html). Also authorize the static IP in the existing SPF record for the mail subdomain; update an existing record rather than publishing a second SPF record. No inbound SMTP firewall rule is needed for these outbound-only alerts.
+
+The local relay is fixed to loopback and rejects any non-loopback relay setting. Multiple recipients can be supplied in `GWAS_FAILURE_EMAIL_TO` as a comma-separated list. Identical consecutive failures are limited to one message every six hours to prevent Docker's restart policy from flooding the inbox; a different error is sent immediately, and a successful run clears the cooldown. If Postfix cannot accept the message, the original generation failure and non-zero exit status are preserved and the alert-delivery error is recorded in `app/logging/diversity_logger.log`.
+
 To do this run "python -m venv virtualenv" from the root of the project. This will create a directory called "virtualenv". Navigate into virtualenv/bin and run "pip install -r requirements.txt" to install the requirements of the project inside your new virtual environment. Then run the project from the root of the project (above the virtualenv/) with `./virtualenv/bin/python gwasdiversitymonitor.py`.
 
 ### Structure

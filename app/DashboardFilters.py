@@ -25,11 +25,8 @@ class DashboardFilterStore:
     """Build and cache dashboards for dataset and funder intersections."""
 
     CACHE_LIMIT = 4
-    def __init__(self, data_path="data", repository_path=None):
+    def __init__(self, data_path="data"):
         self.data_path = os.path.abspath(data_path)
-        self.repository_path = os.path.abspath(
-            repository_path or os.path.join(os.path.dirname(__file__), "..")
-        )
         self._lock = threading.RLock()
         self._sources = None
         self._dataset_entries = None
@@ -54,8 +51,9 @@ class DashboardFilterStore:
             os.path.join(
                 self.data_path, "funders", "pubmed_grants.json"
             ),
+            funder_pipeline.funder_cleaner_path(self.data_path),
         )
-        signature = [self.data_path]
+        signature = [self.data_path, "report-schema:2"]
         for path in source_paths:
             try:
                 stat = os.stat(path)
@@ -96,7 +94,8 @@ class DashboardFilterStore:
             os.path.join(self.data_path, "catalog", "raw", "Cat_Stud.tsv"),
             sep="\t", dtype=str, usecols=lambda column: column in {
                 "PUBMED ID", "PUBMEDID", "STUDY ACCESSION", "COHORT",
-                "DISEASE/TRAIT", "ASSOCIATION COUNT", "DATE",
+                "DISEASE/TRAIT", "ASSOCIATION COUNT", "DATE", "JOURNAL",
+                "GENOTYPING TECHNOLOGY", "FULL SUMMARY STATISTICS",
             }
         )
         if "PUBMED ID" in studies.columns:
@@ -269,9 +268,9 @@ class DashboardFilterStore:
                 encoding="utf-8"
             ) as source:
                 cache = json.load(source)
-            cleaner = funder_pipeline.load_funder_cleaner(os.path.join(
-                self.repository_path, "funder_data", "funder_cleaner.json"
-            ))
+            cleaner = funder_pipeline.load_funder_cleaner(
+                funder_pipeline.funder_cleaner_path(self.data_path)
+            )
             by_publication, _ = funder_pipeline.normalize_funding_records(
                 cache, cleaner, index.get("minimumPublicationCount", 50)
             )
@@ -326,28 +325,10 @@ class DashboardFilterStore:
         )
 
     @staticmethod
-    def _build_report(studies, ancestry):
-        dates = pd.to_datetime(studies["DATE"], errors="coerce").dropna()
-        top_traits = studies["DISEASE/TRAIT"].dropna().value_counts().head(8)
-        return {
-            "studyCount": int(studies["STUDY ACCESSION"].nunique()),
-            "publicationCount": int(studies["PUBMEDID"].nunique()),
-            "ancestryRecordCount": int(len(ancestry)),
-            "participantCount": int(pd.to_numeric(
-                ancestry["N"], errors="coerce"
-            ).fillna(0).sum()),
-            "firstStudyDate": dates.min().strftime("%Y-%m-%d")
-            if not dates.empty else None,
-            "latestStudyDate": dates.max().strftime("%Y-%m-%d")
-            if not dates.empty else None,
-            "topTraits": [
-                {"name": str(name), "studies": int(count)}
-                for name, count in top_traits.items()
-            ],
-            "ancestryPercentages": funder_pipeline.build_summary(
-                ancestry
-            )["overallParticipants"],
-        }
+    def _build_report(studies, ancestry, funding_records=None, funder=None):
+        return funder_pipeline.build_report(
+            funder, studies, ancestry, funding_records or {}
+        )
 
     def dashboard(self, dataset_id, funder_slug=None):
         cache_key = (dataset_id, funder_slug or "")
@@ -403,6 +384,18 @@ class DashboardFilterStore:
             self._sources[1]["DATE"], errors="coerce"
         ).dt.year.max())
 
+        funding_records = {}
+        funder_index_path = os.path.join(
+            self.data_path, "funders", "index.json"
+        )
+        funding_cache_path = os.path.join(
+            self.data_path, "funders", "pubmed_grants.json"
+        )
+        if os.path.isfile(funder_index_path) and os.path.isfile(
+                funding_cache_path):
+            self._ensure_funder_index()
+            funding_records = self._funding_by_publication
+
         payload = {
             "version": 1,
             "selection": {
@@ -426,7 +419,10 @@ class DashboardFilterStore:
                 merged, recorded_ancestries, parent_terms, final_year
             ),
             "summary": funder_pipeline.build_summary(ancestry),
-            "report": self._build_report(studies, ancestry),
+            "report": self._build_report(
+                studies, ancestry, funding_records,
+                funder["name"] if funder else None
+            ),
         }
         self._atomic_json(cache_path, payload)
         with self._lock:

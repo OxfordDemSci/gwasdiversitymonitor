@@ -32,15 +32,19 @@
                     async src="{{ goatcounter_url }}/count.js"></script>
         {% endif %}
     </head>
-    <body class="body-{{ browser }}">
+    <body class="{% block body_class %}body-{{ browser }}{% endblock %}">
 
-        {% include 'partials/header.html' %}
+        {% block site_header %}
+            {% include 'partials/header.html' %}
+        {% endblock %}
 
         <div class="container main">
             {% block content %}{% endblock %}
         </div>
 
-        {% include 'partials/footer.html' %}
+        {% block site_footer %}
+            {% include 'partials/footer.html' %}
+        {% endblock %}
 
         <script src="{{ versioned_static('js/script.js') }}"></script>
     </body>

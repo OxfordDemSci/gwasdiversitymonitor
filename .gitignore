@@ -1,4 +1,8 @@
-data
+# Generated data. Keep the hand-maintained funder normalization map tracked.
+data/*
+!data/funders/
+data/funders/*
+!data/funders/funder_cleaner.json
 backups/
 /config.py
 *.log
@@ -108,6 +112,8 @@ celerybeat.pid
 
 # Environments
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/

@@ -291,13 +291,23 @@
   }
 }
 
+.report-page {
+  background: #f4f6fb;
+
+  .container.main {
+    min-height: 100vh;
+    padding: 0 15px 48px;
+  }
+}
+
 .funder-report {
-  max-width: 980px;
+  max-width: 1240px;
   margin: 0 auto;
   padding: 32px 24px 48px;
   color: $gwas-content-black;
 
-  &__header,
+  &__identity,
+  &__heading,
   &__actions,
   &__metrics,
   &__ancestry,
@@ -305,51 +315,143 @@
     @include flexbox;
   }
 
+  &__print-layout {
+    display: block;
+    width: 100%;
+    border: 0;
+    border-spacing: 0;
+
+    > tbody,
+    > tbody > tr,
+    > tbody > tr > td {
+      display: block;
+      width: 100%;
+    }
+  }
+
+  &__print-masthead {
+    display: none;
+  }
+
   &__header {
-    @include align-items(flex-start);
-    @include justify-content(space-between);
-    padding-bottom: 20px;
-    border-bottom: 3px solid $primary;
+    overflow: hidden;
+    border-bottom: 5px solid $light-primary;
+    border-radius: 4px;
+    background: linear-gradient(135deg, $dark-purple 0%, $primary 68%, $light-primary 100%);
+    box-shadow: $box-shadow;
 
     h1 {
-      margin: 4px 0;
-      color: $dark-purple;
-      font-size: 30px;
+      margin: 6px 0;
+      color: $white;
+      font-size: 34px;
       letter-spacing: 0;
+      line-height: 1.12;
     }
 
     p,
     small {
       margin: 0;
-      color: $blue-grey;
+      color: rgba($white, .88);
+    }
+
+    small {
+      font-size: $small-size;
+      font-weight: bold;
+      letter-spacing: 1.1px;
+      text-transform: uppercase;
+    }
+  }
+
+  &__identity {
+    @include align-items(center);
+    @include justify-content(space-between);
+    padding: 14px 28px;
+    border-bottom: 1px solid rgba($white, .22);
+
+    > span {
+      color: rgba($white, .9);
+      font-size: $small-size;
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+    }
+  }
+
+  &__brand {
+    display: inline-block;
+    width: 210px;
+    padding: 7px 10px;
+    border-radius: 3px;
+    background: $white;
+
+    img {
+      display: block;
+      width: 100%;
+      height: auto;
+    }
+  }
+
+  &__heading {
+    @include align-items(flex-end);
+    @include justify-content(space-between);
+    gap: 28px;
+    padding: 28px;
+
+    > div:first-child {
+      min-width: 0;
     }
   }
 
   &__actions {
+    flex: 0 0 auto;
     gap: 8px;
 
     .btn {
-      border: 0;
-      background: $primary;
-      color: $white;
+      border: 1px solid rgba($white, .5);
+      background: $white;
+      color: $dark-purple;
       cursor: pointer;
+      font-weight: bold;
+      white-space: nowrap;
+
+      i:before {
+        color: $dark-purple;
+      }
+
+      &:hover {
+        border-color: $white;
+        background: $light-grey;
+      }
     }
   }
 
   &__metrics {
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
-    margin: 24px 0 32px;
-    border: 1px solid $light-grey;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin: 12px 0 0;
 
     div {
+      position: relative;
       min-width: 0;
-      padding: 18px 12px;
-      border-right: 1px solid $light-grey;
+      overflow: hidden;
+      padding: 18px;
+      border: 1px solid $light-grey;
+      border-top: 3px solid $primary;
+      background: $white;
+      box-shadow: 0 2px 7px rgba($dark-purple, .06);
+    }
 
-      &:last-child {
-        border-right: 0;
-      }
+    div:nth-child(4n + 2) {
+      border-top-color: $other-mixed;
+    }
+
+    div:nth-child(4n + 3) {
+      border-top-color: $european;
+    }
+
+    div:nth-child(4n + 4) {
+      border-top-color: $african;
     }
 
     strong,
@@ -368,15 +470,153 @@
       color: $blue-grey;
       font-size: $small-size;
     }
+
+    small {
+      display: block;
+      margin-top: 6px;
+      color: $blue-grey;
+    }
   }
 
   &__section {
     margin-top: 30px;
 
+    &--first {
+      margin-top: 24px;
+    }
+
     h2 {
+      margin-bottom: 12px;
+      padding-left: 10px;
+      border-left: 4px solid $light-primary;
       color: $dark-purple;
       font-size: 20px;
       letter-spacing: 0;
+    }
+  }
+
+  &__description {
+    margin: -4px 0 14px;
+    color: $blue-grey;
+    font-size: $small-size;
+  }
+
+  &__metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+
+    &--compact {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-bottom: 18px;
+    }
+
+    div {
+      min-width: 0;
+      padding: 16px;
+      border: 1px solid $light-grey;
+      background: rgba($light-grey, .22);
+    }
+
+    strong,
+    span,
+    small {
+      display: block;
+    }
+
+    strong {
+      overflow-wrap: anywhere;
+      color: $dark-purple;
+      font-size: 18px;
+    }
+
+    span {
+      margin-top: 4px;
+      color: $gwas-content-black;
+      font-size: $small-size;
+    }
+
+    small {
+      margin-top: 6px;
+      color: $blue-grey;
+    }
+  }
+
+  &__rankings {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  &__ranking {
+    min-width: 0;
+
+    h3 {
+      margin: 0 0 8px;
+      color: $primary;
+      font-size: $regular-size;
+    }
+  }
+
+  &__table-wrap {
+    max-width: 100%;
+    overflow-x: auto;
+    border: 1px solid $light-grey;
+  }
+
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: $small-size;
+
+    th,
+    td {
+      padding: 9px 10px;
+      border-bottom: 1px solid $light-grey;
+      text-align: right;
+      vertical-align: top;
+    }
+
+    th:first-child,
+    td:first-child {
+      text-align: left;
+    }
+
+    thead th {
+      background: rgba($light-grey, .65);
+      color: $dark-purple;
+      font-weight: bold;
+      white-space: nowrap;
+    }
+
+    tbody th {
+      color: $gwas-content-black;
+      font-weight: normal;
+    }
+
+    tbody tr:last-child th,
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    &--ancestry {
+      min-width: 920px;
+    }
+  }
+
+  &__bar {
+    display: inline-block;
+    width: 64px;
+    height: 7px;
+    margin-right: 6px;
+    overflow: hidden;
+    background: $light-grey;
+    vertical-align: middle;
+
+    i {
+      display: block;
+      height: 100%;
+      background: $primary;
     }
   }
 
@@ -423,10 +663,22 @@
 
   &__note {
     margin-top: 36px;
-    padding-top: 14px;
-    border-top: 1px solid $light-grey;
+    padding: 16px 18px;
+    border-left: 4px solid $light-primary;
+    background: rgba($light-grey, .45);
     color: $blue-grey;
     font-size: $small-size;
+
+    strong,
+    span {
+      display: block;
+    }
+
+    strong {
+      margin-bottom: 4px;
+      color: $dark-purple;
+      font-size: $regular-size;
+    }
   }
 }
 
@@ -445,36 +697,215 @@
   }
 
   .funder-report {
-    &__header {
+    padding-right: 0;
+    padding-left: 0;
+
+    &__heading {
       flex-direction: column;
+      @include align-items(flex-start);
       gap: 16px;
     }
 
+    &__identity {
+      padding-right: 20px;
+      padding-left: 20px;
+
+      > span {
+        display: none;
+      }
+    }
+
+    &__brand {
+      width: 180px;
+    }
+
+    &__actions {
+      flex-wrap: wrap;
+    }
+
     &__metrics,
+    &__metric-grid,
+    &__rankings,
     &__ancestries {
       grid-template-columns: 1fr;
     }
 
     &__metrics div {
-      border-right: 0;
-      border-bottom: 1px solid $light-grey;
+      border-right: 1px solid $light-grey;
     }
   }
 }
 
 @media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body.report-page {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: $white !important;
+  }
+
   #header,
   .funder-report__actions,
   #footer {
     display: none !important;
   }
 
-  .container.main {
-    padding-top: 0 !important;
+  .report-page .container.main {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    padding: 0 !important;
   }
 
   .funder-report {
     max-width: none;
     padding: 0;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+
+    &__print-layout {
+      display: table;
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+
+      > tbody {
+        display: table-row-group;
+      }
+
+      > tbody > tr {
+        display: table-row;
+      }
+
+      > tbody > tr > td {
+        display: table-cell;
+        width: auto;
+        border: 0;
+      }
+
+      > tbody > tr {
+        break-inside: avoid-page;
+        page-break-inside: avoid;
+      }
+
+      > tbody > tr > td {
+        padding: 0 12mm;
+      }
+
+      > tbody > tr:first-child > td {
+        padding-top: 17mm;
+      }
+
+      > tbody > tr:last-child > td {
+        padding-bottom: 0;
+      }
+    }
+
+    &__print-masthead {
+      display: block;
+      position: fixed;
+      z-index: 10;
+      top: 2mm;
+      right: 12mm;
+      width: 36mm;
+      height: auto;
+      padding: 0;
+      background: $white;
+
+      img {
+        display: block;
+        width: 100%;
+        height: auto;
+      }
+
+      span {
+        display: none;
+      }
+    }
+
+    &__header {
+      overflow: visible;
+      border-bottom: 1mm solid $primary;
+      border-radius: 0;
+      background: $white;
+      box-shadow: none;
+
+      h1 {
+        color: $dark-purple;
+        font-size: 24pt;
+      }
+
+      p,
+      small {
+        color: $blue-grey;
+      }
+    }
+
+    &__identity {
+      display: none;
+    }
+
+    &__heading {
+      display: block;
+      padding: 0 0 4mm;
+    }
+
+    &__section {
+      margin-top: 4mm;
+      padding-top: 4mm;
+      break-inside: avoid-page;
+      page-break-inside: avoid;
+
+      h2 {
+        margin-bottom: 3mm;
+      }
+    }
+
+    &__metrics,
+    &__metric-grid {
+      gap: 3mm;
+    }
+
+    &__metrics div,
+    &__metric-grid div {
+      padding: 3mm;
+      box-shadow: none;
+    }
+
+    &__table-wrap {
+      overflow: visible;
+    }
+
+    &__table {
+      font-size: 8.5pt;
+
+      th,
+      td {
+        padding: 2mm;
+      }
+
+      &--ancestry {
+        min-width: 0;
+        font-size: 7.5pt;
+      }
+    }
+
+    &__note {
+      margin-top: 5mm;
+      padding: 4mm 42mm 4mm 4mm;
+      break-inside: avoid-page;
+      page-break-inside: avoid;
+    }
+
+    &__ranking,
+    &__metric-grid div,
+    &__metrics div {
+      break-inside: avoid;
+    }
   }
 }

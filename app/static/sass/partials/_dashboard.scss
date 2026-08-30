@@ -289,9 +289,21 @@
                   }
                 }
 
+                .metadata-line {
+                  display: block;
+                  line-height: 1.25;
+                  margin-top: 2px;
+                  overflow-wrap: anywhere;
+                  word-break: break-word;
+
+                  strong {
+                    font-weight: bold;
+                  }
+                }
+
                 .last-inside {
-                  width: 80%;
-                  margin-left: auto;
+                  width: 100%;
+                  padding-left: 8px;
                   border-bottom: 1px solid rgba($blue-grey, .4);
                 }
               }

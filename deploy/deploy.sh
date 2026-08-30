@@ -44,6 +44,10 @@ echo -e "\tIdentityFile ~/.ssh/id_rsa" >> ~/.ssh/config
 cd ~
 git clone github:OxfordDemSci/gwasdiversitymonitor
 
+# ---- failure mail ---- #
+cd ~/gwasdiversitymonitor
+sudo ./deploy/configure_failure_mail.sh
+
 # ---- cron ---- #
 cd ~/gwasdiversitymonitor
 sudo cp deploy/gwasdiversitymonitor_crontab /etc/cron.d/

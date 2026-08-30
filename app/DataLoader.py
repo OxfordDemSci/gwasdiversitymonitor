@@ -179,29 +179,16 @@ class DataLoader:
         dataReplication = {}
 
         with open(self._path('toplot', 'bubble_df.csv')) as csv_file:
-            csv_reader = csv.reader(csv_file, delimiter=',')
-
-            line_count = 0
-            j = 0
-            for row in csv_reader:
-                if line_count == 0:
-                    keys = row
-                    keys.remove("")
-                else:
-                    if(row[6] == "replication"):
-                        dataReplication[j] = {}
-                        i = 0
-                        for value in row[1:]:
-                            dataReplication[j][keys[i]] = value
-                            i += 1
-                    elif(row[6] == "initial"):
-                        dataInitial[j] = {}
-                        i = 0
-                        for value in row[1:]:
-                            dataInitial[j][keys[i]] = value
-                            i += 1
-                line_count += 1
-                j += 1
+            csv_reader = csv.DictReader(csv_file)
+            for index, source_row in enumerate(csv_reader):
+                row = {
+                    key: value for key, value in source_row.items()
+                    if key and not key.startswith('Unnamed:')
+                }
+                if row.get("STAGE") == "replication":
+                    dataReplication[index] = row
+                elif row.get("STAGE") == "initial":
+                    dataInitial[index] = row
         return {
             'bubblegraph_initial': dataInitial,
             'bubblegraph_replication': dataReplication,

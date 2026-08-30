@@ -29,6 +29,13 @@ DEFAULT_BATCH_SIZE = 100
 FUNDER_DOWNLOAD_MEMBERS = {
     "studies.tsv", "ancestry.tsv", "bubble_df.csv", "funding.csv"
 }
+FUNDER_DIRECTORY = "funders"
+FUNDER_CLEANER_FILE = "funder_cleaner.json"
+
+
+def funder_cleaner_path(data_path):
+    """Return the canonical funder-normalization configuration path."""
+    return os.path.join(data_path, FUNDER_DIRECTORY, FUNDER_CLEANER_FILE)
 
 
 def normalize_pmid(value):
@@ -207,6 +214,44 @@ def canonical_agency(value, cleaner):
     if agency in visited:
         return sorted(visited, key=lambda item: (len(item), item))[0]
     return agency
+
+
+def funding_names_by_publication(cache, cleaner):
+    """Return every canonical funding agency associated with each PMID."""
+    by_publication = {}
+    for pmid, record in cache.get("records", {}).items():
+        names = {
+            canonical_agency(grant.get("agency"), cleaner)
+            for grant in record.get("grants", [])
+        }
+        names.discard("")
+        names.discard("Unclear")
+        by_publication[normalize_pmid(pmid)] = sorted(
+            names, key=str.casefold
+        )
+    return by_publication
+
+
+def attach_funding_metadata(frame, funding_by_publication):
+    """Add display-ready funder names to bubble rows without dropping rows."""
+    result = frame.copy()
+    result["FUNDER"] = result["PUBMEDID"].map(
+        lambda value: " | ".join(
+            funding_by_publication.get(normalize_pmid(value), [])
+        )
+    )
+    return result
+
+
+def write_bubble_funding_metadata(data_path, cache, cleaner):
+    """Persist funding metadata for the main dashboard's bubble dataset."""
+    path = os.path.join(data_path, "toplot", "bubble_df.csv")
+    frame = pd.read_csv(path, low_memory=False)
+    frame = frame.loc[:, ~frame.columns.str.startswith("Unnamed:")]
+    frame = attach_funding_metadata(
+        frame, funding_names_by_publication(cache, cleaner)
+    )
+    frame.to_csv(path, index=True)
 
 
 def normalize_funding_records(cache, cleaner, min_studies):
@@ -596,28 +641,392 @@ def build_summary(ancestry):
 
 
 def build_report(funder, studies, ancestry, normalized_records):
-    dates = pd.to_datetime(studies["DATE"], errors="coerce").dropna()
-    top_traits = studies["DISEASE/TRAIT"].dropna().value_counts().head(8)
-    summary = build_summary(ancestry)["overallParticipants"]
-    pmids = {normalize_pmid(value) for value in studies["PUBMEDID"]}
-    grant_count = sum(
-        len(normalized_records.get(pmid, [])) for pmid in pmids if pmid
+    """Build the detailed metrics used by funder and dataset reports."""
+    study_columns = [
+        "STUDY ACCESSION", "PUBMEDID", "DATE", "ASSOCIATION COUNT",
+        "DISEASE/TRAIT", "JOURNAL", "COHORT", "GENOTYPING TECHNOLOGY",
+        "FULL SUMMARY STATISTICS",
+    ]
+    ancestry_columns = [
+        "STUDY ACCESSION", "DATE", "N", "STAGE", "Broader",
+        "COUNTRY OF RECRUITMENT",
+    ]
+    studies = studies.loc[:, [
+        column for column in study_columns if column in studies
+    ]].copy()
+    ancestry = ancestry.loc[:, [
+        column for column in ancestry_columns if column in ancestry
+    ]].copy()
+    normalized_records = normalized_records or {}
+
+    def text_column(frame, name):
+        if name not in frame:
+            return pd.Series("", index=frame.index, dtype=object)
+        return frame[name].fillna("").astype(str).str.strip()
+
+    def percentage(numerator, denominator):
+        return round(float(numerator) / float(denominator) * 100, 2) \
+            if denominator else 0.0
+
+    studies["__accession"] = text_column(studies, "STUDY ACCESSION")
+    studies["__pmid"] = text_column(studies, "PUBMEDID").map(normalize_pmid)
+    studies["__date"] = pd.to_datetime(
+        text_column(studies, "DATE"), errors="coerce"
     )
+    association_values = studies["ASSOCIATION COUNT"] \
+        if "ASSOCIATION COUNT" in studies \
+        else pd.Series(0, index=studies.index, dtype=float)
+    studies["__association"] = pd.to_numeric(
+        association_values, errors="coerce"
+    ).fillna(0)
+    studies["__trait"] = text_column(studies, "DISEASE/TRAIT")
+    studies["__journal"] = text_column(studies, "JOURNAL")
+    studies["__cohort"] = text_column(studies, "COHORT")
+    studies["__technology"] = text_column(
+        studies, "GENOTYPING TECHNOLOGY"
+    )
+
+    participant_values = ancestry["N"] if "N" in ancestry \
+        else pd.Series(0, index=ancestry.index, dtype=float)
+    ancestry["__N"] = pd.to_numeric(
+        participant_values, errors="coerce"
+    ).fillna(0)
+    ancestry["__stage"] = text_column(ancestry, "STAGE").str.casefold()
+    ancestry["__broader"] = text_column(ancestry, "Broader")
+    ancestry["__accession"] = text_column(ancestry, "STUDY ACCESSION")
+    ancestry["__date"] = pd.to_datetime(
+        text_column(ancestry, "DATE"), errors="coerce"
+    )
+
+    accessions = studies.loc[studies["__accession"] != "", "__accession"]
+    publication_ids = studies.loc[studies["__pmid"] != "", "__pmid"]
+    study_count = int(accessions.nunique())
+    publication_count = int(publication_ids.nunique())
+    participant_count = int(round(ancestry["__N"].sum()))
+    ancestry_record_count = int(len(ancestry))
+    association_count = int(round(studies["__association"].sum()))
+    valid_dates = studies["__date"].dropna()
+
+    per_study_participants = ancestry[
+        ancestry["__accession"] != ""
+    ].groupby("__accession")["__N"].sum()
+    per_study_associations = studies[
+        studies["__accession"] != ""
+    ].groupby("__accession")["__association"].sum()
+
+    recorded = ancestry[
+        ancestry["__broader"].ne("")
+        & ancestry["__broader"].ne("In Part Not Recorded")
+    ].copy()
+    recorded_participants = int(round(recorded["__N"].sum()))
+    unrecorded_participants = participant_count - recorded_participants
+    non_european_participants = int(round(recorded.loc[
+        recorded["__broader"].ne("European"), "__N"
+    ].sum()))
+
+    stage_breakdown = []
+    for label, stage in (("Discovery", "initial"),
+                         ("Replication", "replication")):
+        stage_rows = ancestry[ancestry["__stage"] == stage]
+        stage_participants = int(round(stage_rows["__N"].sum()))
+        stage_breakdown.append({
+            "name": label,
+            "studyCount": int(stage_rows.loc[
+                stage_rows["__accession"] != "", "__accession"
+            ].nunique()),
+            "recordCount": int(len(stage_rows)),
+            "participantCount": stage_participants,
+            "participantPercentage": percentage(
+                stage_participants, participant_count
+            ),
+        })
+
+    recorded_total = recorded["__N"].sum()
+    recorded_records = len(recorded)
+    ancestry_breakdown = []
+    preferred_ancestries = list(SUMMARY_KEYS)
+    observed_ancestries = sorted(
+        set(recorded["__broader"]) - set(preferred_ancestries),
+        key=str.casefold
+    )
+    for name in preferred_ancestries + observed_ancestries:
+        rows = recorded[recorded["__broader"] == name]
+        if rows.empty and name not in SUMMARY_KEYS:
+            continue
+        participants = int(round(rows["__N"].sum()))
+        discovery_participants = int(round(rows.loc[
+            rows["__stage"] == "initial", "__N"
+        ].sum()))
+        replication_participants = int(round(rows.loc[
+            rows["__stage"] == "replication", "__N"
+        ].sum()))
+        ancestry_breakdown.append({
+            "name": name,
+            "participantCount": participants,
+            "participantPercentage": percentage(
+                participants, recorded_total
+            ),
+            "recordCount": int(len(rows)),
+            "recordPercentage": percentage(len(rows), recorded_records),
+            "studyCount": int(rows.loc[
+                rows["__accession"] != "", "__accession"
+            ].nunique()),
+            "discoveryParticipantCount": discovery_participants,
+            "replicationParticipantCount": replication_participants,
+        })
+
+    def grouped_study_metrics(frame, group_column, limit=10):
+        frame = frame[frame[group_column] != ""]
+        if frame.empty:
+            return []
+        grouped = frame.groupby(group_column, sort=False).agg(
+            studyCount=("__accession", "nunique"),
+            publicationCount=("__pmid", "nunique"),
+            associationCount=("__association", "sum"),
+        ).reset_index().rename(columns={group_column: "name"})
+        grouped = grouped.sort_values(
+            ["studyCount", "publicationCount", "name"],
+            ascending=[False, False, True]
+        ).head(limit)
+        return [{
+            "name": str(row["name"]),
+            "studies": int(row["studyCount"]),
+            "publications": int(row["publicationCount"]),
+            "associations": int(round(row["associationCount"])),
+            "studyPercentage": percentage(row["studyCount"], study_count),
+        } for _, row in grouped.iterrows()]
+
+    top_traits = grouped_study_metrics(studies, "__trait", 12)
+    top_journals = grouped_study_metrics(studies, "__journal", 10)
+
+    cohort_frame = studies[
+        ["__accession", "__pmid", "__association", "__cohort"]
+    ].copy()
+    cohort_frame["name"] = cohort_frame["__cohort"].str.split("|")
+    cohort_frame = cohort_frame.explode("name")
+    cohort_frame["name"] = cohort_frame["name"].fillna("").str.strip()
+    cohort_frame = cohort_frame[cohort_frame["name"] != ""]
+    if cohort_frame.empty:
+        top_cohorts = []
+        cohort_count = 0
+    else:
+        cohort_count = int(cohort_frame["name"].nunique())
+        top_cohorts = grouped_study_metrics(
+            cohort_frame.rename(columns={"name": "__cohort_name"}),
+            "__cohort_name", 10
+        )
+
+    technology_frame = studies[
+        ["__accession", "__pmid", "__association", "__technology"]
+    ].copy()
+    technology_frame["name"] = technology_frame[
+        "__technology"
+    ].str.split(",")
+    technology_frame = technology_frame.explode("name")
+    technology_frame["name"] = technology_frame["name"].fillna("").str. \
+        replace(r"\s*\[[^]]*]\s*$", "", regex=True).str.strip()
+    technology_frame = technology_frame[technology_frame["name"] != ""]
+    if technology_frame.empty:
+        top_technologies = []
+        technology_count = 0
+    else:
+        technology_count = int(technology_frame["name"].nunique())
+        top_technologies = grouped_study_metrics(
+            technology_frame.rename(columns={"name": "__technology_name"}),
+            "__technology_name", 10
+        )
+
+    country_source = ancestry.copy()
+    country_source["__country"] = text_column(
+        country_source, "COUNTRY OF RECRUITMENT"
+    ).map(_first_country)
+    country_source = country_source[country_source["__country"] != ""]
+    if country_source.empty:
+        top_countries = []
+        country_count = 0
+    else:
+        country_count = int(country_source["__country"].nunique())
+        country_groups = country_source.groupby("__country").agg(
+            participantCount=("__N", "sum"),
+            recordCount=("__country", "size"),
+            studyCount=("__accession", "nunique"),
+        ).reset_index().sort_values(
+            ["participantCount", "recordCount", "__country"],
+            ascending=[False, False, True]
+        ).head(12)
+        top_countries = [{
+            "name": str(row["__country"]),
+            "participants": int(round(row["participantCount"])),
+            "participantPercentage": percentage(
+                row["participantCount"], participant_count
+            ),
+            "records": int(row["recordCount"]),
+            "studies": int(row["studyCount"]),
+        } for _, row in country_groups.iterrows()]
+
+    pmids = {pmid for pmid in publication_ids if pmid}
+    publication_funders = {
+        pmid: normalized_records.get(pmid, []) for pmid in pmids
+        if normalized_records.get(pmid, [])
+    }
+    funder_counts = Counter(
+        name for names in publication_funders.values() for name in names
+    )
+    top_funders = [{
+        "name": name,
+        "publications": int(count),
+        "publicationPercentage": percentage(count, publication_count),
+    } for name, count in sorted(
+        funder_counts.items(), key=lambda item: (-item[1], item[0].casefold())
+    )[:12]]
+
+    study_years = studies.assign(
+        __year=studies["__date"].dt.year
+    ).dropna(subset=["__year"])
+    ancestry_years = ancestry.assign(
+        __year=ancestry["__date"].dt.year
+    ).dropna(subset=["__year"])
+    years = sorted(set(study_years["__year"].astype(int))
+                   | set(ancestry_years["__year"].astype(int)))
+    annual_activity = []
+    for year in years:
+        year_studies = study_years[study_years["__year"] == year]
+        year_ancestry = ancestry_years[ancestry_years["__year"] == year]
+        annual_activity.append({
+            "year": int(year),
+            "studyCount": int(year_studies["__accession"].nunique()),
+            "publicationCount": int(year_studies["__pmid"].nunique()),
+            "associationCount": int(round(
+                year_studies["__association"].sum()
+            )),
+            "participantCount": int(round(year_ancestry["__N"].sum())),
+        })
+
+    summary_stats_values = text_column(
+        studies, "FULL SUMMARY STATISTICS"
+    ).str.casefold()
+    summary_stats_studies = int(studies.loc[
+        summary_stats_values.isin({"yes", "y", "true", "1"}),
+        "__accession"
+    ].nunique())
+    studies_with_cohort = int(studies.loc[
+        studies["__cohort"] != "", "__accession"
+    ].nunique())
+    studies_with_journal = int(studies.loc[
+        studies["__journal"] != "", "__accession"
+    ].nunique())
+    studies_with_technology = int(studies.loc[
+        studies["__technology"] != "", "__accession"
+    ].nunique())
+
+    first_date = valid_dates.min() if not valid_dates.empty else None
+    latest_date = valid_dates.max() if not valid_dates.empty else None
+    recent_publications = 0
+    median_publication_year = None
+    if latest_date is not None:
+        recent = studies[
+            studies["__date"] >= pd.Timestamp(latest_date.year - 4, 1, 1)
+        ]
+        recent_publications = int(recent["__pmid"].nunique())
+        publication_dates = studies[
+            studies["__pmid"] != ""
+        ].drop_duplicates("__pmid")["__date"].dropna()
+        if not publication_dates.empty:
+            median_publication_year = int(
+                round(float(publication_dates.dt.year.median()))
+            )
+
     return {
         "funder": funder,
-        "studyCount": int(studies["PUBMEDID"].map(normalize_pmid).nunique()),
-        "ancestryRecordCount": int(len(ancestry)),
-        "participantCount": int(pd.to_numeric(
-            ancestry["N"], errors="coerce"
-        ).fillna(0).sum()),
-        "grantRecordCount": int(grant_count),
-        "firstStudyDate": dates.min().strftime("%Y-%m-%d") if not dates.empty else None,
-        "latestStudyDate": dates.max().strftime("%Y-%m-%d") if not dates.empty else None,
-        "topTraits": [
-            {"name": str(name), "studies": int(count)}
-            for name, count in top_traits.items()
+        "studyCount": study_count,
+        "publicationCount": publication_count,
+        "participantCount": participant_count,
+        "ancestryRecordCount": ancestry_record_count,
+        "associationCount": association_count,
+        "traitCount": int(studies.loc[
+            studies["__trait"] != "", "__trait"
+        ].nunique()),
+        "journalCount": int(studies.loc[
+            studies["__journal"] != "", "__journal"
+        ].nunique()),
+        "cohortCount": cohort_count,
+        "technologyCount": technology_count,
+        "recruitmentCountryCount": country_count,
+        "ancestryGroupCount": int(recorded["__broader"].nunique()),
+        "firstStudyDate": first_date.strftime("%Y-%m-%d")
+        if first_date is not None else None,
+        "latestStudyDate": latest_date.strftime("%Y-%m-%d")
+        if latest_date is not None else None,
+        "yearSpan": int(latest_date.year - first_date.year + 1)
+        if first_date is not None and latest_date is not None else 0,
+        "medianPublicationYear": median_publication_year,
+        "recentPublicationCount": recent_publications,
+        "averageStudiesPerPublication": round(
+            float(study_count) / publication_count, 2
+        ) if publication_count else 0.0,
+        "averageParticipantsPerStudy": round(
+            float(per_study_participants.mean()), 2
+        ) if not per_study_participants.empty else 0.0,
+        "medianParticipantsPerStudy": int(round(
+            per_study_participants.median()
+        )) if not per_study_participants.empty else 0,
+        "largestStudyParticipantCount": int(round(
+            per_study_participants.max()
+        )) if not per_study_participants.empty else 0,
+        "largestStudyAccession": str(per_study_participants.idxmax())
+        if not per_study_participants.empty else None,
+        "averageAssociationsPerStudy": round(
+            float(per_study_associations.mean()), 2
+        ) if not per_study_associations.empty else 0.0,
+        "medianAssociationsPerStudy": round(
+            float(per_study_associations.median()), 2
+        ) if not per_study_associations.empty else 0.0,
+        "maximumAssociationsPerStudy": int(round(
+            per_study_associations.max()
+        )) if not per_study_associations.empty else 0,
+        "recordedParticipantCount": recorded_participants,
+        "unrecordedParticipantCount": unrecorded_participants,
+        "ancestryReportingPercentage": percentage(
+            recorded_participants, participant_count
+        ),
+        "nonEuropeanParticipantCount": non_european_participants,
+        "nonEuropeanParticipantPercentage": percentage(
+            non_european_participants, recorded_participants
+        ),
+        "summaryStatisticsStudyCount": summary_stats_studies,
+        "summaryStatisticsPercentage": percentage(
+            summary_stats_studies, study_count
+        ),
+        "studiesWithCohortCount": studies_with_cohort,
+        "cohortReportingPercentage": percentage(
+            studies_with_cohort, study_count
+        ),
+        "studiesWithJournalCount": studies_with_journal,
+        "journalReportingPercentage": percentage(
+            studies_with_journal, study_count
+        ),
+        "studiesWithTechnologyCount": studies_with_technology,
+        "technologyReportingPercentage": percentage(
+            studies_with_technology, study_count
+        ),
+        "fundedPublicationCount": int(len(publication_funders)),
+        "fundingCoveragePercentage": percentage(
+            len(publication_funders), publication_count
+        ),
+        "funderCount": int(len(funder_counts)),
+        "grantRecordCount": int(sum(funder_counts.values())),
+        "stageBreakdown": stage_breakdown,
+        "ancestryBreakdown": ancestry_breakdown,
+        "topTraits": top_traits,
+        "topJournals": top_journals,
+        "topCohorts": top_cohorts,
+        "topTechnologies": top_technologies,
+        "topCountries": top_countries,
+        "topFunders": top_funders,
+        "annualActivity": annual_activity,
+        "ancestryPercentages": build_summary(ancestry)[
+            "overallParticipants"
         ],
-        "ancestryPercentages": summary,
     }
 
 
@@ -814,6 +1223,9 @@ def build_funder_artifacts(
         cache, cleaner, min_studies
     )
     studies, ancestry, mappings, bubbles, countries = _load_sources(data_path)
+    bubbles = attach_funding_metadata(
+        bubbles, funding_names_by_publication(cache, cleaner)
+    )
 
     with open(os.path.join(data_path, "summary", "uniq_broader.txt")) as source:
         all_ancestries = [line.strip() for line in source if line.strip()]
@@ -946,6 +1358,7 @@ def funder_artifact_files(data_path):
         slugs.append(slug)
 
     return (
+        "funders/funder_cleaner.json",
         "funders/pubmed_grants.json",
         *(f"funders/dashboards/{slug}.json" for slug in slugs),
         *(f"funders/downloads/{slug}.zip" for slug in slugs),
@@ -962,6 +1375,12 @@ def validate_funder_artifacts(data_path):
             raise FileNotFoundError(
                 f"Missing or empty funder artifact: {path}"
             )
+
+    cleaner = _load_json(funder_cleaner_path(data_path), None)
+    if not isinstance(cleaner, dict) or not cleaner or not all(
+            isinstance(alias, str) and isinstance(canonical, str)
+            for alias, canonical in cleaner.items()):
+        raise ValueError("The funder normalization configuration is invalid")
 
     cache = _load_json(
         os.path.join(data_path, "funders", "pubmed_grants.json"), None
@@ -1016,7 +1435,7 @@ def main():
     data_path = os.path.join(repository, "data")
     funder_root = os.path.join(data_path, "funders")
     cache_path = os.path.join(funder_root, "pubmed_grants.json")
-    cleaner_path = os.path.join(repository, "funder_data", "funder_cleaner.json")
+    cleaner_path = funder_cleaner_path(data_path)
     if args.skip_fetch:
         cache = _load_json(cache_path, None)
         if not cache:

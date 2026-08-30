@@ -12,9 +12,12 @@ from app.FunderData import FunderDataStore, FunderDataUnavailable
 from app.DashboardFilters import DashboardFilterStore, split_cohorts
 from funder_pipeline import (
     _promote_funder_artifacts,
+    attach_funding_metadata,
     build_heat_map,
+    build_report,
     build_summary,
     canonical_agency,
+    funding_names_by_publication,
     normalize_funding_records,
     parse_pubmed_grants,
     funder_artifact_files,
@@ -53,6 +56,30 @@ class PubMedFundingTests(unittest.TestCase):
         self.assertEqual(records["3"], ["Other funders"])
         self.assertEqual(counts["A"], 2)
 
+    def test_bubble_metadata_keeps_all_canonical_funder_names(self):
+        cache = {
+            "records": {
+                "123": {"grants": [
+                    {"agency": "Wellcome"},
+                    {"agency": "Medical Research Council"},
+                    {"agency": "Wellcome"},
+                ]},
+                "456": {"grants": []},
+            }
+        }
+        names = funding_names_by_publication(
+            cache, {"Wellcome": "Wellcome Trust"}
+        )
+
+        bubbles = attach_funding_metadata(pd.DataFrame([
+            {"PUBMEDID": 123.0}, {"PUBMEDID": "456"}
+        ]), names)
+
+        self.assertEqual(
+            bubbles["FUNDER"].tolist(),
+            ["Medical Research Council | Wellcome Trust", ""],
+        )
+
 
 class FunderSummaryTests(unittest.TestCase):
     def test_summary_tracks_metric_and_stage_modes(self):
@@ -85,6 +112,76 @@ class FunderSummaryTests(unittest.TestCase):
 
         self.assertEqual(list(heatmap), ["2024"])
         self.assertEqual(heatmap["2024"]["1"]["value"], "0.0")
+
+    def test_detailed_report_covers_output_participants_and_metadata(self):
+        studies = pd.DataFrame([
+            {
+                "STUDY ACCESSION": "A", "PUBMEDID": "1",
+                "DATE": "2020-01-10", "DISEASE/TRAIT": "Trait X",
+                "ASSOCIATION COUNT": 2, "JOURNAL": "Journal One",
+                "COHORT": "Cohort A|Cohort B",
+                "GENOTYPING TECHNOLOGY": "Genome-wide genotyping array",
+                "FULL SUMMARY STATISTICS": "yes",
+            },
+            {
+                "STUDY ACCESSION": "B", "PUBMEDID": "1",
+                "DATE": "2020-02-10", "DISEASE/TRAIT": "Trait Y",
+                "ASSOCIATION COUNT": 3, "JOURNAL": "Journal One",
+                "COHORT": "Cohort A",
+                "GENOTYPING TECHNOLOGY": "Genome-wide sequencing",
+                "FULL SUMMARY STATISTICS": "no",
+            },
+            {
+                "STUDY ACCESSION": "C", "PUBMEDID": "2",
+                "DATE": "2022-03-10", "DISEASE/TRAIT": "Trait X",
+                "ASSOCIATION COUNT": 5, "JOURNAL": "Journal Two",
+                "COHORT": "",
+                "GENOTYPING TECHNOLOGY": "Genome-wide genotyping array",
+                "FULL SUMMARY STATISTICS": "yes",
+            },
+        ])
+        ancestry = pd.DataFrame([
+            {
+                "STUDY ACCESSION": "A", "DATE": "2020-01-10",
+                "STAGE": "initial", "Broader": "European", "N": 100,
+                "COUNTRY OF RECRUITMENT": "UK",
+            },
+            {
+                "STUDY ACCESSION": "B", "DATE": "2020-02-10",
+                "STAGE": "replication", "Broader": "Asian", "N": 50,
+                "COUNTRY OF RECRUITMENT": "UK",
+            },
+            {
+                "STUDY ACCESSION": "C", "DATE": "2022-03-10",
+                "STAGE": "initial", "Broader": "African", "N": 75,
+                "COUNTRY OF RECRUITMENT": "United States",
+            },
+            {
+                "STUDY ACCESSION": "C", "DATE": "2022-03-10",
+                "STAGE": "initial", "Broader": "In Part Not Recorded",
+                "N": 25, "COUNTRY OF RECRUITMENT": "United States",
+            },
+        ])
+
+        report = build_report(
+            "Example Funder", studies, ancestry,
+            {"1": ["Funder A"], "2": ["Funder B"]},
+        )
+
+        self.assertEqual(report["studyCount"], 3)
+        self.assertEqual(report["publicationCount"], 2)
+        self.assertEqual(report["participantCount"], 250)
+        self.assertEqual(report["associationCount"], 10)
+        self.assertEqual(report["traitCount"], 2)
+        self.assertEqual(report["cohortCount"], 2)
+        self.assertEqual(report["summaryStatisticsStudyCount"], 2)
+        self.assertEqual(report["recordedParticipantCount"], 225)
+        self.assertEqual(report["ancestryReportingPercentage"], 90)
+        self.assertEqual(report["fundedPublicationCount"], 2)
+        self.assertEqual(report["topTraits"][0]["name"], "Trait X")
+        self.assertEqual(report["topTraits"][0]["studies"], 2)
+        self.assertEqual(report["topCohorts"][0]["name"], "Cohort A")
+        self.assertEqual(len(report["annualActivity"]), 2)
 
 
 class DatasetFilterTests(unittest.TestCase):
@@ -168,12 +265,34 @@ class DatasetFilterTests(unittest.TestCase):
         self.assertEqual(results[0]["name"], "Dataset 0")
         self.assertEqual(results[-1]["name"], "Dataset 24")
 
+    def test_funder_filter_reads_cleaner_from_the_funders_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            funders = Path(directory) / "funders"
+            funders.mkdir()
+            cleaner_path = funders / "funder_cleaner.json"
+            cleaner_path.write_text('{"Alias": "Canonical"}')
+            (funders / "index.json").write_text(json.dumps({
+                "minimumPublicationCount": 1,
+                "funders": [{"slug": "canonical", "name": "Canonical"}],
+            }))
+            (funders / "pubmed_grants.json").write_text(json.dumps({
+                "records": {"123": {"grants": [{"agency": "Alias"}]}},
+            }))
+
+            store = DashboardFilterStore(directory)
+            store._ensure_funder_index()
+
+        self.assertEqual(store._funder_pmids["canonical"], frozenset({"123"}))
+
 
 class FunderArtifactTests(unittest.TestCase):
     def _write_release(self, root):
         funders = root / "funders"
         (funders / "dashboards").mkdir(parents=True)
         (funders / "downloads").mkdir()
+        (funders / "funder_cleaner.json").write_text(
+            '{"Alias": "Canonical"}'
+        )
         (funders / "pubmed_grants.json").write_text(json.dumps({
             "version": 1, "records": {"123": {"grants": []}}
         }))
@@ -239,6 +358,7 @@ class FunderArtifactTests(unittest.TestCase):
             files = validate_funder_artifacts(str(root))
 
             self.assertEqual(files, funder_artifact_files(str(root)))
+            self.assertIn("funders/funder_cleaner.json", files)
             self.assertIn("funders/pubmed_grants.json", files)
             self.assertIn("funders/dashboards/safe.json", files)
             self.assertIn("funders/downloads/safe.zip", files)
@@ -248,6 +368,9 @@ class FunderArtifactTests(unittest.TestCase):
             root = Path(directory)
             staged = root / "staged"
             previous = root / "previous"
+            source_funders = root / "data" / "funders"
+            source_funders.mkdir(parents=True)
+            (source_funders / "funder_cleaner.json").write_text("{}")
             (previous / "funders").mkdir(parents=True)
             staged.mkdir()
             cache_payload = {"version": 1, "records": {"123": {"grants": []}}}
@@ -269,10 +392,19 @@ class FunderArtifactTests(unittest.TestCase):
             self.assertTrue(
                 (staged / "funders" / "pubmed_grants.json").is_file()
             )
+            self.assertEqual(
+                (staged / "funders" / "funder_cleaner.json").read_text(),
+                "{}",
+            )
             collect.assert_called_once_with(
                 str(staged), str(staged / "funders" / "pubmed_grants.json")
             )
-            build.assert_called_once()
+            build.assert_called_once_with(
+                str(root),
+                str(staged),
+                cache_payload,
+                str(staged / "funders" / "funder_cleaner.json"),
+            )
 
 
 class FunderRouteTests(unittest.TestCase):
@@ -307,6 +439,11 @@ class FunderRouteTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Funding-linked diversity report", response.data)
+        self.assertIn(b"funder-report__print-masthead", response.data)
+        self.assertIn(b"logo_white_rect.png", response.data)
+        self.assertIn(b"Print / save PDF", response.data)
+        self.assertNotIn(b'<div id="header"', response.data)
+        self.assertNotIn(b'<div id="footer"', response.data)
 
     def test_unknown_funder_is_not_exposed(self):
         self.assertEqual(
@@ -402,6 +539,9 @@ class FunderRouteTests(unittest.TestCase):
         self.assertEqual(report.status_code, 200)
         self.assertIn(b"Dataset diversity report", report.data)
         self.assertIn(b"UKB", report.data)
+        self.assertIn(b"At a glance", report.data)
+        self.assertIn(b"Participant and association profile", report.data)
+        self.assertIn(b"Annual activity", report.data)
         download.close()
 
 

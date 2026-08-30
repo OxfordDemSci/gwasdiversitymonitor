@@ -125,7 +125,7 @@ function __dcDownloadBubbleCsv() {
     var points = state && state.points ? state.points : [];
     var selectedTraits = state && state.selectedTraits ? state.selectedTraits : [];
     var exportPoints = selectedTraits.length ? points.filter(function (p) { return p.traitOk; }) : points;
-    var columns = ["", "Broader", "N", "PUBMEDID", "AUTHOR", "parentterm", "STAGE", "DATE", "ACCESSION", "DiseaseOrTrait", "cssclassname", "trait"];
+    var columns = ["", "Broader", "N", "PUBMEDID", "AUTHOR", "parentterm", "STAGE", "DATE", "ACCESSION", "DiseaseOrTrait", "COHORT", "JOURNAL", "FUNDER", "cssclassname", "trait"];
     var lines = [columns.map(__dcCsvEscape).join(",")];
 
     for (var i = 0; i < exportPoints.length; i++) {
@@ -573,6 +573,10 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         proxyCircle.setAttribute("pubmedid", d.PUBMEDID);
         proxyCircle.setAttribute("author", d.AUTHOR);
         proxyCircle.setAttribute("accession", d.ACCESSION);
+        proxyCircle.setAttribute("cohort", d.COHORT || "");
+        proxyCircle.setAttribute("journal", d.JOURNAL || "");
+        proxyCircle.setAttribute("funder", d.FUNDER || "");
+        proxyCircle.setAttribute("publicationdate", d.DATE || "");
         proxyCircle.setAttribute("N", __dcN(d));
         proxyCircle.setAttribute("DiseaseOrTrait", __dcDiseaseClean(d));
         proxyCircle.setAttribute("trait", __dcTrait(d));
@@ -945,35 +949,100 @@ function backgroundMouseOver(evt) {
     }
 }
 
+function __dcDetailsValue(value, listValue) {
+    var text = String(value === undefined || value === null ? "" : value).trim();
+    if (!text || /^(nan|null|none)$/i.test(text)) return "Not reported";
+
+    if (listValue) {
+        text = text.split(/\s*\|\s*/).filter(function(item) {
+            return item.trim().length > 0;
+        }).join("; ");
+    }
+
+    return text || "Not reported";
+}
+
+function __dcPublicationDate(value) {
+    var text = __dcDetailsValue(value, false);
+    var match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+    if (!match) return text;
+
+    var months = [
+        "January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"
+    ];
+    var month = months[+match[2] - 1];
+    if (!month) return text;
+    return +match[3] + " " + month + " " + match[1];
+}
+
+function __dcMetadataLine(label, value, listValue) {
+    return $("<span>", { "class": "metadata-line" })
+        .append($("<strong>").text(label + ":"))
+        .append(document.createTextNode(" " + __dcDetailsValue(value, listValue)));
+}
+
+function __dcStudyDetails(node) {
+    return $("<div>", { "class": "last-inside" })
+        .append(__dcMetadataLine("Study accession", node.getAttribute("accession"), false))
+        .append(__dcMetadataLine("Cohort", node.getAttribute("cohort"), true))
+        .append(__dcMetadataLine("Trait", node.getAttribute("DiseaseOrTrait"), false));
+}
+
+function __dcSizeGroup(node, size) {
+    return $("<div>", { "class": "last", "data-size": size })
+        .append(__dcMetadataLine("Sample size", numberFormatter(size) + " participants", false))
+        .append(__dcStudyDetails(node));
+}
+
+function __dcPublicationRow(node, id, size) {
+    var first = $("<div>", { "class": "first" });
+    if (id && id !== "Not reported") {
+        first.append($("<a>", {
+            href: "https://www.ncbi.nlm.nih.gov/pubmed/" + encodeURIComponent(id),
+            target: "_blank",
+            rel: "noopener noreferrer"
+        }).text("PUBMED ID: " + id));
+    } else {
+        first.append(__dcMetadataLine("PUBMED ID", id, false));
+    }
+    first
+        .append(__dcMetadataLine("First author", node.getAttribute("author"), false))
+        .append(__dcMetadataLine("Journal name", node.getAttribute("journal"), false))
+        .append(__dcMetadataLine(
+            "Publication date",
+            __dcPublicationDate(node.getAttribute("publicationdate")),
+            false
+        ))
+        .append(__dcMetadataLine("Funder", node.getAttribute("funder"), true));
+
+    return $("<div>", {
+        "class": "row",
+        "data-pubmedid": id
+    }).append(first).append(__dcSizeGroup(node, size));
+}
+
 function makeSelected(node) {
     if (node && node.classList) {
         node.classList.add("selected");
         $("#bubbleGraph .details-zone").addClass('active');
-        var id = node.getAttribute("pubmedid").replace('.0', '');
-        var size = node.getAttribute("N").replace('.0', '');
-        if($("#bubbleGraph .details .row#" + id).length > 0) {
-            if($("#bubbleGraph .details .row#" + id + " .last#" + size).length > 0) {
-                $("#bubbleGraph .details .row#" + id + " .last#" + size).append(
-                    "<div class='last-inside'><span>" + node.getAttribute("accession") + "</span>"+
-                    "<span>" + node.getAttribute("DiseaseOrTrait") + "</span></div>"
-                )
+        var id = __dcDetailsValue(node.getAttribute("pubmedid"), false).replace(/\.0$/, '');
+        var size = __dcDetailsValue(node.getAttribute("N"), false).replace(/\.0$/, '');
+        var row = $("#bubbleGraph .details .row").filter(function() {
+            return $(this).attr("data-pubmedid") === id;
+        }).first();
+
+        if(row.length > 0) {
+            var sizeGroup = row.children(".last").filter(function() {
+                return $(this).attr("data-size") === size;
+            }).first();
+            if(sizeGroup.length > 0) {
+                sizeGroup.append(__dcStudyDetails(node));
             } else {
-                $("#bubbleGraph .details .row#" + id).append(
-                    "<div class='last' id='" + size + "'><span>Size: " + numberFormatter(size) + " Part.</span>"+
-                    "<div class='last-inside'><span>" + node.getAttribute("accession") + "</span>"+
-                    "<span>" + node.getAttribute("DiseaseOrTrait") + "</span></div></div>"
-                )
+                row.append(__dcSizeGroup(node, size));
             }
         } else {
-            $("#bubbleGraph .details").append(
-                "<div class='row' id='" + id + "'>"+
-                "<div class='first'><a href='https://www.ncbi.nlm.nih.gov/pubmed/" + id + "' target='_blank'>PUBMEDID: " + id + "</a>"+
-                "<span>First Author <strong>" + node.getAttribute("author")+"</strong></span></div>"+
-                "<div class='last' id='" + size + "'><span>Size: " + numberFormatter(size) + " Part.</span>"+
-                "<div class='last-inside'><span>" + node.getAttribute("accession") + "</span>"+
-                "<span>" + node.getAttribute("DiseaseOrTrait") + "</span></div></div>"+
-                "</div>"
-            );
+            $("#bubbleGraph .details").append(__dcPublicationRow(node, id, size));
         }
     }
 }
@@ -1029,6 +1098,10 @@ function reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, t
         .attr("pubmedid", function (d) { return d.PUBMEDID })
         .attr("author", function (d) { return d.AUTHOR })
         .attr("accession", function (d) { return d.ACCESSION })
+        .attr("cohort", function (d) { return d.COHORT || "" })
+        .attr("journal", function (d) { return d.JOURNAL || "" })
+        .attr("funder", function (d) { return d.FUNDER || "" })
+        .attr("publicationdate", function (d) { return d.DATE || "" })
         .attr("N", function (d) { return d.N })
         .attr("DiseaseOrTrait", function (d) { return d.DiseaseOrTrait.replace('>', 'more than').replace('<', 'less than') })
         .attr("trait", function (d) { return d.DiseaseOrTrait.replace(/ /g, '-').replace('>', 'more than').replace('<', 'less than').replace(/\(/g, '').replace(/\)/g, '').toLowerCase() })
