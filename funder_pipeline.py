@@ -23,7 +23,8 @@ import requests
 
 NCBI_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 CACHE_VERSION = 1
-ARTIFACT_VERSION = 1
+ARTIFACT_VERSION = 2
+REPORT_SCHEMA_VERSION = 3
 DEFAULT_MIN_STUDIES = 50
 DEFAULT_BATCH_SIZE = 100
 FUNDER_DOWNLOAD_MEMBERS = {
@@ -31,6 +32,88 @@ FUNDER_DOWNLOAD_MEMBERS = {
 }
 FUNDER_DIRECTORY = "funders"
 FUNDER_CLEANER_FILE = "funder_cleaner.json"
+
+REPORT_REQUIRED_KEYS = frozenset({
+    "schemaVersion", "funder", "studyCount", "publicationCount",
+    "participantCount", "ancestryRecordCount", "associationCount",
+    "traitCount", "journalCount", "cohortCount", "technologyCount",
+    "recruitmentCountryCount", "ancestryGroupCount", "firstStudyDate",
+    "latestStudyDate", "yearSpan", "medianPublicationYear",
+    "recentPublicationCount", "averageStudiesPerPublication",
+    "averageParticipantsPerStudy", "medianParticipantsPerStudy",
+    "largestStudyParticipantCount", "largestStudyAccession",
+    "averageAssociationsPerStudy", "medianAssociationsPerStudy",
+    "maximumAssociationsPerStudy", "recordedParticipantCount",
+    "unrecordedParticipantCount", "ancestryReportingPercentage",
+    "nonEuropeanParticipantCount", "nonEuropeanParticipantPercentage",
+    "summaryStatisticsStudyCount", "summaryStatisticsPercentage",
+    "studiesWithCohortCount", "cohortReportingPercentage",
+    "studiesWithJournalCount", "journalReportingPercentage",
+    "studiesWithTechnologyCount", "technologyReportingPercentage",
+    "fundedPublicationCount", "fundingCoveragePercentage", "funderCount",
+    "grantRecordCount", "stageBreakdown", "ancestryBreakdown",
+    "topTraits", "topJournals", "topCohorts", "topTechnologies",
+    "topCountries", "topFunders", "annualActivity",
+    "ancestryPercentages",
+})
+
+REPORT_NUMERIC_KEYS = frozenset({
+    "studyCount", "publicationCount", "participantCount",
+    "ancestryRecordCount", "associationCount", "traitCount",
+    "journalCount", "cohortCount", "technologyCount",
+    "recruitmentCountryCount", "ancestryGroupCount", "yearSpan",
+    "recentPublicationCount", "averageStudiesPerPublication",
+    "averageParticipantsPerStudy", "medianParticipantsPerStudy",
+    "largestStudyParticipantCount", "averageAssociationsPerStudy",
+    "medianAssociationsPerStudy", "maximumAssociationsPerStudy",
+    "recordedParticipantCount", "unrecordedParticipantCount",
+    "ancestryReportingPercentage", "nonEuropeanParticipantCount",
+    "nonEuropeanParticipantPercentage", "summaryStatisticsStudyCount",
+    "summaryStatisticsPercentage", "studiesWithCohortCount",
+    "cohortReportingPercentage", "studiesWithJournalCount",
+    "journalReportingPercentage", "studiesWithTechnologyCount",
+    "technologyReportingPercentage", "fundedPublicationCount",
+    "fundingCoveragePercentage", "funderCount", "grantRecordCount",
+})
+
+REPORT_ROW_SCHEMAS = {
+    "stageBreakdown": frozenset({
+        "name", "studyCount", "recordCount", "participantCount",
+        "participantPercentage",
+    }),
+    "ancestryBreakdown": frozenset({
+        "name", "participantCount", "participantPercentage", "recordCount",
+        "recordPercentage", "studyCount", "discoveryParticipantCount",
+        "replicationParticipantCount",
+    }),
+    "topTraits": frozenset({
+        "name", "studies", "publications", "associations",
+        "studyPercentage",
+    }),
+    "topJournals": frozenset({
+        "name", "studies", "publications", "associations",
+        "studyPercentage",
+    }),
+    "topCohorts": frozenset({
+        "name", "studies", "publications", "associations",
+        "studyPercentage",
+    }),
+    "topTechnologies": frozenset({
+        "name", "studies", "publications", "associations",
+        "studyPercentage",
+    }),
+    "topCountries": frozenset({
+        "name", "participants", "participantPercentage", "records",
+        "studies",
+    }),
+    "topFunders": frozenset({
+        "name", "publications", "publicationPercentage",
+    }),
+    "annualActivity": frozenset({
+        "year", "studyCount", "publicationCount", "associationCount",
+        "participantCount",
+    }),
+}
 
 
 def funder_cleaner_path(data_path):
@@ -553,7 +636,11 @@ def build_doughnut(merged, ancestry_order, parent_terms, final_year):
 
 
 COUNTRY_REPLACEMENTS = {
+    "US": "United States",
+    "USA": "United States",
     "U.S.": "United States",
+    "U.S.A.": "United States",
+    "UK": "United Kingdom",
     "U.K.": "United Kingdom",
     "Gambia": "Gambia, The",
     "Republic of Korea": "Korea, South",
@@ -567,12 +654,54 @@ COUNTRY_REPLACEMENTS = {
 }
 
 
-def _first_country(value):
+def _countries(value):
+    countries = []
+    seen = set()
     for token in re.split(r"[,;|]", str(value or "")):
         token = token.strip()
-        if token and token != "NR":
-            return COUNTRY_REPLACEMENTS.get(token, token)
-    return ""
+        if not token or token.casefold() in {
+                "nr", "na", "n/a", "not reported", "none"}:
+            continue
+        country = COUNTRY_REPLACEMENTS.get(token, token)
+        if country not in seen:
+            countries.append(country)
+            seen.add(country)
+    return countries
+
+
+def _first_country(value):
+    countries = _countries(value)
+    return countries[0] if countries else ""
+
+
+def _split_technologies(value):
+    """Split top-level technology categories, not commas in brackets."""
+    tokens = []
+    current = []
+    depth = 0
+    for character in str(value or ""):
+        if character == "[":
+            depth += 1
+        elif character == "]" and depth:
+            depth -= 1
+        if character == "," and depth == 0:
+            tokens.append("".join(current))
+            current = []
+        else:
+            current.append(character)
+    tokens.append("".join(current))
+
+    technologies = []
+    seen = set()
+    for token in tokens:
+        technology = re.sub(r"\s*\[[^]]*]\s*$", "", token).strip()
+        if not technology or technology.casefold() in {
+                "nr", "na", "n/a", "not reported", "none"}:
+            continue
+        if technology not in seen:
+            technologies.append(technology)
+            seen.add(technology)
+    return technologies
 
 
 def build_country_map(ancestry, country_lookup, final_year):
@@ -640,6 +769,95 @@ def build_summary(ancestry):
     return result
 
 
+def validate_report(report, require_content=False):
+    """Reject incomplete report payloads before missing data become zeros."""
+    if not isinstance(report, dict):
+        raise ValueError("The report payload is not an object")
+    if report.get("schemaVersion") != REPORT_SCHEMA_VERSION:
+        raise ValueError(
+            "The report schema is stale or unsupported; expected version "
+            f"{REPORT_SCHEMA_VERSION}"
+        )
+    missing = REPORT_REQUIRED_KEYS - set(report)
+    if missing:
+        raise ValueError(
+            "The report payload is missing required fields: "
+            + ", ".join(sorted(missing))
+        )
+    for field in REPORT_NUMERIC_KEYS:
+        value = report[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                or not math.isfinite(value) or value < 0:
+            raise ValueError(
+                f"The report field {field} is not a non-negative number"
+            )
+    median_year = report["medianPublicationYear"]
+    if median_year is not None and (
+            isinstance(median_year, bool)
+            or not isinstance(median_year, (int, float))
+            or not math.isfinite(median_year)):
+        raise ValueError("The report median publication year is invalid")
+
+    for field, required_row_keys in REPORT_ROW_SCHEMAS.items():
+        rows = report[field]
+        if not isinstance(rows, list):
+            raise ValueError(f"The report field {field} is not a list")
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                raise ValueError(
+                    f"The report field {field}[{index}] is not an object"
+                )
+            missing_row_keys = required_row_keys - set(row)
+            if missing_row_keys:
+                raise ValueError(
+                    f"The report field {field}[{index}] is missing: "
+                    + ", ".join(sorted(missing_row_keys))
+                )
+
+    if not isinstance(report["ancestryPercentages"], dict):
+        raise ValueError("The report ancestry percentages are invalid")
+    if report["studyCount"] < report["publicationCount"]:
+        raise ValueError(
+            "A report cannot contain fewer studies than publications"
+        )
+    if report["recordedParticipantCount"] \
+            + report["unrecordedParticipantCount"] \
+            != report["participantCount"]:
+        raise ValueError(
+            "Recorded and unrecorded participants do not match the total"
+        )
+
+    if require_content:
+        positive_fields = (
+            "studyCount", "publicationCount", "participantCount",
+            "ancestryRecordCount", "associationCount", "traitCount",
+            "journalCount",
+        )
+        missing_content = [
+            field for field in positive_fields if report[field] <= 0
+        ]
+        nonempty_fields = (
+            "stageBreakdown", "ancestryBreakdown", "topTraits",
+            "topJournals", "annualActivity",
+        )
+        missing_content.extend(
+            field for field in nonempty_fields if not report[field]
+        )
+        if report["cohortCount"] > 0 and not report["topCohorts"]:
+            missing_content.append("topCohorts")
+        if report["technologyCount"] > 0 and not report["topTechnologies"]:
+            missing_content.append("topTechnologies")
+        if report["recruitmentCountryCount"] > 0 \
+                and not report["topCountries"]:
+            missing_content.append("topCountries")
+        if missing_content:
+            raise ValueError(
+                "The generated report has empty source-backed content: "
+                + ", ".join(missing_content)
+            )
+    return report
+
+
 def build_report(funder, studies, ancestry, normalized_records):
     """Build the detailed metrics used by funder and dataset reports."""
     study_columns = [
@@ -651,12 +869,20 @@ def build_report(funder, studies, ancestry, normalized_records):
         "STUDY ACCESSION", "DATE", "N", "STAGE", "Broader",
         "COUNTRY OF RECRUITMENT",
     ]
-    studies = studies.loc[:, [
-        column for column in study_columns if column in studies
-    ]].copy()
-    ancestry = ancestry.loc[:, [
-        column for column in ancestry_columns if column in ancestry
-    ]].copy()
+    missing_study_columns = set(study_columns) - set(studies.columns)
+    missing_ancestry_columns = set(ancestry_columns) - set(ancestry.columns)
+    if missing_study_columns:
+        raise ValueError(
+            "Report study data are missing required columns: "
+            + ", ".join(sorted(missing_study_columns))
+        )
+    if missing_ancestry_columns:
+        raise ValueError(
+            "Report ancestry data are missing required columns: "
+            + ", ".join(sorted(missing_ancestry_columns))
+        )
+    studies = studies.loc[:, study_columns].copy()
+    ancestry = ancestry.loc[:, ancestry_columns].copy()
     normalized_records = normalized_records or {}
 
     def text_column(frame, name):
@@ -821,10 +1047,9 @@ def build_report(funder, studies, ancestry, normalized_records):
     ].copy()
     technology_frame["name"] = technology_frame[
         "__technology"
-    ].str.split(",")
+    ].map(_split_technologies)
     technology_frame = technology_frame.explode("name")
-    technology_frame["name"] = technology_frame["name"].fillna("").str. \
-        replace(r"\s*\[[^]]*]\s*$", "", regex=True).str.strip()
+    technology_frame["name"] = technology_frame["name"].fillna("").str.strip()
     technology_frame = technology_frame[technology_frame["name"] != ""]
     if technology_frame.empty:
         top_technologies = []
@@ -839,7 +1064,11 @@ def build_report(funder, studies, ancestry, normalized_records):
     country_source = ancestry.copy()
     country_source["__country"] = text_column(
         country_source, "COUNTRY OF RECRUITMENT"
-    ).map(_first_country)
+    ).map(_countries)
+    country_source = country_source.explode("__country")
+    country_source["__country"] = country_source[
+        "__country"
+    ].fillna("").str.strip()
     country_source = country_source[country_source["__country"] != ""]
     if country_source.empty:
         top_countries = []
@@ -936,7 +1165,8 @@ def build_report(funder, studies, ancestry, normalized_records):
                 round(float(publication_dates.dt.year.median()))
             )
 
-    return {
+    report = {
+        "schemaVersion": REPORT_SCHEMA_VERSION,
         "funder": funder,
         "studyCount": study_count,
         "publicationCount": publication_count,
@@ -1028,6 +1258,7 @@ def build_report(funder, studies, ancestry, normalized_records):
             "overallParticipants"
         ],
     }
+    return validate_report(report)
 
 
 def _safe_zip_write(archive_path, files):
@@ -1285,9 +1516,15 @@ def build_funder_artifacts(
         report = build_report(
             funder, selected_studies, selected_ancestry, normalized_records
         )
+        validate_report(report, require_content=True)
         payload = {
             "version": ARTIFACT_VERSION,
-            "funder": {"name": funder, "slug": slug, "studyCount": int(count)},
+            "funder": {
+                "name": funder,
+                "slug": slug,
+                "studyCount": report["studyCount"],
+                "publicationCount": report["publicationCount"],
+            },
             "bubbleGraph": build_bubble_payload(selected_bubbles),
             "tsPlot": build_time_series(
                 selected_ancestry, all_ancestries, final_year
@@ -1316,7 +1553,8 @@ def build_funder_artifacts(
         entries.append({
             "name": funder,
             "slug": slug,
-            "studyCount": int(count),
+            "studyCount": report["studyCount"],
+            "publicationCount": report["publicationCount"],
             "participantCount": report["participantCount"],
         })
         print(f"Built funder dashboard: {funder} ({count} publications)")
@@ -1408,6 +1646,23 @@ def validate_funder_artifacts(data_path):
                 or dashboard.get("funder", {}).get("slug") != slug \
                 or dashboard.get("funder", {}).get("name") != entry["name"]:
             raise ValueError(f"Funder dashboard metadata differs: {slug}")
+        try:
+            report = validate_report(
+                dashboard.get("report"), require_content=True
+            )
+        except ValueError as error:
+            raise ValueError(
+                f"Invalid funder report for {slug}: {error}"
+            ) from error
+        count_fields = ("studyCount", "publicationCount")
+        if any(
+            entry.get(field) != report[field]
+            or dashboard["funder"].get(field) != report[field]
+            for field in count_fields
+        ):
+            raise ValueError(
+                f"Funder study/publication counts differ for {slug}"
+            )
 
         archive_path = os.path.join(
             data_path, "funders", "downloads", f"{slug}.zip"

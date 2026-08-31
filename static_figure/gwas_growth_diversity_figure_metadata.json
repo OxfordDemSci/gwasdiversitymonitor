@@ -1,0 +1,84 @@
+{
+  "figure": "GWAS Diversity Monitor: growth and representation, 2005–2026",
+  "dataGeneratedAt": "2026-08-30 23:01:58",
+  "latestPublicationDate": "2026-07-30",
+  "gitRevision": "5bd8c65",
+  "publicationCount": 7797,
+  "accessionCount": 229900,
+  "ancestryRecordCount": 298217,
+  "currentEuropeanParticipantPercentage": 88.1988,
+  "currentNonEuropeanParticipantPercentage": 11.8012,
+  "originalCorrespondence": {
+    "publication_count": 4346,
+    "european_participant_pct": 88.45,
+    "published": "2020-03-05",
+    "doi": "10.1038/s41588-020-0580-y"
+  },
+  "releaseEvents": [
+    {
+      "date": "2019-11-08",
+      "label": "Repository\nrelease"
+    },
+    {
+      "date": "2020-03-05",
+      "label": "Nature Genetics\nCorrespondence"
+    },
+    {
+      "date": "2026-08-27",
+      "label": "Funder + cohort\ndev release"
+    }
+  ],
+  "partialYear": 2026,
+  "visibleFunderCount": 39,
+  "meaningfulCohortCount": 1426,
+  "fundingMetadataCoveragePercentage": 66.4358,
+  "cohortMetadataCoveragePercentage": 88.7268,
+  "topFunders": [
+    "Medical Research Council (UK)",
+    "NHLBI NIH HHS",
+    "Wellcome Trust",
+    "NIDDK NIH HHS",
+    "NCI NIH HHS",
+    "NIA NIH HHS",
+    "NHGRI NIH HHS",
+    "NCATS NIH HHS",
+    "NCRR NIH HHS",
+    "NIMH NIH HHS"
+  ],
+  "topCohorts": [
+    "UK Biobank (UKB)",
+    "FinnGen",
+    "MVP",
+    "BBJ",
+    "ARIC",
+    "EB",
+    "FHS",
+    "CHS",
+    "KoGES",
+    "MESA"
+  ],
+  "allFunderFigureCount": 39,
+  "allCohortFigureCount": 1407,
+  "ancestryOrder": [
+    "European",
+    "Asian",
+    "African",
+    "African American or Afro-Caribbean",
+    "Hispanic or Latin American",
+    "Other/Mixed"
+  ],
+  "ancestryColors": {
+    "European": "#ed7892",
+    "Asian": "#489ed8",
+    "African": "#f59c44",
+    "African American or Afro-Caribbean": "#fece59",
+    "Hispanic or Latin American": "#9767ab",
+    "Other/Mixed": "#54bdbe"
+  },
+  "countingRules": {
+    "participants": "Participant instances across accessions; not deduplicated people.",
+    "funder": "Full counting across every retained funder linked through PubMed GrantList.",
+    "cohort": "Full counting across every named cohort linked to an accession; not cohort demographics.",
+    "historical": "Reconstructed from publication dates in the current snapshot; subject to Catalog backfilling."
+  }
+}

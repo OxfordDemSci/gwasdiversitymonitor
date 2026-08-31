@@ -108,10 +108,26 @@ PUBLISHED_DATA_FILES = (
 )
 
 RAW_REQUIRED_COLUMNS = {
-    'catalog/raw/Cat_Anc.tsv': {'BROAD ANCESTRAL CATEGORY'},
+    'catalog/raw/Cat_Anc.tsv': {
+        'STUDY ACCESSION', 'DATE', 'STAGE', 'NUMBER OF INDIVDUALS',
+        'BROAD ANCESTRAL CATEGORY', 'COUNTRY OF RECRUITMENT',
+    },
     'catalog/raw/Cat_Full.tsv': {'P-VALUE'},
     'catalog/raw/Cat_Map.tsv': {'Disease trait', 'Parent term'},
-    'catalog/raw/Cat_Stud.tsv': {'STUDY ACCESSION', 'COHORT'},
+    'catalog/raw/Cat_Stud.tsv': {
+        'STUDY ACCESSION', 'DATE', 'ASSOCIATION COUNT', 'DISEASE/TRAIT',
+        'JOURNAL', 'COHORT', 'GENOTYPING TECHNOLOGY',
+        'FULL SUMMARY STATISTICS',
+    },
+}
+
+RAW_REQUIRED_COLUMN_ALTERNATIVES = {
+    'catalog/raw/Cat_Anc.tsv': (
+        {'PUBMEDID', 'PUBMED ID', 'PUBMED_ID'},
+    ),
+    'catalog/raw/Cat_Stud.tsv': (
+        {'PUBMEDID', 'PUBMED ID', 'PUBMED_ID'},
+    ),
 }
 
 
@@ -2469,6 +2485,13 @@ def _validate_raw_inputs(data_path):
             raise ValueError(
                 f'{path}: missing required columns {sorted(missing)}'
             )
+        for alternatives in RAW_REQUIRED_COLUMN_ALTERNATIVES.get(
+                relative_path, ()):
+            if not set(header).intersection(alternatives):
+                raise ValueError(
+                    f'{path}: missing one of the required column aliases '
+                    f'{sorted(alternatives)}'
+                )
     return _fingerprint_files(data_path, RAW_INPUT_FILES)
 
 

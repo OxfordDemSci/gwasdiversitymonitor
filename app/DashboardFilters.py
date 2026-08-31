@@ -53,7 +53,10 @@ class DashboardFilterStore:
             ),
             funder_pipeline.funder_cleaner_path(self.data_path),
         )
-        signature = [self.data_path, "report-schema:2"]
+        signature = [
+            self.data_path,
+            f"report-schema:{funder_pipeline.REPORT_SCHEMA_VERSION}",
+        ]
         for path in source_paths:
             try:
                 stat = os.stat(path)

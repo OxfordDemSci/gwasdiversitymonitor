@@ -25,6 +25,17 @@ Data generation is staged under `data/.generate_data` and published only after e
 
 All funder resources live under `data/funders`. The hand-maintained `funder_cleaner.json` normalization map is version-controlled; `pubmed_grants.json`, `index.json`, `dashboards/`, and `downloads/` are generated. The cleaner is copied into each staged release and included in release validation and recovery snapshots.
 
+The data image contains a copy of the generator code. After pulling a change to
+`generate_data.py` or `funder_pipeline.py`, rebuild that image before starting
+the data service; rebuilding only Flask and nginx does not refresh generated
+reports. To rebuild just the funder reports from the existing PubMed cache:
+
+```bash
+docker-compose build data
+docker-compose run --rm data python3 funder_pipeline.py --skip-fetch --repository /app
+docker-compose restart flask
+```
+
 #### Data-generation failure email
 
 Failure email is disabled by default and fails closed. It is considered only when `GWAS_DEPLOYMENT_DOMAIN` is set to exactly `gwasdiversitymonitor.com`, which must be done only in the ignored `.env` file on the canonical production server. Local, development, staging, test, cloned, and otherwise unmarked copies never open a mail connection.

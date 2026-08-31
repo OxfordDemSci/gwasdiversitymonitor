@@ -1,6 +1,8 @@
 import json
 import os
 
+import funder_pipeline
+
 
 class FunderDataUnavailable(RuntimeError):
     pass
@@ -25,7 +27,13 @@ class FunderDataStore:
                     "Funder data have not been generated"
                 ) from error
 
+            if not isinstance(payload, dict):
+                raise FunderDataUnavailable("The funder index is invalid")
             funders = payload.get("funders")
+            if payload.get("version") != funder_pipeline.ARTIFACT_VERSION:
+                raise FunderDataUnavailable(
+                    "Funder data use an obsolete schema and must be regenerated"
+                )
             if not isinstance(funders, list):
                 raise FunderDataUnavailable("The funder index is invalid")
             self._index = payload
@@ -50,8 +58,26 @@ class FunderDataStore:
 
     def dashboard(self, slug):
         try:
-            return self._load_json(self.dashboard_path(slug))
+            payload = self._load_json(self.dashboard_path(slug))
         except (OSError, ValueError, json.JSONDecodeError) as error:
             raise FunderDataUnavailable(
                 f"Dashboard data are unavailable for {slug}"
             ) from error
+        if not isinstance(payload, dict):
+            raise FunderDataUnavailable(
+                f"Dashboard data are invalid for {slug}"
+            )
+        if payload.get("version") != funder_pipeline.ARTIFACT_VERSION:
+            raise FunderDataUnavailable(
+                f"Dashboard data use an obsolete schema for {slug}"
+            )
+        try:
+            funder_pipeline.validate_report(
+                payload.get("report"), require_content=True
+            )
+        except ValueError as error:
+            raise FunderDataUnavailable(
+                f"Report data are incomplete for {slug}; regenerate the "
+                "funder artifacts"
+            ) from error
+        return payload

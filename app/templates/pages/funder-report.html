@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 
 {% macro number(value) -%}
-    {{ "{:,}".format((value or 0)|int) }}
+    {% if value is undefined or value is none %}Not available{% else %}{{ "{:,}".format(value|int) }}{% endif %}
 {%- endmacro %}
 
 {% macro decimal(value) -%}
-    {{ "{:,.2f}".format((value or 0)|float) }}
+    {% if value is undefined or value is none %}Not available{% else %}{{ "{:,.2f}".format(value|float) }}{% endif %}
 {%- endmacro %}
 
 {% macro metric(value, label, detail=None) -%}
@@ -60,14 +60,14 @@
     <section class="funder-report__section funder-report__section--first">
         <h2>At a glance</h2>
         <div class="funder-report__metrics" aria-label="Report summary">
-            {{ metric(number(report.get('studyCount', 0)), 'GWAS studies') }}
-            {{ metric(number(report.get('publicationCount', report.get('studyCount', 0))), 'Publications') }}
-            {{ metric(number(report.get('participantCount', 0)), 'Participants') }}
-            {{ metric(number(report.get('ancestryRecordCount', 0)), 'Ancestry records') }}
-            {{ metric(number(report.get('associationCount', 0)), 'Associations') }}
-            {{ metric(number(report.get('traitCount', 0)), 'Diseases and traits') }}
-            {{ metric(number(report.get('cohortCount', 0)), 'Named cohorts') }}
-            {{ metric(number(report.get('journalCount', 0)), 'Journals') }}
+            {{ metric(number(report.get('studyCount')), 'GWAS studies') }}
+            {{ metric(number(report.get('publicationCount')), 'Publications') }}
+            {{ metric(number(report.get('participantCount')), 'Participants') }}
+            {{ metric(number(report.get('ancestryRecordCount')), 'Ancestry records') }}
+            {{ metric(number(report.get('associationCount')), 'Associations') }}
+            {{ metric(number(report.get('traitCount')), 'Diseases and traits') }}
+            {{ metric(number(report.get('cohortCount')), 'Named cohorts') }}
+            {{ metric(number(report.get('journalCount')), 'Journals') }}
         </div>
     </section>
             </td>
@@ -80,16 +80,16 @@
         <div class="funder-report__metric-grid">
             {{ metric(report.get('firstStudyDate') or 'Not available', 'First publication') }}
             {{ metric(report.get('latestStudyDate') or 'Not available', 'Latest publication') }}
-            {{ metric(number(report.get('yearSpan', 0)), 'Years represented') }}
+            {{ metric(number(report.get('yearSpan')), 'Years represented') }}
             {{ metric(report.get('medianPublicationYear') or 'Not available', 'Median publication year') }}
-            {{ metric(number(report.get('recentPublicationCount', 0)), 'Publications in latest 5 years') }}
-            {{ metric(decimal(report.get('averageStudiesPerPublication', 0)), 'Mean studies per publication') }}
-            {{ metric(number(report.get('summaryStatisticsStudyCount', 0)), 'Studies with full summary statistics', decimal(report.get('summaryStatisticsPercentage', 0)) ~ '% of studies') }}
-            {{ metric(number(report.get('studiesWithTechnologyCount', 0)), 'Studies reporting technology', decimal(report.get('technologyReportingPercentage', 0)) ~ '% of studies') }}
-            {{ metric(number(report.get('studiesWithCohortCount', 0)), 'Studies naming a cohort', decimal(report.get('cohortReportingPercentage', 0)) ~ '% of studies') }}
-            {{ metric(number(report.get('studiesWithJournalCount', 0)), 'Studies with journal metadata', decimal(report.get('journalReportingPercentage', 0)) ~ '% of studies') }}
-            {{ metric(number(report.get('technologyCount', 0)), 'Technology categories') }}
-            {{ metric(number(report.get('recruitmentCountryCount', 0)), 'Recruitment countries') }}
+            {{ metric(number(report.get('recentPublicationCount')), 'Publications in latest 5 years') }}
+            {{ metric(decimal(report.get('averageStudiesPerPublication')), 'Mean studies per publication') }}
+            {{ metric(number(report.get('summaryStatisticsStudyCount')), 'Studies with full summary statistics', decimal(report.get('summaryStatisticsPercentage')) ~ '% of studies') }}
+            {{ metric(number(report.get('studiesWithTechnologyCount')), 'Studies reporting technology', decimal(report.get('technologyReportingPercentage')) ~ '% of studies') }}
+            {{ metric(number(report.get('studiesWithCohortCount')), 'Studies naming a cohort', decimal(report.get('cohortReportingPercentage')) ~ '% of studies') }}
+            {{ metric(number(report.get('studiesWithJournalCount')), 'Studies with journal metadata', decimal(report.get('journalReportingPercentage')) ~ '% of studies') }}
+            {{ metric(number(report.get('technologyCount')), 'Technology categories') }}
+            {{ metric(number(report.get('recruitmentCountryCount')), 'Recruitment countries') }}
         </div>
     </section>
             </td>
@@ -100,16 +100,16 @@
     <section class="funder-report__section">
         <h2>Participant and association profile</h2>
         <div class="funder-report__metric-grid">
-            {{ metric(decimal(report.get('averageParticipantsPerStudy', 0)), 'Mean participants per study') }}
-            {{ metric(number(report.get('medianParticipantsPerStudy', 0)), 'Median participants per study') }}
-            {{ metric(number(report.get('largestStudyParticipantCount', 0)), 'Largest study', report.get('largestStudyAccession')) }}
-            {{ metric(decimal(report.get('averageAssociationsPerStudy', 0)), 'Mean associations per study') }}
-            {{ metric(decimal(report.get('medianAssociationsPerStudy', 0)), 'Median associations per study') }}
-            {{ metric(number(report.get('maximumAssociationsPerStudy', 0)), 'Maximum associations in one study') }}
-            {{ metric(number(report.get('recordedParticipantCount', 0)), 'Participants with recorded ancestry', decimal(report.get('ancestryReportingPercentage', 0)) ~ '% of participants') }}
-            {{ metric(number(report.get('unrecordedParticipantCount', 0)), 'Participants without recorded ancestry') }}
-            {{ metric(number(report.get('nonEuropeanParticipantCount', 0)), 'Non-European participants', decimal(report.get('nonEuropeanParticipantPercentage', 0)) ~ '% of ancestry-recorded participants') }}
-            {{ metric(number(report.get('ancestryGroupCount', 0)), 'Broad ancestry groups') }}
+            {{ metric(decimal(report.get('averageParticipantsPerStudy')), 'Mean participants per study') }}
+            {{ metric(number(report.get('medianParticipantsPerStudy')), 'Median participants per study') }}
+            {{ metric(number(report.get('largestStudyParticipantCount')), 'Largest study', report.get('largestStudyAccession')) }}
+            {{ metric(decimal(report.get('averageAssociationsPerStudy')), 'Mean associations per study') }}
+            {{ metric(decimal(report.get('medianAssociationsPerStudy')), 'Median associations per study') }}
+            {{ metric(number(report.get('maximumAssociationsPerStudy')), 'Maximum associations in one study') }}
+            {{ metric(number(report.get('recordedParticipantCount')), 'Participants with recorded ancestry', decimal(report.get('ancestryReportingPercentage')) ~ '% of participants') }}
+            {{ metric(number(report.get('unrecordedParticipantCount')), 'Participants without recorded ancestry') }}
+            {{ metric(number(report.get('nonEuropeanParticipantCount')), 'Non-European participants', decimal(report.get('nonEuropeanParticipantPercentage')) ~ '% of ancestry-recorded participants') }}
+            {{ metric(number(report.get('ancestryGroupCount')), 'Broad ancestry groups') }}
         </div>
     </section>
             </td>
@@ -249,9 +249,9 @@
     <section class="funder-report__section">
         <h2>Funding metadata</h2>
         <div class="funder-report__metric-grid funder-report__metric-grid--compact">
-            {{ metric(number(report.get('fundedPublicationCount', 0)), 'Publications linked to funding metadata', decimal(report.get('fundingCoveragePercentage', 0)) ~ '% of publications') }}
-            {{ metric(number(report.get('funderCount', 0)), 'Distinct funders represented') }}
-            {{ metric(number(report.get('grantRecordCount', 0)), 'Publication–funder links') }}
+            {{ metric(number(report.get('fundedPublicationCount')), 'Publications linked to funding metadata', decimal(report.get('fundingCoveragePercentage')) ~ '% of publications') }}
+            {{ metric(number(report.get('funderCount')), 'Distinct funders represented') }}
+            {{ metric(number(report.get('grantRecordCount')), 'Publication–funder links') }}
         </div>
         <div class="funder-report__table-wrap">
             <table class="funder-report__table">

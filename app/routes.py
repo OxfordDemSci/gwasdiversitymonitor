@@ -262,6 +262,7 @@ def getFunderDashboard(slug):
         store = FunderDataStore(published_path)
         try:
             path = store.dashboard_path(slug)
+            store.dashboard(slug)
         except KeyError:
             abort(404)
         if not os.path.isfile(path):
