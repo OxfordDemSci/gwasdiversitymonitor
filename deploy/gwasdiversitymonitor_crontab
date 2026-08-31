@@ -2,4 +2,4 @@
 SHELL=/bin/sh
 PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin/python3
 # m h dom mon dow user  command
-@daily ubuntu cd ~/gwasdiversitymonitor && docker-compose up -d --build --force-recreate data
+@daily ubuntu cd /opt/gwasdiversitymonitor && docker-compose up -d --build --force-recreate data

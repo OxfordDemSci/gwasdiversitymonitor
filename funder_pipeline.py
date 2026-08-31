@@ -5,6 +5,7 @@ import csv
 import datetime
 import html
 import json
+import logging
 import math
 import os
 import re
@@ -19,6 +20,9 @@ from xml.etree import ElementTree
 
 import pandas as pd
 import requests
+
+
+LOGGER = logging.getLogger("diversity_logger")
 
 
 NCBI_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
@@ -249,9 +253,10 @@ def collect_pubmed_grants(
                 ).isoformat()
                 cache["publicationCount"] = len(publication_ids)
                 _atomic_json(output_path, cache)
-                print(
-                    f"Collected PubMed funding data: "
-                    f"{min(offset + len(batch), len(missing))}/{len(missing)}"
+                LOGGER.info(
+                    "Collected PubMed funding data: %d/%d",
+                    min(offset + len(batch), len(missing)),
+                    len(missing),
                 )
                 last_error = None
                 break
@@ -1557,7 +1562,9 @@ def build_funder_artifacts(
             "publicationCount": report["publicationCount"],
             "participantCount": report["participantCount"],
         })
-        print(f"Built funder dashboard: {funder} ({count} publications)")
+        LOGGER.info(
+            "Built funder dashboard: %s (%d publications)", funder, count
+        )
 
     index = {
         "version": ARTIFACT_VERSION,
@@ -1684,9 +1691,32 @@ def parse_args():
     return parser.parse_args()
 
 
+def _configure_standalone_logging(repository):
+    """Write standalone pipeline progress to the generator's log file."""
+    log_directory = os.path.join(repository, "app", "logging")
+    os.makedirs(log_directory, exist_ok=True)
+    log_path = os.path.abspath(
+        os.path.join(log_directory, "diversity_logger.log")
+    )
+
+    LOGGER.setLevel(logging.DEBUG)
+    LOGGER.propagate = False
+    for handler in LOGGER.handlers[:]:
+        LOGGER.removeHandler(handler)
+        handler.close()
+
+    handler = logging.FileHandler(log_path)
+    handler.setLevel(logging.DEBUG)
+    handler.setFormatter(logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    ))
+    LOGGER.addHandler(handler)
+
+
 def main():
     args = parse_args()
     repository = os.path.abspath(args.repository)
+    _configure_standalone_logging(repository)
     data_path = os.path.join(repository, "data")
     funder_root = os.path.join(data_path, "funders")
     cache_path = os.path.join(funder_root, "pubmed_grants.json")
@@ -1703,7 +1733,7 @@ def main():
         repository, data_path, cache, cleaner_path,
         min_studies=args.min_studies
     )
-    print(f"Generated {len(index['funders'])} funder dashboards")
+    LOGGER.info("Generated %d funder dashboards", len(index["funders"]))
 
 
 if __name__ == "__main__":

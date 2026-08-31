@@ -9,7 +9,11 @@
         <meta http-equiv="X-UA-Compatible" content="IE=edge">
         <meta name="description" content="This interactive dashboard monitors participants included across all published Genome Wide Association Studies (GWAS).">
         <meta name="og:title" property="og:title" content="GWAS Diversity Monitor">
-        <meta name="robots" content="index, follow">
+        {% if config.get('GWAS_NOINDEX', False) %}
+            <meta name="robots" content="noindex, nofollow, noarchive">
+        {% else %}
+            <meta name="robots" content="index, follow">
+        {% endif %}
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <link rel="icon" href="{{ url_for('static', filename='images/favicon.ico') }}" type="image/x-icon" />
 

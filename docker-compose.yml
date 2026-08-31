@@ -29,6 +29,8 @@ services:
       - ./data:/app/data
     environment:
       GOATCOUNTER_URL: ${GOATCOUNTER_URL-https://stats.gwasdiversitymonitor.com}
+      GWAS_DEPLOYMENT_DOMAIN: ${GWAS_DEPLOYMENT_DOMAIN:-}
+      GWAS_NOINDEX: ${GWAS_NOINDEX:-}
     networks:
       my-network:
         aliases:
@@ -54,6 +56,7 @@ services:
     command: ["python3", "generate_data.py"]
     volumes:
       - ./data:/app/data
+      - ./app/logging:/app/app/logging
     environment:
       GWAS_DEPLOYMENT_DOMAIN: ${GWAS_DEPLOYMENT_DOMAIN:-}
       GWAS_LOCAL_MAIL_HOST: 127.0.0.1
