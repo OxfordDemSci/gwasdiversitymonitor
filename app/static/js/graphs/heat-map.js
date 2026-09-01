@@ -115,9 +115,9 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
             .attr("stop-opacity", 1);
 
         if (window.innerWidth < 1500 && window.innerWidth >= 1200) {
-            drawLegendResponsive(legend, 70, maxValue, 125);
+            drawLegendResponsive(legend, maxValue, 125);
         } else {
-            drawLegendResponsive(legend, 126, maxValue, 100);
+            drawLegendResponsive(legend, maxValue, 100);
         }
 
         let legendDupArray = document.querySelectorAll('.log-colour-scale');
@@ -131,34 +131,27 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
         }
     }
 
-    function drawLegendResponsive(legend, widthValue, maxValue, xRectValue) {
-        if(isIE()) {
-            legend.append("rect")
-                .attr("x", width-xRectValue)
-                .attr("y", height - 64)
-                .attr("width", document.querySelector('#heatMap svg').clientWidth-162-10-20+'px')
-                .attr("height", 19)
-                .style("fill", "url(#heatmapgradient)");
-        } else {
-            legend.append("rect")
-                .attr("x", width-xRectValue)
-                .attr("y", height - 64)
-                .attr("width", document.querySelector('#heatMap svg').clientWidth-162-32+'px')
-                .attr("height", 19)
-                .style("fill", "url(#heatmapgradient)");
-        }
+    function drawLegendResponsive(legend, maxValue, xRectValue) {
+        let legendStartX = width - xRectValue;
+        let legendEndX = width - 6;
+
+        legend.append("rect")
+            .attr("x", legendStartX)
+            .attr("y", height - 64)
+            .attr("width", legendEndX - legendStartX)
+            .attr("height", 19)
+            .style("fill", "url(#heatmapgradient)");
 
         legend.append('text')
             .attr('class', 'heat-map-legend-end-text')
             .text(numberFormatter(maxValue))
-            .attr('x', function () {
-                return document.querySelector('#heatMap svg').clientWidth-3-this.getBBox().width;
-            })
+            .attr('x', legendEndX)
+            .attr('text-anchor', 'end')
             .attr('y', height-35);
 
         legend.append('text')
             .attr('class', 'heat-map-legend-start-text')
-            .attr('x', width-xRectValue)
+            .attr('x', legendStartX)
             .attr('y', height-35)
             .attr('font-size', 11)
             .text('0');
