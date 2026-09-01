@@ -324,6 +324,30 @@ class DatasetFilterTests(unittest.TestCase):
         self.assertEqual(split_cohorts("UKB| CHIMGEN |"), ["UKB", "CHIMGEN"])
         self.assertEqual(split_cohorts(None), [])
 
+    def test_dashboard_cache_survives_outside_temporary_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = DashboardFilterStore(directory)
+
+            self.assertEqual(
+                Path(store._cache_root).parent,
+                Path(directory) / ".dashboard-filter-cache",
+            )
+
+    def test_warm_loads_sources_and_filter_indexes(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        with mock.patch.object(store, "_ensure_sources") as sources, \
+                mock.patch.object(
+                    store, "_ensure_dataset_index"
+                ) as cohorts, \
+                mock.patch.object(
+                    store, "_ensure_funder_index"
+                ) as funders:
+            store.warm()
+
+        sources.assert_called_once_with()
+        cohorts.assert_called_once_with()
+        funders.assert_called_once_with()
+
     def test_cohort_normalization_is_case_based_not_fuzzy(self):
         self.assertEqual(
             normalize_cohort_name(" 23ANDME "),

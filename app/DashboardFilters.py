@@ -99,8 +99,13 @@ class DashboardFilterStore:
             except OSError:
                 signature.append(f"{path}:missing")
         digest = hashlib.sha256("\n".join(signature).encode()).hexdigest()[:20]
+        cache_base = os.environ.get("GWAS_DASHBOARD_FILTER_CACHE", "").strip()
+        if not cache_base:
+            cache_base = os.path.join(
+                self.data_path, ".dashboard-filter-cache"
+            )
         return os.path.join(
-            tempfile.gettempdir(), "gwas-dashboard-filter-cache", digest
+            os.path.abspath(cache_base), digest
         )
 
     def _cache_path(self, directory, cohort_ids, funder_slugs, suffix):
@@ -191,7 +196,11 @@ class DashboardFilterStore:
                     json.JSONDecodeError):
                 pass
 
-            studies = self._load_studies()
+            studies = (
+                self._facet_studies
+                if self._facet_studies is not None
+                else self._load_studies()
+            )
             self._facet_studies = studies
             accession_pmids = defaultdict(set)
             variants = defaultdict(lambda: defaultdict(set))
@@ -326,6 +335,12 @@ class DashboardFilterStore:
             )
             if self._all_accessions is None:
                 self._set_facet_indexes(studies, ancestry)
+
+    def warm(self):
+        """Load immutable filter sources and indexes before serving requests."""
+        self._ensure_sources()
+        self._ensure_dataset_index()
+        self._ensure_funder_index()
 
     def _select_accessions(self, source_number, accessions):
         self._ensure_sources()

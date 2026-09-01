@@ -71,6 +71,7 @@
 			let dashboardFilterRequest = null;
 			let dashboardFilterRevision = 0;
 			let baseDashboardReady = false;
+			let filterOptionsPrefetched = false;
 
 		function markBaseDashboardReady() {
 			let required = [
@@ -84,6 +85,10 @@
 				$('#funder-filter').prop('disabled', false);
 				$('#dataset-filter').prop('disabled', false);
 				updateSummaryFromFunder(baseDashboardData.summary);
+				if (!filterOptionsPrefetched) {
+					filterOptionsPrefetched = true;
+					prefetchInitialFilterOptions();
+				}
 			}
 		}
 
@@ -178,6 +183,78 @@
                 funders: selectedFilterValues('#funder-filter').join(',')
             });
         }
+
+        const dashboardFilterCache = new Map();
+        const dashboardFilterCacheLimit = 4;
+		const filterOptionCache = new Map();
+		const filterOptionCacheLimit = 12;
+
+        function cachedDashboardFilter(query) {
+            if (!dashboardFilterCache.has(query)) return null;
+            let payload = dashboardFilterCache.get(query);
+            dashboardFilterCache.delete(query);
+            dashboardFilterCache.set(query, payload);
+            return payload;
+        }
+
+        function cacheDashboardFilter(query, payload) {
+            dashboardFilterCache.delete(query);
+            dashboardFilterCache.set(query, payload);
+            while (dashboardFilterCache.size > dashboardFilterCacheLimit) {
+                dashboardFilterCache.delete(
+                    dashboardFilterCache.keys().next().value
+                );
+            }
+        }
+
+		function filterOptionCacheKey(url, data) {
+			return url + '?' + $.param(data || {});
+		}
+
+		function cacheFilterOptions(key, payload) {
+			filterOptionCache.delete(key);
+			filterOptionCache.set(key, payload);
+			while (filterOptionCache.size > filterOptionCacheLimit) {
+				filterOptionCache.delete(filterOptionCache.keys().next().value);
+			}
+		}
+
+		function filterOptionTransport(params, success, failure) {
+			let key = filterOptionCacheKey(params.url, params.data);
+			if (filterOptionCache.has(key)) {
+				let payload = filterOptionCache.get(key);
+				filterOptionCache.delete(key);
+				filterOptionCache.set(key, payload);
+				setTimeout(function() { success(payload); }, 0);
+				return { abort: function() {} };
+			}
+
+			let request = $.ajax(params);
+			request.done(function(payload) {
+				cacheFilterOptions(key, payload);
+				success(payload);
+			});
+			request.fail(failure);
+			return request;
+		}
+
+		function prefetchFilterOptions(url, data) {
+			let key = filterOptionCacheKey(url, data);
+			if (filterOptionCache.has(key)) return;
+			$.getJSON(url, data).done(function(payload) {
+				cacheFilterOptions(key, payload);
+			});
+		}
+
+		function prefetchInitialFilterOptions() {
+			let stage = activeStageName();
+			prefetchFilterOptions('/api/funders', {
+				search: '', cohorts: '', stage: stage, page: 1
+			});
+			prefetchFilterOptions('/api/cohorts', {
+				search: '', funders: '', stage: stage, page: 1
+			});
+		}
 
         function formattedCount(value, singular, plural) {
             let count = Number(value || 0);
@@ -328,13 +405,22 @@
 			);
 			$('#funder-status').text('Loading ' + labels.join(' / ') + '...');
 			$('.funder-toolbar').addClass('is-loading');
-			let requestUrl = '/json/filtered-dashboard.json?' +
-				filterSelectionQuery();
+			let selectionQuery = filterSelectionQuery();
+			let cachedPayload = cachedDashboardFilter(selectionQuery);
+			if (cachedPayload) {
+				activeSelectionData = cachedPayload.selection;
+				redrawDashboardData(cachedPayload);
+				updateSelectionStatus(cachedPayload.selection);
+				$('.funder-toolbar').removeClass('is-loading');
+				return;
+			}
+			let requestUrl = '/json/filtered-dashboard.json?' + selectionQuery;
             let request = $.getJSON(requestUrl);
             dashboardFilterRequest = request;
             request
                 .done(function(payload) {
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
+					cacheDashboardFilter(selectionQuery, payload);
 					activeSelectionData = payload.selection;
 					redrawDashboardData(payload);
 					updateSelectionStatus(payload.selection);
@@ -367,6 +453,7 @@
 						url: '/api/funders',
 						dataType: 'json',
 						delay: 150,
+						transport: filterOptionTransport,
 						data: function(params) {
 							return {
 								search: params.term || '',
@@ -413,6 +500,7 @@
 					url: '/api/cohorts',
                     dataType: 'json',
                     delay: 150,
+					transport: filterOptionTransport,
                     data: function(params) {
 						return {
 							search: params.term || '',
