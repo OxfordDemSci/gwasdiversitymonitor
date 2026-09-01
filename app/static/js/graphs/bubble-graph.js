@@ -149,6 +149,50 @@ function __dcDateValue(d) {
     return +(d.__dateMS !== undefined ? d.__dateMS : new Date(d.DATE));
 }
 
+function __dcTimeAxisConfig(data) {
+    var extent = getYear(data);
+    var minDate = new Date(extent.minYear);
+    var maxDate = new Date(extent.maxYear);
+    var day = 24 * 60 * 60 * 1000;
+
+    if (!isFinite(+minDate) || !isFinite(+maxDate)) {
+        var currentYear = new Date().getFullYear();
+        minDate = new Date(currentYear, 0, 1);
+        maxDate = new Date(currentYear, 11, 31);
+    }
+
+    var span = Math.max(0, +maxDate - +minDate);
+    if (span < day) {
+        return {
+            domain: [
+                d3.timeMonth.offset(minDate, -6),
+                d3.timeMonth.offset(maxDate, 6)
+            ],
+            ticks: d3.timeMonth.every(3),
+            format: d3.timeFormat("%b %Y")
+        };
+    }
+
+    if (span < 2 * 365 * day) {
+        var padding = Math.max(30 * day, span * 0.08);
+        return {
+            domain: [
+                new Date(+minDate - padding),
+                new Date(+maxDate + padding)
+            ],
+            ticks: span < 180 * day
+                ? d3.timeMonth.every(1) : d3.timeMonth.every(3),
+            format: d3.timeFormat("%b %Y")
+        };
+    }
+
+    return {
+        domain: [minDate, maxDate],
+        ticks: 6,
+        format: d3.timeFormat("%Y")
+    };
+}
+
 function __dcPatchGetYearAndDataMax() {
     if (window.__dcPatchedGetYearAndDataMax) return;
     window.__dcPatchedGetYearAndDataMax = true;
@@ -268,9 +312,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         .attr("class", "svg-container")
         .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
 
-    var yearExtent = getYear(data);
-    var minYear = yearExtent.minYear;
-    var maxYear = yearExtent.maxYear;
+    var timeAxis = __dcTimeAxisConfig(data);
 
     var max = getDataMax(data);
 
@@ -282,13 +324,15 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     var maxRadius = Math.ceil(sizeScale(max)) + 4;
 
     const xScale = d3.scaleTime()
-        .domain([minYear, maxYear])
+        .domain(timeAxis.domain)
         .range([maxRadius, width - maxRadius]);
 
     svg.append("g")
         .attr('class', 'axis-x')
         .attr("transform", "translate(0," + height + ")")
-        .call(d3.axisBottom(xScale).ticks(6));
+        .call(d3.axisBottom(xScale)
+            .ticks(timeAxis.ticks)
+            .tickFormat(timeAxis.format));
 
     const yScale = d3.scaleLinear()
         .domain([0, max])
@@ -1058,13 +1102,17 @@ function reDrawBubbleGraph(data, filters, selector, xScale, yScale, sizeScale, t
 
     var svg = d3.select(selector);
     var max = getDataMax(data, filters);
-    var minYear = getYear(data)['minYear'];
-    var maxYear = getYear(data)['maxYear'];
+    var timeAxis = __dcTimeAxisConfig(data);
     var selected=$(selector).find(".filter select[name='trait']").val()
     var disabled_switch=''
 
 
-    xScale.domain([minYear, maxYear]);
+    xScale.domain(timeAxis.domain);
+
+    svg.select(".axis-x")
+        .call(d3.axisBottom(xScale)
+            .ticks(timeAxis.ticks)
+            .tickFormat(timeAxis.format));
 
     yScale.domain([0, max]);
 

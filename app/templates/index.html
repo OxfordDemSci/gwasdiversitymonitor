@@ -66,8 +66,7 @@
 		let doughnutData;
 		let bubbleData;
 			let baseDashboardData = {};
-			let activeFunder = null;
-			let activeDataset = null;
+				let activeSelectionData = null;
 			let activeSummaryData = null;
 			let dashboardFilterRequest = null;
 			let dashboardFilterRevision = 0;
@@ -157,28 +156,73 @@
             };
         }
 
-        function updateSelectionActions(funderEntry, datasetEntry) {
+        function selectedFilterValues(selector) {
+            let values = $(selector).val() || [];
+            return Array.isArray(values) ? values : [values];
+        }
+
+        function selectedFilterEntries(selector) {
+            return ($(selector).select2('data') || []).filter(function(entry) {
+                return !!entry.id;
+            });
+        }
+
+        function activeStageName() {
+            return document.getElementById('cb2').checked
+                ? 'replication' : 'initial';
+        }
+
+        function filterSelectionQuery() {
+            return $.param({
+                cohorts: selectedFilterValues('#dataset-filter').join(','),
+                funders: selectedFilterValues('#funder-filter').join(',')
+            });
+        }
+
+        function formattedCount(value, singular, plural) {
+            let count = Number(value || 0);
+            return count.toLocaleString() + ' ' +
+                (count === 1 ? singular : plural);
+        }
+
+        function optionCountLabel(entry) {
+            return formattedCount(entry.studyCount, 'study', 'studies') +
+                ' · ' + formattedCount(
+                    entry.publicationCount, 'publication', 'publications'
+                );
+        }
+
+        function updateSelectionStatus(selection) {
+            if (!selection) {
+                $('#funder-status').text('All published GWAS');
+                return;
+            }
+            let stage = activeStageName();
+            let counts = (selection.stageCounts || {})[stage] || selection;
+            let stageLabel = stage === 'replication'
+                ? 'Replication' : 'Discovery';
+            $('#funder-status').text(
+                formattedCount(counts.studyCount, 'study', 'studies') +
+                ' · ' + formattedCount(
+                    counts.publicationCount,
+                    'publication',
+                    'publications'
+                ) + ' (' + stageLabel + ')'
+            );
+        }
+
+        function updateSelectionActions(funderEntries, cohortEntries) {
             let download = $('#funder-data-download');
             let report = $('#funder-report-link');
-            if (!funderEntry && !datasetEntry) {
+            if (!funderEntries.length && !cohortEntries.length) {
                 download.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 report.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 return;
             }
 
-            let downloadUrl;
-            let reportUrl;
-            if (datasetEntry) {
-                let query = $.param({
-                    dataset: datasetEntry.id,
-                    funder: funderEntry ? funderEntry.id : ''
-                });
-                downloadUrl = '/download/filtered-dashboard.zip?' + query;
-                reportUrl = '/reports/filtered-dashboard?' + query;
-            } else {
-                downloadUrl = '/download/funders/' + funderEntry.id + '.zip';
-                reportUrl = '/reports/funders/' + funderEntry.id;
-            }
+            let query = filterSelectionQuery();
+            let downloadUrl = '/download/filtered-dashboard.zip?' + query;
+            let reportUrl = '/reports/filtered-dashboard?' + query;
             download.attr('href', downloadUrl)
                 .attr('aria-disabled', 'false').removeClass('is-disabled');
             report.attr('href', reportUrl)
@@ -247,8 +291,8 @@
             heatData = payload.heatMap;
             mapData = payload.chloroMap;
             doughnutData = payload.doughnutGraph;
-            bubbleData = payload.bubbleGraph;
-			activeSummaryData = payload.summary;
+			bubbleData = payload.bubbleGraph;
+				activeSummaryData = payload.summary;
 
             drawWorldMapChart(mapData, switches.metric, state.worldMap);
             drawTimeSeries(timeseriesData, '#timeSeries', switches.metric, switches.stage);
@@ -262,61 +306,38 @@
 
         function applyDashboardFilters() {
             if (!baseDashboardReady) return;
-            let revision = ++dashboardFilterRevision;
-            let funderSlug = $('#funder-filter').val() || '';
-            let datasetId = $('#dataset-filter').val() || '';
-            let selectedFunder = funderSlug
-                ? ($('#funder-filter').select2('data')[0] || null)
-                : null;
-            let selectedDataset = datasetId
-                ? ($('#dataset-filter').select2('data')[0] || null)
-                : null;
-            updateSelectionActions(selectedFunder, selectedDataset);
+			let revision = ++dashboardFilterRevision;
+			let funderSlugs = selectedFilterValues('#funder-filter');
+			let cohortIds = selectedFilterValues('#dataset-filter');
+			let selectedFunders = selectedFilterEntries('#funder-filter');
+			let selectedCohorts = selectedFilterEntries('#dataset-filter');
+			updateSelectionActions(selectedFunders, selectedCohorts);
 
             if (dashboardFilterRequest && dashboardFilterRequest.abort) {
                 dashboardFilterRequest.abort();
             }
-            if (!funderSlug && !datasetId) {
-                activeFunder = null;
-                activeDataset = null;
-                $('#funder-status').text('All published GWAS');
-                redrawDashboardData(baseDashboardData);
-                return;
-            }
+			if (!funderSlugs.length && !cohortIds.length) {
+				activeSelectionData = null;
+				updateSelectionStatus(null);
+				redrawDashboardData(baseDashboardData);
+				return;
+			}
 
-            let labels = [];
-            if (selectedFunder) labels.push(selectedFunder.text);
-            if (selectedDataset) labels.push(selectedDataset.text);
-            $('#funder-status').text('Loading ' + labels.join(' / ') + '...');
-            $('.funder-toolbar').addClass('is-loading');
-            let requestUrl = datasetId
-                ? '/json/filtered-dashboard.json?' + $.param({
-                    dataset: datasetId,
-                    funder: funderSlug
-                })
-                : '/json/funders/' + encodeURIComponent(funderSlug) + '.json';
+			let labels = selectedCohorts.concat(selectedFunders).map(
+				function(entry) { return entry.text; }
+			);
+			$('#funder-status').text('Loading ' + labels.join(' / ') + '...');
+			$('.funder-toolbar').addClass('is-loading');
+			let requestUrl = '/json/filtered-dashboard.json?' +
+				filterSelectionQuery();
             let request = $.getJSON(requestUrl);
             dashboardFilterRequest = request;
             request
                 .done(function(payload) {
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
-                    activeFunder = selectedFunder;
-                    activeDataset = selectedDataset;
-                    redrawDashboardData(payload);
-                    if (datasetId) {
-                        $('#funder-status').text(
-                            payload.selection.studyCount.toLocaleString() +
-                            ' matching studies'
-                        );
-                    } else {
-                        $('#funder-status').text(
-                            (payload.report.publicationCount ||
-                                payload.report.studyCount).toLocaleString() +
-                            ' linked publications; ' +
-                            payload.report.participantCount.toLocaleString() +
-                            ' participants'
-                        );
-                    }
+					activeSelectionData = payload.selection;
+					redrawDashboardData(payload);
+					updateSelectionStatus(payload.selection);
                 })
                 .fail(function(xhr, status) {
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
@@ -336,45 +357,69 @@
 
         function initFunderFilter() {
             let select = $('#funder-filter');
-            select.select2({
-                width: '100%',
-                placeholder: 'All funders',
-                allowClear: true,
-				ajax: {
-					url: '/api/funders',
-					dataType: 'json',
-					data: function(params) {
+			select.select2({
+				width: '100%',
+				placeholder: 'All funders',
+				allowClear: true,
+				closeOnSelect: false,
+				dropdownAutoWidth: true,
+					ajax: {
+						url: '/api/funders',
+						dataType: 'json',
+						delay: 150,
+						data: function(params) {
+							return {
+								search: params.term || '',
+								cohorts: selectedFilterValues(
+									'#dataset-filter'
+								).join(','),
+								stage: activeStageName(),
+								page: params.page || 1
+							};
+						},
+					processResults: function(data) {
 						return {
-							search: params.term || '',
-							dataset: $('#dataset-filter').val() || ''
+							results: data.results,
+							pagination: data.pagination
 						};
-					},
-                    processResults: function(data) { return {results: data.results}; }
-                },
-                templateResult: function(entry) {
-                    if (!entry.id) return entry.text;
-                    return $('<span class="funder-option"><strong></strong><small></small></span>')
-                        .find('strong').text(entry.text).end()
-                        .find('small').text(entry.studyCount + ' publications').end();
-                }
-            });
-            select.on('select2:select select2:clear', applyDashboardFilters);
+					}
+				},
+				templateResult: function(entry) {
+					if (!entry.id) return entry.text;
+					return $('<span class="funder-option"><strong></strong><small></small></span>')
+						.find('strong').text(entry.text).end()
+						.find('small').text(optionCountLabel(entry)).end();
+				}
+			});
+			select.on(
+				'select2:select select2:unselect select2:clear',
+				applyDashboardFilters
+			);
+			select.on('select2:open', function() {
+				$('.select2-container--open .select2-dropdown')
+					.addClass('dashboard-filter-dropdown');
+			});
         }
 
         function initDatasetFilter() {
             let select = $('#dataset-filter');
-            select.select2({
-                width: '100%',
-                placeholder: 'All datasets',
-                allowClear: true,
-                ajax: {
-                    url: '/api/datasets',
+			select.select2({
+				width: '100%',
+				placeholder: 'All cohorts',
+				allowClear: true,
+				closeOnSelect: false,
+				dropdownAutoWidth: true,
+				ajax: {
+					url: '/api/cohorts',
                     dataType: 'json',
                     delay: 150,
                     data: function(params) {
-                        return {
-                            search: params.term || '',
-                            funder: $('#funder-filter').val() || '',
+						return {
+							search: params.term || '',
+							funders: selectedFilterValues(
+								'#funder-filter'
+							).join(','),
+							stage: activeStageName(),
                             page: params.page || 1
                         };
                     },
@@ -387,12 +432,19 @@
                 },
                 templateResult: function(entry) {
                     if (!entry.id) return entry.text;
-                    return $('<span class="funder-option"><strong></strong><small></small></span>')
-                        .find('strong').text(entry.text).end()
-                        .find('small').text(entry.studyCount + ' studies').end();
-                }
-            });
-            select.on('select2:select select2:clear', applyDashboardFilters);
+					return $('<span class="funder-option"><strong></strong><small></small></span>')
+						.find('strong').text(entry.text).end()
+						.find('small').text(optionCountLabel(entry)).end();
+				}
+			});
+			select.on(
+				'select2:select select2:unselect select2:clear',
+				applyDashboardFilters
+			);
+			select.on('select2:open', function() {
+				$('.select2-container--open .select2-dropdown')
+					.addClass('dashboard-filter-dropdown');
+			});
         }
 
         function highlight(box) {
@@ -417,6 +469,7 @@
 				switchMetric.checked,
 				switchStage.checked
 			);
+			updateSelectionStatus(activeSelectionData);
 
             // Change titles
             filtersTitle(switchMetric.checked, switchStage.checked);

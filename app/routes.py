@@ -123,37 +123,55 @@ def getFilterTraits():
         return jsonify(results=dataLoader.filterTraits(search))
 
 
+def _filter_query_values(plural_name, legacy_name):
+    values = request.args.getlist(plural_name)
+    values += request.args.getlist(f"{plural_name}[]")
+    if not values:
+        values = request.args.getlist(legacy_name)
+
+    result = []
+    seen = set()
+    for value in values:
+        for token in str(value or "").split(","):
+            token = token.strip()
+            if token and token not in seen:
+                result.append(token)
+                seen.add(token)
+    return tuple(result)
+
+
 @app.route("/api/funders", methods=["GET"])
 def getFilterFunders():
     search = (
         request.args.get("search")
         or request.args.get("term")
         or ""
-    ).strip().casefold()
-    dataset_id = (request.args.get("dataset") or "").strip()
+    ).strip()
+    cohort_ids = _filter_query_values("cohorts", "dataset")
+    stage = (request.args.get("stage") or "").strip()
+    page = max(request.args.get("page", default=1, type=int), 1)
+    page_size = 50
     with DataLoader.published_data_lock() as published_path:
-        store = FunderDataStore(published_path)
-        allowed_funders = None
-        if dataset_id:
-            try:
-                allowed_funders = get_dashboard_filter_store(
-                    published_path
-                ).funders_for_dataset(dataset_id)
-            except KeyError:
-                abort(404)
-        return jsonify(results=[
-            {
-                "id": entry["slug"],
-                "text": entry["name"],
-                "studyCount": entry["studyCount"],
-            }
-            for entry in store.entries()
-            if (allowed_funders is None or entry["slug"] in allowed_funders)
-            and (not search or search in entry["name"].casefold()
-                 or search in entry["slug"].casefold())
-        ])
+        store = get_dashboard_filter_store(published_path)
+        try:
+            entries = store.funders(search, cohort_ids, stage)
+        except KeyError:
+            abort(404)
+        except ValueError:
+            abort(400)
+        start = (page - 1) * page_size
+        page_entries = entries[start:start + page_size]
+        return jsonify(results=[{
+            "id": entry["slug"],
+            "text": entry["name"],
+            "studyCount": entry["studyCount"],
+            "publicationCount": entry["publicationCount"],
+        } for entry in page_entries], pagination={
+            "more": start + page_size < len(entries),
+        })
 
 
+@app.route("/api/cohorts", methods=["GET"])
 @app.route("/api/datasets", methods=["GET"])
 def getFilterDatasets():
     search = (
@@ -161,21 +179,25 @@ def getFilterDatasets():
         or request.args.get("term")
         or ""
     ).strip()
-    funder_slug = (request.args.get("funder") or "").strip() or None
+    funder_slugs = _filter_query_values("funders", "funder")
+    stage = (request.args.get("stage") or "").strip()
     page = max(request.args.get("page", default=1, type=int), 1)
     page_size = 50
     with DataLoader.published_data_lock() as published_path:
         store = get_dashboard_filter_store(published_path)
         try:
-            entries = store.datasets(search, funder_slug)
+            entries = store.cohorts(search, funder_slugs, stage)
         except KeyError:
             abort(404)
+        except ValueError:
+            abort(400)
         start = (page - 1) * page_size
         page_entries = entries[start:start + page_size]
         return jsonify(results=[{
             "id": entry["id"],
             "text": entry["name"],
             "studyCount": entry["studyCount"],
+            "publicationCount": entry["publicationCount"],
         } for entry in page_entries], pagination={
             "more": start + page_size < len(entries),
         })
@@ -183,14 +205,14 @@ def getFilterDatasets():
 
 @app.route("/json/filtered-dashboard.json")
 def getFilteredDashboard():
-    dataset_id = (request.args.get("dataset") or "").strip()
-    funder_slug = (request.args.get("funder") or "").strip() or None
-    if not dataset_id:
+    cohort_ids = _filter_query_values("cohorts", "dataset")
+    funder_slugs = _filter_query_values("funders", "funder")
+    if not cohort_ids and not funder_slugs:
         abort(400)
     with DataLoader.published_data_lock() as published_path:
         store = get_dashboard_filter_store(published_path)
         try:
-            path = store.dashboard_path(dataset_id, funder_slug)
+            path = store.dashboard_path(cohort_ids, funder_slugs)
         except KeyError:
             abort(404)
         return send_file(path, mimetype="application/json", conditional=True)
@@ -198,20 +220,20 @@ def getFilteredDashboard():
 
 @app.route("/download/filtered-dashboard.zip")
 def getFilteredDashboardDownload():
-    dataset_id = (request.args.get("dataset") or "").strip()
-    funder_slug = (request.args.get("funder") or "").strip() or None
-    if not dataset_id:
+    cohort_ids = _filter_query_values("cohorts", "dataset")
+    funder_slugs = _filter_query_values("funders", "funder")
+    if not cohort_ids and not funder_slugs:
         abort(400)
     with DataLoader.published_data_lock() as published_path:
         store = get_dashboard_filter_store(published_path)
         try:
-            dataset = store.dataset(dataset_id)
-            path = store.download_path(dataset_id, funder_slug)
+            path = store.download_path(cohort_ids, funder_slugs)
         except KeyError:
             abort(404)
-        selection = dataset_id
-        if funder_slug:
-            selection = f"{selection}-{funder_slug}"
+        selection = "-".join(cohort_ids + funder_slugs)
+        if len(selection) > 100:
+            selection = f"multiple-{len(cohort_ids)}-cohorts-" \
+                f"{len(funder_slugs)}-funders"
         return send_file(
             path,
             as_attachment=True,
@@ -221,25 +243,41 @@ def getFilteredDashboardDownload():
 
 @app.route("/reports/filtered-dashboard")
 def getFilteredDashboardReport():
-    dataset_id = (request.args.get("dataset") or "").strip()
-    funder_slug = (request.args.get("funder") or "").strip() or None
-    if not dataset_id:
+    cohort_ids = _filter_query_values("cohorts", "dataset")
+    funder_slugs = _filter_query_values("funders", "funder")
+    if not cohort_ids and not funder_slugs:
         abort(400)
     with DataLoader.published_data_lock() as published_path:
         store = get_dashboard_filter_store(published_path)
         try:
-            dashboard = store.dashboard(dataset_id, funder_slug)
+            dashboard = store.dashboard(cohort_ids, funder_slugs)
         except KeyError:
             abort(404)
 
         selection = dashboard["selection"]
-        dataset = selection["dataset"]
-        funder = selection["funder"]
-        report_title = dataset["name"]
-        report_subtitle = "Dataset diversity report"
-        if funder:
-            report_title = f"{dataset['name']} / {funder['name']}"
-            report_subtitle = "Dataset and funding-linked diversity report"
+        cohorts = selection.get("cohorts") or (
+            [selection["dataset"]] if selection.get("dataset") else []
+        )
+        funders = selection.get("funders") or (
+            [selection["funder"]] if selection.get("funder") else []
+        )
+        cohort_names = ", ".join(entry["name"] for entry in cohorts)
+        funder_names = ", ".join(entry["name"] for entry in funders)
+        if cohorts and funders:
+            report_title = f"{cohort_names} / {funder_names}"
+            report_subtitle = "Cohort and funding-linked diversity report"
+            report_note = (
+                "This report reflects the intersection of the selected "
+                "cohorts and funders."
+            )
+        elif cohorts:
+            report_title = cohort_names
+            report_subtitle = "Cohort diversity report"
+            report_note = "This report reflects the selected cohorts."
+        else:
+            report_title = funder_names
+            report_subtitle = "Funding-linked diversity report"
+            report_note = "This report reflects the selected funders."
         download_url = request.url_root.rstrip("/") + \
             "/download/filtered-dashboard.zip?" + request.query_string.decode()
         return render_template(
@@ -249,10 +287,7 @@ def getFilteredDashboardReport():
             report_subtitle=report_subtitle,
             report=dashboard["report"],
             download_url=download_url,
-            report_note=(
-                "This report reflects the selected dataset"
-                + (" and funder intersection." if funder else ".")
-            ),
+            report_note=report_note,
         )
 
 

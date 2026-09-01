@@ -241,6 +241,19 @@
     .select2-container {
       min-width: 190px;
     }
+
+    .select2-selection--multiple {
+      max-height: 72px;
+      min-height: 34px;
+      overflow-y: auto;
+    }
+
+    .select2-selection__choice {
+      max-width: 170px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
 
   &__status {
@@ -283,12 +296,25 @@
 
 .funder-option {
   @include flexbox;
+  @include align-items(center);
   @include justify-content(space-between);
   gap: 16px;
 
-  small {
-    color: $blue-grey;
+  strong {
+    min-width: 0;
   }
+
+  small {
+    flex: 0 0 auto;
+    color: $blue-grey;
+    white-space: nowrap;
+  }
+}
+
+.dashboard-filter-dropdown {
+  width: auto !important;
+  min-width: 360px;
+  max-width: min(520px, calc(100vw - 24px));
 }
 
 .report-page {

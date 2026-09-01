@@ -1,15 +1,13 @@
 <section class="funder-toolbar" aria-label="Dashboard filters">
     <div class="funder-toolbar__field">
         <label for="funder-filter">Funder</label>
-        <select id="funder-filter" aria-label="Filter dashboard by funder" disabled>
-            <option value="">All funders</option>
-        </select>
+        <select id="funder-filter" aria-label="Filter dashboard by funder"
+                multiple disabled></select>
     </div>
     <div class="funder-toolbar__field">
-        <label for="dataset-filter">Dataset</label>
-        <select id="dataset-filter" aria-label="Filter dashboard by dataset" disabled>
-            <option value="">All datasets</option>
-        </select>
+        <label for="dataset-filter">Cohort</label>
+        <select id="dataset-filter" aria-label="Filter dashboard by cohort"
+                multiple disabled></select>
     </div>
     <span id="funder-status" class="funder-toolbar__status" aria-live="polite">
         All published GWAS

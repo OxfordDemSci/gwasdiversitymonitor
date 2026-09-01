@@ -1,14 +1,19 @@
-import json
 import hashlib
+import json
 import os
+import re
 import tempfile
 import threading
-from collections import OrderedDict
+import unicodedata
+from collections import OrderedDict, defaultdict
 from pathlib import Path
 
 import pandas as pd
 
 import funder_pipeline
+
+
+FILTER_SCHEMA_VERSION = 2
 
 
 class DashboardSelectionUnavailable(RuntimeError):
@@ -21,20 +26,50 @@ def split_cohorts(value):
     return [token.strip() for token in str(value).split("|") if token.strip()]
 
 
+def normalize_cohort_name(value):
+    """Return a conservative key without fuzzy or plural matching."""
+    text = unicodedata.normalize("NFKC", str(value or ""))
+    return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def _selection_ids(values):
+    if values is None:
+        return ()
+    if isinstance(values, str):
+        values = [values]
+
+    result = []
+    seen = set()
+    for value in values:
+        for token in str(value or "").split(","):
+            token = token.strip()
+            if token and token not in seen:
+                result.append(token)
+                seen.add(token)
+    return tuple(sorted(result))
+
+
 class DashboardFilterStore:
-    """Build and cache dashboards for dataset and funder intersections."""
+    """Build and cache dashboards for cohort and funder selections."""
 
     CACHE_LIMIT = 4
+
     def __init__(self, data_path="data"):
         self.data_path = os.path.abspath(data_path)
         self._lock = threading.RLock()
         self._sources = None
+        self._source_indexes = None
+        self._facet_studies = None
+        self._all_accessions = None
+        self._accession_pmids = None
+        self._stage_accessions = None
         self._dataset_entries = None
         self._dataset_accessions = None
+        self._dataset_by_id = None
         self._funder_pmids = None
+        self._funder_accessions = None
         self._funder_entries = None
         self._funding_by_publication = None
-        self._source_indexes = None
         self._payload_cache = OrderedDict()
         self._cache_root = self._build_cache_root()
 
@@ -47,7 +82,6 @@ class DashboardFilterStore:
                 "Cat_Anc_wBroader.tsv",
             ),
             os.path.join(self.data_path, "toplot", "bubble_df.csv"),
-            os.path.join(self.data_path, "funders", "index.json"),
             os.path.join(
                 self.data_path, "funders", "pubmed_grants.json"
             ),
@@ -55,6 +89,7 @@ class DashboardFilterStore:
         )
         signature = [
             self.data_path,
+            f"filter-schema:{FILTER_SCHEMA_VERSION}",
             f"report-schema:{funder_pipeline.REPORT_SCHEMA_VERSION}",
         ]
         for path in source_paths:
@@ -68,12 +103,20 @@ class DashboardFilterStore:
             tempfile.gettempdir(), "gwas-dashboard-filter-cache", digest
         )
 
-    def _cache_path(self, directory, dataset_id, funder_slug, suffix):
-        selection = dataset_id
-        if funder_slug:
-            selection = f"{selection}--{funder_slug}"
+    def _cache_path(self, directory, cohort_ids, funder_slugs, suffix):
+        cohort_ids = _selection_ids(cohort_ids)
+        funder_slugs = _selection_ids(funder_slugs)
+        encoded = json.dumps(
+            {"cohorts": cohort_ids, "funders": funder_slugs},
+            separators=(",", ":"), sort_keys=True,
+        )
+        digest = hashlib.sha256(encoded.encode()).hexdigest()[:20]
+        hint = cohort_ids[0] if cohort_ids else "all-cohorts"
+        if funder_slugs:
+            hint = f"{hint}--{funder_slugs[0]}"
+        hint = re.sub(r"[^a-zA-Z0-9._-]+", "-", hint)[:70]
         return os.path.join(
-            self._cache_root, directory, f"{selection}.{suffix}"
+            self._cache_root, directory, f"{hint}-{digest}.{suffix}"
         )
 
     @staticmethod
@@ -111,18 +154,37 @@ class DashboardFilterStore:
         ).fillna(0)
         return studies
 
+    @staticmethod
+    def _entry_sort_key(entry):
+        return (
+            -entry.get("studyCount", 0),
+            -entry.get("publicationCount", 0),
+            entry.get("name", "").casefold(),
+            entry.get("name", ""),
+        )
+
     def _ensure_dataset_index(self):
         with self._lock:
             if self._dataset_entries is not None:
+                if self._dataset_by_id is None:
+                    self._dataset_by_id = {
+                        entry["id"]: entry for entry in self._dataset_entries
+                    }
                 return
-            cache_path = os.path.join(self._cache_root, "datasets.json")
+
+            cache_path = os.path.join(self._cache_root, "cohorts.json")
             try:
                 with open(cache_path, encoding="utf-8") as source:
                     cached = json.load(source)
+                if cached.get("version") != FILTER_SCHEMA_VERSION:
+                    raise ValueError("obsolete cohort cache")
                 self._dataset_entries = cached["entries"]
                 self._dataset_accessions = {
                     key: frozenset(values)
                     for key, values in cached["accessions"].items()
+                }
+                self._dataset_by_id = {
+                    entry["id"]: entry for entry in self._dataset_entries
                 }
                 return
             except (KeyError, OSError, TypeError, ValueError,
@@ -130,125 +192,143 @@ class DashboardFilterStore:
                 pass
 
             studies = self._load_studies()
-            memberships = studies[["STUDY ACCESSION", "COHORT"]].copy()
-            memberships["dataset"] = memberships["COHORT"].map(split_cohorts)
-            memberships = memberships.explode("dataset")
-            memberships = memberships[
-                memberships["dataset"].notna()
-                & memberships["dataset"].ne("")
-            ].drop_duplicates(["STUDY ACCESSION", "dataset"])
+            self._facet_studies = studies
+            accession_pmids = defaultdict(set)
+            variants = defaultdict(lambda: defaultdict(set))
+            for row in studies[
+                    ["STUDY ACCESSION", "PUBMEDID", "COHORT"]
+            ].itertuples(index=False, name=None):
+                accession, pmid, cohort_value = row
+                if pd.isna(accession):
+                    continue
+                accession = str(accession)
+                if pmid:
+                    accession_pmids[accession].add(str(pmid))
+                for cohort_name in split_cohorts(cohort_value):
+                    key = normalize_cohort_name(cohort_name)
+                    if key:
+                        variants[key][cohort_name].add(accession)
 
-            accession_groups = memberships.groupby(
-                "dataset", sort=False
-            )["STUDY ACCESSION"].agg(
-                lambda values: frozenset(values.dropna().astype(str))
-            )
             used_ids = set()
             entries = []
             accessions = {}
-            for name in sorted(
-                    accession_groups.index,
-                    key=lambda value: value.casefold()):
-                base = funder_pipeline.slugify(name)
-                dataset_id = base
+            for cohort_variants in variants.values():
+                name = sorted(
+                    cohort_variants,
+                    key=lambda value: (
+                        -len(cohort_variants[value]),
+                        value.casefold(), value,
+                    ),
+                )[0]
+                cohort_accessions = frozenset().union(
+                    *cohort_variants.values()
+                )
+                base = funder_pipeline.slugify(name) or "cohort"
+                cohort_id = base
                 suffix = 2
-                while dataset_id in used_ids:
-                    dataset_id = f"{base}-{suffix}"
+                while cohort_id in used_ids:
+                    cohort_id = f"{base}-{suffix}"
                     suffix += 1
-                used_ids.add(dataset_id)
-                entry = {
-                    "id": dataset_id,
-                    "name": name,
-                    "studyCount": len(accession_groups[name]),
+                used_ids.add(cohort_id)
+                publications = {
+                    pmid for accession in cohort_accessions
+                    for pmid in accession_pmids.get(accession, ()) if pmid
                 }
-                entries.append(entry)
-                accessions[dataset_id] = accession_groups[name]
+                entries.append({
+                    "id": cohort_id,
+                    "name": name,
+                    "studyCount": len(cohort_accessions),
+                    "publicationCount": len(publications),
+                })
+                accessions[cohort_id] = cohort_accessions
+
+            entries.sort(key=self._entry_sort_key)
             self._dataset_entries = entries
             self._dataset_accessions = accessions
+            self._dataset_by_id = {entry["id"]: entry for entry in entries}
             self._atomic_json(cache_path, {
-                "version": 1,
+                "version": FILTER_SCHEMA_VERSION,
                 "entries": entries,
                 "accessions": {
                     key: sorted(values) for key, values in accessions.items()
                 },
             })
 
-    def datasets(self, search="", funder_slug=None):
-        self._ensure_dataset_index()
-        needle = search.strip().casefold()
-        entries = [
-            entry for entry in self._dataset_entries
-            if not needle
-            or needle in entry["name"].casefold()
-            or needle in entry["id"].casefold()
-        ]
-        if funder_slug:
-            self._ensure_sources()
-            self._ensure_funder_index()
-            if funder_slug not in self._funder_pmids:
-                raise KeyError(funder_slug)
-            studies = self._sources[0]
-            funder_accessions = frozenset(studies.loc[
-                studies["PUBMEDID"].isin(self._funder_pmids[funder_slug]),
-                "STUDY ACCESSION"
-            ].dropna().astype(str))
-            results = []
-            for entry in entries:
-                count = len(
-                    self._dataset_accessions[entry["id"]] & funder_accessions
-                )
-                if count:
-                    result = entry.copy()
-                    result["studyCount"] = count
-                    results.append(result)
-            entries = results
-
-        return entries
-
-    def dataset(self, dataset_id):
-        self._ensure_dataset_index()
-        for entry in self._dataset_entries:
-            if entry["id"] == dataset_id:
-                return entry
-        raise KeyError(dataset_id)
-
-    def funders_for_dataset(self, dataset_id):
-        self._ensure_dataset_index()
-        self._ensure_sources()
-        self._ensure_funder_index()
-        if dataset_id not in self._dataset_accessions:
-            raise KeyError(dataset_id)
-        studies = self._sources[0]
-        dataset_pmids = frozenset(studies.loc[
-            studies["STUDY ACCESSION"].isin(
-                self._dataset_accessions[dataset_id]
-            ),
-            "PUBMEDID"
-        ].dropna().astype(str))
-        return {
-            slug for slug, pmids in self._funder_pmids.items()
-            if pmids & dataset_pmids
+    def _set_facet_indexes(self, studies, ancestry):
+        self._facet_studies = studies
+        self._all_accessions = frozenset(
+            studies["STUDY ACCESSION"].dropna().astype(str)
+        )
+        accession_pmids = defaultdict(set)
+        for accession, pmid in studies[
+                ["STUDY ACCESSION", "PUBMEDID"]
+        ].itertuples(index=False, name=None):
+            if pd.isna(accession):
+                continue
+            pmid = funder_pipeline.normalize_pmid(pmid)
+            if pmid:
+                accession_pmids[str(accession)].add(pmid)
+        self._accession_pmids = {
+            accession: frozenset(pmids)
+            for accession, pmids in accession_pmids.items()
         }
+        if "STAGE" in ancestry.columns:
+            stage_values = ancestry["STAGE"].fillna("").astype(str).str.casefold()
+        else:
+            stage_values = pd.Series("initial", index=ancestry.index)
+        self._stage_accessions = {
+            "initial": frozenset(
+                ancestry.loc[
+                    stage_values.eq("initial"), "STUDY ACCESSION"
+                ].dropna().astype(str)
+            ),
+            "replication": frozenset(
+                ancestry.loc[
+                    stage_values.eq("replication"), "STUDY ACCESSION"
+                ].dropna().astype(str)
+            ),
+        }
+
+    def _ensure_facet_indexes(self):
+        with self._lock:
+            if self._all_accessions is not None:
+                return
+            studies = self._facet_studies
+            if studies is None and self._sources is not None:
+                studies = self._sources[0]
+            if studies is None:
+                studies = self._load_studies()
+            if self._sources is not None:
+                ancestry = self._sources[1]
+            else:
+                ancestry = pd.read_csv(
+                    os.path.join(
+                        self.data_path, "catalog", "synthetic",
+                        "Cat_Anc_wBroader.tsv",
+                    ),
+                    sep="\t", dtype=str,
+                    usecols=["STUDY ACCESSION", "STAGE"],
+                )
+            self._set_facet_indexes(studies, ancestry)
 
     def _ensure_sources(self):
         with self._lock:
-            if self._sources is not None:
+            if self._sources is None:
+                self._sources = funder_pipeline._load_sources(self.data_path)
+            if self._source_indexes is not None:
                 return
-            self._sources = funder_pipeline._load_sources(self.data_path)
+
             studies, ancestry, _, bubbles, _ = self._sources
             self._source_indexes = (
                 studies.set_index("STUDY ACCESSION", drop=False),
                 ancestry.set_index("STUDY ACCESSION", drop=False),
                 bubbles.set_index("ACCESSION", drop=False),
             )
+            if self._all_accessions is None:
+                self._set_facet_indexes(studies, ancestry)
 
     def _select_accessions(self, source_number, accessions):
-        if self._source_indexes is None:
-            source = self._sources[(0, 1, 3)[source_number]]
-            column = ("STUDY ACCESSION", "STUDY ACCESSION", "ACCESSION")[
-                source_number
-            ]
-            return source[source[column].isin(accessions)].copy()
+        self._ensure_sources()
         indexed = self._source_indexes[source_number]
         available = indexed.index.unique().intersection(
             list(accessions), sort=False
@@ -260,12 +340,11 @@ class DashboardFilterStore:
     def _ensure_funder_index(self):
         with self._lock:
             if self._funder_pmids is not None:
+                if self._funder_accessions is None:
+                    self._funder_accessions = {}
                 return
-            with open(
-                os.path.join(self.data_path, "funders", "index.json"),
-                encoding="utf-8"
-            ) as source:
-                index = json.load(source)
+
+            self._ensure_facet_indexes()
             with open(
                 os.path.join(self.data_path, "funders", "pubmed_grants.json"),
                 encoding="utf-8"
@@ -274,56 +353,244 @@ class DashboardFilterStore:
             cleaner = funder_pipeline.load_funder_cleaner(
                 funder_pipeline.funder_cleaner_path(self.data_path)
             )
-            by_publication, _ = funder_pipeline.normalize_funding_records(
-                cache, cleaner, index.get("minimumPublicationCount", 50)
+            by_publication = funder_pipeline.funding_names_by_publication(
+                cache, cleaner
             )
-            names_by_slug = {
-                entry["slug"]: entry["name"] for entry in index["funders"]
-            }
-            self._funder_entries = {
-                entry["slug"]: entry for entry in index["funders"]
-            }
-            self._funding_by_publication = by_publication
-            self._funder_pmids = {
-                slug: frozenset(
-                    pmid for pmid, names in by_publication.items()
-                    if name in names
-                )
-                for slug, name in names_by_slug.items()
-            }
+            pmid_accessions = defaultdict(set)
+            for accession, pmids in self._accession_pmids.items():
+                for pmid in pmids:
+                    pmid_accessions[pmid].add(accession)
 
-    def _selection(self, dataset_id, funder_slug=None):
+            name_pmids = defaultdict(set)
+            for pmid, names in by_publication.items():
+                for name in names:
+                    name_pmids[name].add(pmid)
+
+            entries = {}
+            funder_pmids = {}
+            funder_accessions = {}
+            used_slugs = set()
+            for name in sorted(name_pmids, key=str.casefold):
+                pmids = frozenset(name_pmids[name])
+                accessions = frozenset().union(
+                    *(pmid_accessions.get(pmid, set()) for pmid in pmids)
+                ) if pmids else frozenset()
+                if not accessions:
+                    continue
+                base = funder_pipeline.slugify(name) or "funder"
+                slug = base
+                suffix = 2
+                while slug in used_slugs:
+                    slug = f"{base}-{suffix}"
+                    suffix += 1
+                used_slugs.add(slug)
+                matched_pmids = {
+                    pmid for accession in accessions
+                    for pmid in self._accession_pmids.get(accession, ())
+                    if pmid in pmids
+                }
+                entry = {
+                    "slug": slug,
+                    "name": name,
+                    "studyCount": len(accessions),
+                    "publicationCount": len(matched_pmids),
+                }
+                entries[slug] = entry
+                funder_pmids[slug] = pmids
+                funder_accessions[slug] = accessions
+
+            self._funder_entries = entries
+            self._funder_pmids = funder_pmids
+            self._funder_accessions = funder_accessions
+            self._funding_by_publication = by_publication
+
+    @staticmethod
+    def _normalise_stage(stage):
+        value = str(stage or "").strip().casefold()
+        if value in ("", "all"):
+            return None
+        if value in ("initial", "discovery"):
+            return "initial"
+        if value == "replication":
+            return "replication"
+        raise ValueError(f"Unknown stage: {stage}")
+
+    def _publication_count(self, accessions):
+        self._ensure_facet_indexes()
+        publications = {
+            pmid for accession in accessions
+            for pmid in self._accession_pmids.get(accession, ()) if pmid
+        }
+        return len(publications)
+
+    def _counts(self, accessions, stage=None):
+        self._ensure_facet_indexes()
+        stage = self._normalise_stage(stage)
+        matching = frozenset(accessions)
+        if stage:
+            matching &= self._stage_accessions[stage]
+        return {
+            "studyCount": len(matching),
+            "publicationCount": self._publication_count(matching),
+        }
+
+    def _cohort_union(self, cohort_ids):
+        self._ensure_dataset_index()
+        cohort_ids = _selection_ids(cohort_ids)
+        if not cohort_ids:
+            self._ensure_facet_indexes()
+            return self._all_accessions
+        unknown = [
+            cohort_id for cohort_id in cohort_ids
+            if cohort_id not in self._dataset_accessions
+        ]
+        if unknown:
+            raise KeyError(unknown[0])
+        return frozenset().union(*(
+            self._dataset_accessions[cohort_id]
+            for cohort_id in cohort_ids
+        ))
+
+    def _funder_union(self, funder_slugs):
+        funder_slugs = _selection_ids(funder_slugs)
+        self._ensure_facet_indexes()
+        if not funder_slugs:
+            return self._all_accessions
+        self._ensure_funder_index()
+        unknown = [
+            slug for slug in funder_slugs if slug not in self._funder_pmids
+        ]
+        if unknown:
+            raise KeyError(unknown[0])
+        for slug in funder_slugs:
+            if slug not in self._funder_accessions:
+                pmids = self._funder_pmids[slug]
+                studies = self._facet_studies
+                self._funder_accessions[slug] = frozenset(
+                    studies.loc[
+                        studies["PUBMEDID"].isin(pmids), "STUDY ACCESSION"
+                    ].dropna().astype(str)
+                )
+        return frozenset().union(*(
+            self._funder_accessions[slug] for slug in funder_slugs
+        ))
+
+    def _filtered_accessions(
+            self, cohort_ids=None, funder_slugs=None, stage=None):
+        self._ensure_facet_indexes()
+        accessions = self._all_accessions
+        cohort_ids = _selection_ids(cohort_ids)
+        funder_slugs = _selection_ids(funder_slugs)
+        if cohort_ids:
+            accessions &= self._cohort_union(cohort_ids)
+        if funder_slugs:
+            accessions &= self._funder_union(funder_slugs)
+        stage = self._normalise_stage(stage)
+        if stage:
+            accessions &= self._stage_accessions[stage]
+        return accessions
+
+    def cohorts(self, search="", funder_slugs=None, stage=None):
+        self._ensure_dataset_index()
+        if not _selection_ids(funder_slugs) and not self._normalise_stage(stage):
+            needle = normalize_cohort_name(search)
+            results = [
+                entry.copy() for entry in self._dataset_entries
+                if not needle
+                or needle in normalize_cohort_name(entry["name"])
+                or needle in entry["id"].casefold()
+            ]
+            results.sort(key=self._entry_sort_key)
+            return results
+        self._ensure_facet_indexes()
+        needle = normalize_cohort_name(search)
+        opposite = self._funder_union(funder_slugs)
+        stage_name = self._normalise_stage(stage)
+        if stage_name:
+            opposite &= self._stage_accessions[stage_name]
+
+        results = []
+        for entry in self._dataset_entries:
+            if needle and needle not in normalize_cohort_name(entry["name"]) \
+                    and needle not in entry["id"].casefold():
+                continue
+            matching = self._dataset_accessions[entry["id"]] & opposite
+            if not matching:
+                continue
+            result = entry.copy()
+            result.update(self._counts(matching))
+            results.append(result)
+        results.sort(key=self._entry_sort_key)
+        return results
+
+    def datasets(self, search="", funder_slug=None, stage=None):
+        return self.cohorts(search, funder_slug, stage)
+
+    def cohort(self, cohort_id):
+        self._ensure_dataset_index()
+        try:
+            return self._dataset_by_id[cohort_id]
+        except KeyError:
+            raise KeyError(cohort_id) from None
+
+    def dataset(self, dataset_id):
+        return self.cohort(dataset_id)
+
+    def funders(self, search="", cohort_ids=None, stage=None):
+        self._ensure_funder_index()
+        needle = str(search or "").strip().casefold()
+        opposite = self._cohort_union(cohort_ids)
+        stage_name = self._normalise_stage(stage)
+        if stage_name:
+            opposite &= self._stage_accessions[stage_name]
+
+        results = []
+        for slug, entry in self._funder_entries.items():
+            if needle and needle not in entry["name"].casefold() \
+                    and needle not in slug.casefold():
+                continue
+            matching = self._funder_accessions[slug] & opposite
+            if not matching:
+                continue
+            result = entry.copy()
+            result.update(self._counts(matching))
+            results.append(result)
+        results.sort(key=self._entry_sort_key)
+        return results
+
+    def funders_for_dataset(self, dataset_id, stage=None):
+        return {
+            entry["slug"]
+            for entry in self.funders(cohort_ids=dataset_id, stage=stage)
+        }
+
+    def _selection(self, cohort_ids=None, funder_slugs=None):
+        cohort_ids = _selection_ids(cohort_ids)
+        funder_slugs = _selection_ids(funder_slugs)
+        if not cohort_ids and not funder_slugs:
+            raise DashboardSelectionUnavailable("Choose a cohort or funder")
+
         self._ensure_dataset_index()
         self._ensure_sources()
-        studies, ancestry, mappings, bubbles, countries = self._sources
+        self._ensure_funder_index()
+        _, _, mappings, _, countries = self._sources
+        cohorts = [self.cohort(cohort_id) for cohort_id in cohort_ids]
+        funders = []
+        for slug in funder_slugs:
+            if slug not in self._funder_entries:
+                raise KeyError(slug)
+            funders.append(self._funder_entries[slug])
 
-        dataset = self.dataset(dataset_id)
-        accessions = self._dataset_accessions[dataset_id]
+        accessions = self._filtered_accessions(cohort_ids, funder_slugs)
         selected_studies = self._select_accessions(0, accessions)
-
-        funder = None
-        if funder_slug:
-            self._ensure_funder_index()
-            if funder_slug not in self._funder_pmids:
-                raise KeyError(funder_slug)
-            selected_studies = selected_studies[
-                selected_studies["PUBMEDID"].isin(
-                    self._funder_pmids[funder_slug]
-                )
-            ].copy()
-            funder = self._funder_entries[funder_slug]
-
-        selected_accessions = frozenset(
-            selected_studies["STUDY ACCESSION"].dropna().astype(str)
-        )
-        selected_ancestry = self._select_accessions(1, selected_accessions)
-        selected_bubbles = self._select_accessions(2, selected_accessions)
+        selected_ancestry = self._select_accessions(1, accessions)
+        selected_bubbles = self._select_accessions(2, accessions)
         if selected_studies.empty or selected_ancestry.empty:
             raise DashboardSelectionUnavailable(
-                "No published GWAS match this funder and dataset selection"
+                "No published GWAS match this cohort and funder selection"
             )
         return (
-            dataset, funder, selected_studies, selected_ancestry,
+            cohorts, funders, selected_studies, selected_ancestry,
             selected_bubbles, mappings, countries,
         )
 
@@ -333,8 +600,10 @@ class DashboardFilterStore:
             funder, studies, ancestry, funding_records or {}
         )
 
-    def dashboard(self, dataset_id, funder_slug=None):
-        cache_key = (dataset_id, funder_slug or "")
+    def dashboard(self, cohort_ids=None, funder_slugs=None):
+        cohort_ids = _selection_ids(cohort_ids)
+        funder_slugs = _selection_ids(funder_slugs)
+        cache_key = (cohort_ids, funder_slugs)
         with self._lock:
             cached = self._payload_cache.get(cache_key)
             if cached is not None:
@@ -342,19 +611,24 @@ class DashboardFilterStore:
                 return cached
 
         cache_path = self._cache_path(
-            "dashboards", dataset_id, funder_slug, "json"
+            "dashboards", cohort_ids, funder_slugs, "json"
         )
         try:
             with open(cache_path, encoding="utf-8") as source:
                 cached = json.load(source)
+            if cached.get("version") != FILTER_SCHEMA_VERSION:
+                raise ValueError("obsolete dashboard cache")
             with self._lock:
                 self._payload_cache[cache_key] = cached
             return cached
-        except (OSError, ValueError, json.JSONDecodeError):
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
             pass
 
-        (dataset, funder, studies, ancestry, bubbles, mappings,
-         countries) = self._selection(dataset_id, funder_slug)
+        (cohorts, funders, studies, ancestry, bubbles, mappings,
+         countries) = self._selection(cohort_ids, funder_slugs)
+        selected_accessions = frozenset(
+            studies["STUDY ACCESSION"].dropna().astype(str)
+        )
         study_parent_map = funder_pipeline.build_study_parent_map(
             studies, mappings
         )
@@ -387,27 +661,25 @@ class DashboardFilterStore:
             self._sources[1]["DATE"], errors="coerce"
         ).dt.year.max())
 
-        funding_records = {}
-        funder_index_path = os.path.join(
-            self.data_path, "funders", "index.json"
-        )
-        funding_cache_path = os.path.join(
-            self.data_path, "funders", "pubmed_grants.json"
-        )
-        if os.path.isfile(funder_index_path) and os.path.isfile(
-                funding_cache_path):
-            self._ensure_funder_index()
-            funding_records = self._funding_by_publication
-
+        funding_records = self._funding_by_publication or {}
+        overall_counts = self._counts(selected_accessions)
+        stage_counts = {
+            stage: self._counts(selected_accessions, stage)
+            for stage in ("initial", "replication")
+        }
+        selection = {
+            "cohorts": cohorts,
+            "funders": funders,
+            "dataset": cohorts[0] if len(cohorts) == 1 else None,
+            "funder": funders[0] if len(funders) == 1 else None,
+            "studyCount": overall_counts["studyCount"],
+            "publicationCount": overall_counts["publicationCount"],
+            "stageCounts": stage_counts,
+        }
+        funder_label = ", ".join(entry["name"] for entry in funders) or None
         payload = {
-            "version": 1,
-            "selection": {
-                "dataset": dataset,
-                "funder": funder,
-                "studyCount": int(
-                    studies["STUDY ACCESSION"].nunique()
-                ),
-            },
+            "version": FILTER_SCHEMA_VERSION,
+            "selection": selection,
             "bubbleGraph": funder_pipeline.build_bubble_payload(bubbles),
             "tsPlot": funder_pipeline.build_time_series(
                 ancestry, all_ancestries, final_year
@@ -423,8 +695,7 @@ class DashboardFilterStore:
             ),
             "summary": funder_pipeline.build_summary(ancestry),
             "report": self._build_report(
-                studies, ancestry, funding_records,
-                funder["name"] if funder else None
+                studies, ancestry, funding_records, funder_label
             ),
         }
         self._atomic_json(cache_path, payload)
@@ -435,28 +706,35 @@ class DashboardFilterStore:
                 self._payload_cache.popitem(last=False)
         return payload
 
-    def dashboard_path(self, dataset_id, funder_slug=None):
-        self.dataset(dataset_id)
-        if funder_slug:
-            self._ensure_funder_index()
-            if funder_slug not in self._funder_pmids:
-                raise KeyError(funder_slug)
+    def dashboard_path(self, cohort_ids=None, funder_slugs=None):
+        cohort_ids = _selection_ids(cohort_ids)
+        funder_slugs = _selection_ids(funder_slugs)
+        if not cohort_ids and not funder_slugs:
+            raise DashboardSelectionUnavailable("Choose a cohort or funder")
+        for cohort_id in cohort_ids:
+            self.cohort(cohort_id)
+        self._ensure_funder_index()
+        for slug in funder_slugs:
+            if slug not in self._funder_entries:
+                raise KeyError(slug)
         path = self._cache_path(
-            "dashboards", dataset_id, funder_slug, "json"
+            "dashboards", cohort_ids, funder_slugs, "json"
         )
         if not os.path.isfile(path):
-            self.dashboard(dataset_id, funder_slug)
+            self.dashboard(cohort_ids, funder_slugs)
         return path
 
-    def download_path(self, dataset_id, funder_slug=None):
+    def download_path(self, cohort_ids=None, funder_slugs=None):
+        cohort_ids = _selection_ids(cohort_ids)
+        funder_slugs = _selection_ids(funder_slugs)
         path = self._cache_path(
-            "downloads", dataset_id, funder_slug, "zip"
+            "downloads", cohort_ids, funder_slugs, "zip"
         )
         if os.path.isfile(path):
             return path
 
-        (dataset, funder, studies, ancestry, bubbles, _, _) = \
-            self._selection(dataset_id, funder_slug)
+        (cohorts, funders, studies, ancestry, bubbles, _, _) = \
+            self._selection(cohort_ids, funder_slugs)
         with tempfile.TemporaryDirectory(
                 prefix="gwas-dashboard-download-") as temporary:
             temporary = Path(temporary)
@@ -468,18 +746,26 @@ class DashboardFilterStore:
             studies.to_csv(studies_path, sep="\t", index=False)
             ancestry.to_csv(ancestry_path, sep="\t", index=False)
             bubble_output = bubbles.copy()
-            bubble_output["Selected Dataset"] = dataset["name"]
-            if funder:
-                bubble_output["Selected Funder"] = funder["name"]
+            bubble_output["Selected Cohorts"] = " | ".join(
+                entry["name"] for entry in cohorts
+            )
+            bubble_output["Selected Funders"] = " | ".join(
+                entry["name"] for entry in funders
+            )
             bubble_output.to_csv(bubbles_path, index=False)
+            selected_accessions = frozenset(
+                studies["STUDY ACCESSION"].dropna().astype(str)
+            )
+            selection = {
+                "cohorts": cohorts,
+                "funders": funders,
+                "studyCount": len(selected_accessions),
+                "publicationCount": self._publication_count(
+                    selected_accessions
+                ),
+            }
             with open(selection_path, "w", encoding="utf-8") as output:
-                json.dump({
-                    "dataset": dataset,
-                    "funder": funder,
-                    "studyCount": int(
-                        studies["STUDY ACCESSION"].nunique()
-                    ),
-                }, output, indent=2)
+                json.dump(selection, output, indent=2)
 
             files = [
                 (studies_path, "studies.tsv"),
@@ -487,8 +773,7 @@ class DashboardFilterStore:
                 (bubbles_path, "bubble_df.csv"),
                 (selection_path, "selection.json"),
             ]
-            if funder:
-                self._ensure_funder_index()
+            if funders:
                 funding_path = temporary / "funding.json"
                 selected_pmids = {
                     funder_pipeline.normalize_pmid(value)
@@ -497,8 +782,7 @@ class DashboardFilterStore:
                 with open(funding_path, "w", encoding="utf-8") as output:
                     json.dump({
                         pmid: self._funding_by_publication.get(pmid, [])
-                        for pmid in sorted(selected_pmids)
-                        if pmid
+                        for pmid in sorted(selected_pmids) if pmid
                     }, output, indent=2)
                 files.append((funding_path, "funding.json"))
 
@@ -512,10 +796,17 @@ _stores_lock = threading.Lock()
 
 def get_dashboard_filter_store(data_path="data"):
     absolute_path = os.path.abspath(data_path)
-    study_path = os.path.join(
-        absolute_path, "catalog", "raw", "Cat_Stud.tsv"
+    source_paths = (
+        os.path.join(absolute_path, "catalog", "raw", "Cat_Stud.tsv"),
+        os.path.join(
+            absolute_path, "catalog", "synthetic", "Cat_Anc_wBroader.tsv"
+        ),
+        os.path.join(absolute_path, "funders", "pubmed_grants.json"),
+        funder_pipeline.funder_cleaner_path(absolute_path),
     )
-    signature = (absolute_path, os.path.getmtime(study_path))
+    signature = tuple(
+        (path, os.path.getmtime(path)) for path in source_paths
+    )
     with _stores_lock:
         store = _stores.get(signature)
         if store is None:

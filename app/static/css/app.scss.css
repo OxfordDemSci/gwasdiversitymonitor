@@ -2909,6 +2909,15 @@ button, .btn {
       white-space: nowrap; }
     .funder-toolbar__field .select2-container {
       min-width: 190px; }
+    .funder-toolbar__field .select2-selection--multiple {
+      max-height: 72px;
+      min-height: 34px;
+      overflow-y: auto; }
+    .funder-toolbar__field .select2-selection__choice {
+      max-width: 170px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap; }
   .funder-toolbar__status {
     min-width: 0;
     flex: 1;
@@ -2949,14 +2958,28 @@ button, .btn {
   display: -moz-flex;
   display: -ms-flexbox;
   display: flex;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  -webkit-align-items: center;
+  -moz-align-items: center;
+  align-items: center;
   -webkit-box-pack: justify;
   -ms-flex-pack: justify;
   -webkit-justify-content: space-between;
   -moz-justify-content: space-between;
   justify-content: space-between;
   gap: 16px; }
+  .funder-option strong {
+    min-width: 0; }
   .funder-option small {
-    color: #78909c; }
+    flex: 0 0 auto;
+    color: #78909c;
+    white-space: nowrap; }
+
+.dashboard-filter-dropdown {
+  width: auto !important;
+  min-width: 360px;
+  max-width: min(520px, calc(100vw - 24px)); }
 
 .report-page {
   background: #f4f6fb; }
