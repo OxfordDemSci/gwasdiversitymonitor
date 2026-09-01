@@ -177,15 +177,26 @@
                 ? 'replication' : 'initial';
         }
 
-        function filterSelectionQuery() {
+        function filterSelectionQuery(extraFacet, extraId) {
+            let cohorts = selectedFilterValues('#dataset-filter').slice();
+            let funders = selectedFilterValues('#funder-filter').slice();
+            if (extraFacet === 'cohort' && extraId &&
+                    cohorts.indexOf(extraId) === -1) {
+                cohorts.push(extraId);
+            }
+            if (extraFacet === 'funder' && extraId &&
+                    funders.indexOf(extraId) === -1) {
+                funders.push(extraId);
+            }
             return $.param({
-                cohorts: selectedFilterValues('#dataset-filter').join(','),
-                funders: selectedFilterValues('#funder-filter').join(',')
+                cohorts: cohorts.sort().join(','),
+                funders: funders.sort().join(',')
             });
         }
 
         const dashboardFilterCache = new Map();
         const dashboardFilterCacheLimit = 4;
+		const dashboardFilterRequests = new Map();
 		const filterOptionCache = new Map();
 		const filterOptionCacheLimit = 12;
 
@@ -206,6 +217,43 @@
                 );
             }
         }
+
+		function requestDashboardFilter(query) {
+			let cached = cachedDashboardFilter(query);
+			if (cached) {
+				return $.Deferred().resolve(cached).promise();
+			}
+			if (dashboardFilterRequests.has(query)) {
+				return dashboardFilterRequests.get(query);
+			}
+
+			let request = $.getJSON(
+				'/json/filtered-dashboard.json?' + query
+			);
+			dashboardFilterRequests.set(query, request);
+			request.done(function(payload) {
+				cacheDashboardFilter(query, payload);
+			});
+			request.always(function() {
+				if (dashboardFilterRequests.get(query) === request) {
+					dashboardFilterRequests.delete(query);
+				}
+			});
+			return request;
+		}
+
+		function prefetchFirstDashboardOption(facet, entries) {
+			let first = (entries || []).find(function(entry) {
+				return entry && entry.id;
+			});
+			if (!first || !baseDashboardReady) return;
+			let query = filterSelectionQuery(facet, first.id);
+			if (dashboardFilterCache.has(query) ||
+					dashboardFilterRequests.has(query)) return;
+			setTimeout(function() {
+				requestDashboardFilter(query);
+			}, 0);
+		}
 
 		function filterOptionCacheKey(url, data) {
 			return url + '?' + $.param(data || {});
@@ -364,6 +412,24 @@
             };
             let state = captureDashboardState();
 
+			if (!payload.bubbleGraph && payload.selection &&
+					payload.selection.accessions) {
+				let allowedAccessions = new Set(payload.selection.accessions);
+				let baseBubbles = baseDashboardData.bubbleGraph;
+				payload.bubbleGraph = {
+					bubblegraph_initial: __dcSelectData(
+						baseBubbles, false
+					).filter(function(row) {
+						return allowedAccessions.has(String(row.ACCESSION));
+					}),
+					bubblegraph_replication: __dcSelectData(
+						baseBubbles, true
+					).filter(function(row) {
+						return allowedAccessions.has(String(row.ACCESSION));
+					})
+				};
+			}
+
             timeseriesData = payload.tsPlot;
             heatData = payload.heatMap;
             mapData = payload.chloroMap;
@@ -390,9 +456,6 @@
 			let selectedCohorts = selectedFilterEntries('#dataset-filter');
 			updateSelectionActions(selectedFunders, selectedCohorts);
 
-            if (dashboardFilterRequest && dashboardFilterRequest.abort) {
-                dashboardFilterRequest.abort();
-            }
 			if (!funderSlugs.length && !cohortIds.length) {
 				activeSelectionData = null;
 				updateSelectionStatus(null);
@@ -414,13 +477,11 @@
 				$('.funder-toolbar').removeClass('is-loading');
 				return;
 			}
-			let requestUrl = '/json/filtered-dashboard.json?' + selectionQuery;
-            let request = $.getJSON(requestUrl);
+			let request = requestDashboardFilter(selectionQuery);
             dashboardFilterRequest = request;
             request
                 .done(function(payload) {
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
-					cacheDashboardFilter(selectionQuery, payload);
 					activeSelectionData = payload.selection;
 					redrawDashboardData(payload);
 					updateSelectionStatus(payload.selection);
@@ -447,7 +508,7 @@
 				width: '100%',
 				placeholder: 'All funders',
 				allowClear: true,
-				closeOnSelect: false,
+				closeOnSelect: true,
 				dropdownAutoWidth: true,
 					ajax: {
 						url: '/api/funders',
@@ -465,6 +526,7 @@
 							};
 						},
 					processResults: function(data) {
+						prefetchFirstDashboardOption('funder', data.results);
 						return {
 							results: data.results,
 							pagination: data.pagination
@@ -483,6 +545,7 @@
 				applyDashboardFilters
 			);
 			select.on('select2:open', function() {
+				$('#dataset-filter').select2('close');
 				$('.select2-container--open .select2-dropdown')
 					.addClass('dashboard-filter-dropdown');
 			});
@@ -494,7 +557,7 @@
 				width: '100%',
 				placeholder: 'All cohorts',
 				allowClear: true,
-				closeOnSelect: false,
+				closeOnSelect: true,
 				dropdownAutoWidth: true,
 				ajax: {
 					url: '/api/cohorts',
@@ -512,6 +575,7 @@
                         };
                     },
                     processResults: function(data) {
+						prefetchFirstDashboardOption('cohort', data.results);
                         return {
                             results: data.results,
                             pagination: data.pagination
@@ -530,6 +594,7 @@
 				applyDashboardFilters
 			);
 			select.on('select2:open', function() {
+				$('#funder-filter').select2('close');
 				$('.select2-container--open .select2-dropdown')
 					.addClass('dashboard-filter-dropdown');
 			});

@@ -11,13 +11,18 @@ from app import app as flask_app
 from app.FunderData import FunderDataStore, FunderDataUnavailable
 from app.DashboardFilters import (
     DashboardFilterStore,
+    FILTER_SCHEMA_VERSION,
+    PRECOMPUTED_FILTER_ARCHIVE,
+    PRECOMPUTED_FILTER_MANIFEST,
     normalize_cohort_name,
     split_cohorts,
+    validate_precomputed_filter_archive,
 )
 from funder_pipeline import (
     ARTIFACT_VERSION,
     _promote_funder_artifacts,
     attach_funding_metadata,
+    build_doughnut,
     build_funder_artifacts,
     build_heat_map,
     build_report,
@@ -61,6 +66,44 @@ class PubMedFundingTests(unittest.TestCase):
         self.assertEqual(records["1"], ["A"])
         self.assertEqual(records["3"], ["Other funders"])
         self.assertEqual(counts["A"], 2)
+
+    def test_doughnut_grouping_preserves_recorded_share_denominators(self):
+        merged = pd.DataFrame([
+            {"Year": 2020, "parentterm": "Cancer", "STAGE": "initial",
+             "Broader": "European", "N": 80, "ASSOCIATION COUNT": 8},
+            {"Year": 2020, "parentterm": "Cancer", "STAGE": "initial",
+             "Broader": "Asian", "N": 20, "ASSOCIATION COUNT": 2},
+            {"Year": 2020, "parentterm": "Cancer", "STAGE": "initial",
+             "Broader": "In Part Not Recorded", "N": 100,
+             "ASSOCIATION COUNT": 0},
+            {"Year": 2020, "parentterm": "Cancer",
+             "STAGE": "replication", "Broader": "European", "N": 30,
+             "ASSOCIATION COUNT": 0},
+        ])
+
+        result = build_doughnut(
+            merged, ["European", "Asian"], ["Cancer"], 2020
+        )
+
+        self.assertEqual(
+            result["doughnut_discovery_studies"]["2020"]["Cancer"]["1"]
+            ["value"],
+            33.33333333,
+        )
+        self.assertEqual(
+            result["doughnut_discovery_participants"]["2020"]["Cancer"]["1"]
+            ["value"],
+            40.0,
+        )
+        self.assertEqual(
+            result["doughnut_replication_studies"]["2020"]["Cancer"]["1"]
+            ["value"],
+            100.0,
+        )
+        self.assertEqual(
+            result["doughnut_associations"]["2020"]["Cancer"]["2"]["value"],
+            20.0,
+        )
 
     def test_bubble_metadata_keeps_all_canonical_funder_names(self):
         cache = {
@@ -332,6 +375,36 @@ class DatasetFilterTests(unittest.TestCase):
                 Path(store._cache_root).parent,
                 Path(directory) / ".dashboard-filter-cache",
             )
+
+    def test_precomputed_individual_dashboard_is_loaded_from_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive_path = Path(directory) / PRECOMPUTED_FILTER_ARCHIVE
+            archive_path.parent.mkdir(parents=True)
+            payload = {
+                "version": FILTER_SCHEMA_VERSION,
+                "selection": {"studyCount": 3},
+            }
+            member = "funders/wellcome.json"
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr(member, json.dumps(payload))
+                archive.writestr(PRECOMPUTED_FILTER_MANIFEST, json.dumps({
+                    "version": FILTER_SCHEMA_VERSION,
+                    "funderCount": 1,
+                    "cohortCount": 0,
+                    "members": [member],
+                }))
+
+            store = DashboardFilterStore(directory)
+            loaded = store._load_precomputed_dashboard((), ("wellcome",))
+            manifest = validate_precomputed_filter_archive(directory)
+
+        self.assertEqual(loaded, payload)
+        self.assertEqual(manifest["funderCount"], 1)
+        self.assertIsNone(
+            store._load_precomputed_dashboard(
+                ("ukb",), ("wellcome",)
+            )
+        )
 
     def test_warm_loads_sources_and_filter_indexes(self):
         store = DashboardFilterStore("/tmp/not-used")
@@ -732,7 +805,13 @@ class FunderArtifactTests(unittest.TestCase):
                     generate_data.funder_pipeline, "collect_pubmed_grants",
                     return_value=cache_payload) as collect, mock.patch.object(
                     generate_data.funder_pipeline, "build_funder_artifacts",
-                    return_value={"funders": [{"slug": "safe"}]}) as build:
+                    return_value={"funders": [{"slug": "safe"}]}) as build, \
+                    mock.patch.object(
+                        generate_data, "build_precomputed_filter_archive"
+                    ) as precompute, mock.patch.object(
+                        generate_data, "validate_precomputed_filter_archive",
+                        return_value={"funderCount": 1, "cohortCount": 1}
+                    ):
                 generate_data._run_funder_wrangling(
                     str(root), str(staged), str(previous)
                 )
@@ -753,6 +832,7 @@ class FunderArtifactTests(unittest.TestCase):
                 cache_payload,
                 str(staged / "funders" / "funder_cleaner.json"),
             )
+            precompute.assert_called_once()
 
 
 class FunderRouteTests(unittest.TestCase):
@@ -977,6 +1057,7 @@ class FunderRouteTests(unittest.TestCase):
             store.dataset.return_value = {"id": "ukb", "name": "UKB"}
             store.download_path.return_value = str(archive)
             store.dashboard.return_value = report_payload
+            store.report.return_value = report_payload["report"]
             with mock.patch(
                     "app.routes.get_dashboard_filter_store",
                     return_value=store):
@@ -1002,6 +1083,7 @@ class FunderRouteTests(unittest.TestCase):
             self.assertIn(b"Annual activity", report.data)
             store.download_path.assert_called_once_with(("ukb",), ())
             store.dashboard.assert_called_once_with(("ukb",), ())
+            store.report.assert_called_once_with(("ukb",), ())
             download.close()
 
 

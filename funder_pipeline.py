@@ -588,48 +588,75 @@ def build_doughnut(merged, ancestry_order, parent_terms, final_year):
         "doughnut_replication_participants": {},
         "doughnut_associations": {},
     }
-    for year in range(2008, final_year + 1):
-        year_frame = merged[merged["Year"] == year]
-        if year_frame.empty:
-            continue
+    source = merged[
+        pd.to_numeric(merged["Year"], errors="coerce").between(
+            2008, final_year
+        )
+    ].copy()
+    if source.empty:
+        return keys
+
+    source["Year"] = pd.to_numeric(
+        source["Year"], errors="coerce"
+    ).astype(int)
+    source["__row_count"] = 1
+    all_terms = source.copy()
+    all_terms["parentterm"] = "All"
+    expanded = pd.concat([source, all_terms], ignore_index=True)
+
+    grouped = expanded.groupby(
+        ["Year", "parentterm", "STAGE", "Broader"], sort=False
+    ).agg(
+        N=("N", "sum"),
+        Count=("__row_count", "sum"),
+        Associations=("ASSOCIATION COUNT", "sum"),
+    ).to_dict(orient="index")
+    totals = expanded.groupby(
+        ["Year", "parentterm", "STAGE"], sort=False
+    ).agg(
+        N=("N", "sum"),
+        Count=("__row_count", "sum"),
+        Associations=("ASSOCIATION COUNT", "sum"),
+    ).to_dict(orient="index")
+
+    for year in sorted(source["Year"].unique()):
         for container in keys.values():
             container[str(year)] = {}
         for term in ["All"] + parent_terms:
-            term_frame = year_frame if term == "All" else year_frame[
-                year_frame["parentterm"] == term
-            ]
             for container in keys.values():
                 container[str(year)][term] = {}
-            initial = term_frame[term_frame["STAGE"] == "initial"]
-            replication = term_frame[term_frame["STAGE"] == "replication"]
-            totals = {
-                "initialN": initial["N"].sum(),
-                "initialCount": len(initial),
-                "replicationN": replication["N"].sum(),
-                "replicationCount": len(replication),
-                "associations": initial["ASSOCIATION COUNT"].sum(),
-            }
+            initial_total = totals.get(
+                (year, term, "initial"), {}
+            )
+            replication_total = totals.get(
+                (year, term, "replication"), {}
+            )
             for order, ancestry in enumerate(ancestry_order, 1):
-                initial_ancestry = initial[initial["Broader"] == ancestry]
-                replication_ancestry = replication[
-                    replication["Broader"] == ancestry
-                ]
+                initial = grouped.get(
+                    (year, term, "initial", ancestry), {}
+                )
+                replication = grouped.get(
+                    (year, term, "replication", ancestry), {}
+                )
                 values = {
                     "doughnut_discovery_studies": _percentage(
-                        len(initial_ancestry), totals["initialCount"]
+                        initial.get("Count", 0),
+                        initial_total.get("Count", 0),
                     ),
                     "doughnut_discovery_participants": _percentage(
-                        initial_ancestry["N"].sum(), totals["initialN"]
+                        initial.get("N", 0), initial_total.get("N", 0),
                     ),
                     "doughnut_replication_studies": _percentage(
-                        len(replication_ancestry), totals["replicationCount"]
+                        replication.get("Count", 0),
+                        replication_total.get("Count", 0),
                     ),
                     "doughnut_replication_participants": _percentage(
-                        replication_ancestry["N"].sum(), totals["replicationN"]
+                        replication.get("N", 0),
+                        replication_total.get("N", 0),
                     ),
                     "doughnut_associations": _percentage(
-                        initial_ancestry["ASSOCIATION COUNT"].sum(),
-                        totals["associations"]
+                        initial.get("Associations", 0),
+                        initial_total.get("Associations", 0),
                     ),
                 }
                 for key, value in values.items():

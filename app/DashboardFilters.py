@@ -1,10 +1,12 @@
 import hashlib
+import datetime
 import json
 import os
 import re
 import tempfile
 import threading
 import unicodedata
+import zipfile
 from collections import OrderedDict, defaultdict
 from pathlib import Path
 
@@ -13,7 +15,11 @@ import pandas as pd
 import funder_pipeline
 
 
-FILTER_SCHEMA_VERSION = 2
+FILTER_SCHEMA_VERSION = 3
+PRECOMPUTED_FILTER_ARCHIVE = os.path.join(
+    "filter-cache", "individual-dashboards.zip"
+)
+PRECOMPUTED_FILTER_MANIFEST = "manifest.json"
 
 
 class DashboardSelectionUnavailable(RuntimeError):
@@ -54,7 +60,7 @@ class DashboardFilterStore:
 
     CACHE_LIMIT = 4
 
-    def __init__(self, data_path="data"):
+    def __init__(self, data_path="data", use_precomputed=True):
         self.data_path = os.path.abspath(data_path)
         self._lock = threading.RLock()
         self._sources = None
@@ -72,6 +78,9 @@ class DashboardFilterStore:
         self._funding_by_publication = None
         self._payload_cache = OrderedDict()
         self._cache_root = self._build_cache_root()
+        self._precomputed_archive = os.path.join(
+            self.data_path, PRECOMPUTED_FILTER_ARCHIVE
+        ) if use_precomputed else None
 
     def _build_cache_root(self):
         source_paths = (
@@ -139,6 +148,29 @@ class DashboardFilterStore:
         finally:
             if temporary and os.path.exists(temporary):
                 os.unlink(temporary)
+
+    @staticmethod
+    def _precomputed_member(cohort_ids, funder_slugs):
+        if len(cohort_ids) == 1 and not funder_slugs:
+            return f"cohorts/{cohort_ids[0]}.json"
+        if len(funder_slugs) == 1 and not cohort_ids:
+            return f"funders/{funder_slugs[0]}.json"
+        return None
+
+    def _load_precomputed_dashboard(self, cohort_ids, funder_slugs):
+        member = self._precomputed_member(cohort_ids, funder_slugs)
+        if not member or not self._precomputed_archive \
+                or not os.path.isfile(self._precomputed_archive):
+            return None
+        try:
+            with zipfile.ZipFile(self._precomputed_archive) as archive:
+                payload = json.loads(archive.read(member))
+            if payload.get("version") != FILTER_SCHEMA_VERSION:
+                return None
+            return payload
+        except (KeyError, OSError, TypeError, ValueError,
+                zipfile.BadZipFile, json.JSONDecodeError):
+            return None
 
     def _load_studies(self):
         studies = pd.read_csv(
@@ -579,7 +611,9 @@ class DashboardFilterStore:
             for entry in self.funders(cohort_ids=dataset_id, stage=stage)
         }
 
-    def _selection(self, cohort_ids=None, funder_slugs=None):
+    def _selection(
+            self, cohort_ids=None, funder_slugs=None,
+            include_bubbles=True):
         cohort_ids = _selection_ids(cohort_ids)
         funder_slugs = _selection_ids(funder_slugs)
         if not cohort_ids and not funder_slugs:
@@ -599,7 +633,8 @@ class DashboardFilterStore:
         accessions = self._filtered_accessions(cohort_ids, funder_slugs)
         selected_studies = self._select_accessions(0, accessions)
         selected_ancestry = self._select_accessions(1, accessions)
-        selected_bubbles = self._select_accessions(2, accessions)
+        selected_bubbles = self._select_accessions(2, accessions) \
+            if include_bubbles else None
         if selected_studies.empty or selected_ancestry.empty:
             raise DashboardSelectionUnavailable(
                 "No published GWAS match this cohort and funder selection"
@@ -639,8 +674,20 @@ class DashboardFilterStore:
         except (OSError, TypeError, ValueError, json.JSONDecodeError):
             pass
 
-        (cohorts, funders, studies, ancestry, bubbles, mappings,
-         countries) = self._selection(cohort_ids, funder_slugs)
+        cached = self._load_precomputed_dashboard(cohort_ids, funder_slugs)
+        if cached is not None:
+            self._atomic_json(cache_path, cached)
+            with self._lock:
+                self._payload_cache[cache_key] = cached
+                self._payload_cache.move_to_end(cache_key)
+                while len(self._payload_cache) > self.CACHE_LIMIT:
+                    self._payload_cache.popitem(last=False)
+            return cached
+
+        (cohorts, funders, studies, ancestry, _, mappings,
+         countries) = self._selection(
+             cohort_ids, funder_slugs, include_bubbles=False
+         )
         selected_accessions = frozenset(
             studies["STUDY ACCESSION"].dropna().astype(str)
         )
@@ -676,7 +723,6 @@ class DashboardFilterStore:
             self._sources[1]["DATE"], errors="coerce"
         ).dt.year.max())
 
-        funding_records = self._funding_by_publication or {}
         overall_counts = self._counts(selected_accessions)
         stage_counts = {
             stage: self._counts(selected_accessions, stage)
@@ -690,12 +736,11 @@ class DashboardFilterStore:
             "studyCount": overall_counts["studyCount"],
             "publicationCount": overall_counts["publicationCount"],
             "stageCounts": stage_counts,
+            "accessions": sorted(selected_accessions),
         }
-        funder_label = ", ".join(entry["name"] for entry in funders) or None
         payload = {
             "version": FILTER_SCHEMA_VERSION,
             "selection": selection,
-            "bubbleGraph": funder_pipeline.build_bubble_payload(bubbles),
             "tsPlot": funder_pipeline.build_time_series(
                 ancestry, all_ancestries, final_year
             ),
@@ -709,9 +754,6 @@ class DashboardFilterStore:
                 merged, recorded_ancestries, parent_terms, final_year
             ),
             "summary": funder_pipeline.build_summary(ancestry),
-            "report": self._build_report(
-                studies, ancestry, funding_records, funder_label
-            ),
         }
         self._atomic_json(cache_path, payload)
         with self._lock:
@@ -720,6 +762,38 @@ class DashboardFilterStore:
             while len(self._payload_cache) > self.CACHE_LIMIT:
                 self._payload_cache.popitem(last=False)
         return payload
+
+    def report(self, cohort_ids=None, funder_slugs=None):
+        cohort_ids = _selection_ids(cohort_ids)
+        funder_slugs = _selection_ids(funder_slugs)
+        path = self._cache_path(
+            "reports", cohort_ids, funder_slugs, "json"
+        )
+        try:
+            with open(path, encoding="utf-8") as source:
+                cached = json.load(source)
+            if cached.get("version") != FILTER_SCHEMA_VERSION:
+                raise ValueError("obsolete report cache")
+            return cached["report"]
+        except (KeyError, OSError, TypeError, ValueError,
+                json.JSONDecodeError):
+            pass
+
+        (_, funders, studies, ancestry, _, _, _) = self._selection(
+            cohort_ids, funder_slugs, include_bubbles=False
+        )
+        funder_label = ", ".join(
+            entry["name"] for entry in funders
+        ) or None
+        report = self._build_report(
+            studies, ancestry, self._funding_by_publication or {},
+            funder_label,
+        )
+        self._atomic_json(path, {
+            "version": FILTER_SCHEMA_VERSION,
+            "report": report,
+        })
+        return report
 
     def dashboard_path(self, cohort_ids=None, funder_slugs=None):
         cohort_ids = _selection_ids(cohort_ids)
@@ -803,6 +877,101 @@ class DashboardFilterStore:
 
             funder_pipeline._safe_zip_write(path, files)
         return path
+
+
+def build_precomputed_filter_archive(data_path="data", output_path=None,
+                                     progress=None, limit=None):
+    """Prepare compact dashboards for every individual cohort and funder."""
+    data_path = os.path.abspath(data_path)
+    output_path = output_path or os.path.join(
+        data_path, PRECOMPUTED_FILTER_ARCHIVE
+    )
+    store = DashboardFilterStore(data_path, use_precomputed=False)
+    store.warm()
+
+    selections = [
+        ("funders", slug, (), (slug,))
+        for slug in store._funder_entries
+    ] + [
+        ("cohorts", entry["id"], (entry["id"],), ())
+        for entry in store._dataset_entries
+    ]
+    if limit is not None:
+        selections = selections[:max(0, int(limit))]
+
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{output.name}.", dir=str(output.parent)
+    )
+    os.close(descriptor)
+    members = []
+    try:
+        with zipfile.ZipFile(
+                temporary, "w", compression=zipfile.ZIP_DEFLATED,
+                compresslevel=6) as archive:
+            total = len(selections)
+            for number, (kind, identifier, cohorts, funders) in enumerate(
+                    selections, 1):
+                payload = store.dashboard(cohorts, funders)
+                member = f"{kind}/{identifier}.json"
+                archive.writestr(
+                    member,
+                    json.dumps(payload, separators=(",", ":")),
+                )
+                members.append(member)
+                if progress:
+                    progress(number, total, kind, identifier)
+
+            archive.writestr(PRECOMPUTED_FILTER_MANIFEST, json.dumps({
+                "version": FILTER_SCHEMA_VERSION,
+                "generatedAt": datetime.datetime.now(
+                    datetime.timezone.utc
+                ).isoformat(),
+                "funderCount": sum(
+                    member.startswith("funders/") for member in members
+                ),
+                "cohortCount": sum(
+                    member.startswith("cohorts/") for member in members
+                ),
+                "members": members,
+            }, separators=(",", ":")))
+        os.replace(temporary, output)
+        temporary = None
+    finally:
+        if temporary and os.path.exists(temporary):
+            os.unlink(temporary)
+    return str(output)
+
+
+def validate_precomputed_filter_archive(data_path="data", path=None):
+    path = path or os.path.join(
+        os.path.abspath(data_path), PRECOMPUTED_FILTER_ARCHIVE
+    )
+    with zipfile.ZipFile(path) as archive:
+        if archive.testzip() is not None:
+            raise ValueError("The precomputed filter archive is corrupt")
+        manifest = json.loads(archive.read(PRECOMPUTED_FILTER_MANIFEST))
+        members = manifest.get("members")
+        if manifest.get("version") != FILTER_SCHEMA_VERSION \
+                or not isinstance(members, list):
+            raise ValueError("The precomputed filter manifest is invalid")
+        expected = set(members) | {PRECOMPUTED_FILTER_MANIFEST}
+        if len(expected) != len(members) + 1 \
+                or set(archive.namelist()) != expected:
+            raise ValueError("The precomputed filter members differ")
+        if any(
+                not re.fullmatch(r"(?:funders|cohorts)/[a-z0-9._-]+\.json",
+                                 member)
+                for member in members):
+            raise ValueError("The precomputed filter archive has unsafe names")
+        if manifest.get("funderCount") != sum(
+                member.startswith("funders/") for member in members) \
+                or manifest.get("cohortCount") != sum(
+                    member.startswith("cohorts/") for member in members
+                ):
+            raise ValueError("The precomputed filter counts differ")
+    return manifest
 
 
 _stores = {}

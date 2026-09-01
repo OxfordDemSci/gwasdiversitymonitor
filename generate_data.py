@@ -29,6 +29,11 @@ from app.DataLoader import (
     TOPLOT_RUNTIME_FILES,
     published_data_lock,
 )
+from app.DashboardFilters import (
+    PRECOMPUTED_FILTER_ARCHIVE,
+    build_precomputed_filter_archive,
+    validate_precomputed_filter_archive,
+)
 import funder_pipeline
 
 warnings.filterwarnings("ignore")
@@ -97,6 +102,8 @@ DOWNLOAD_OUTPUT_FILES = (
     'todownload/timeseries.zip',
 )
 
+FILTER_CACHE_OUTPUT_FILES = (PRECOMPUTED_FILTER_ARCHIVE,)
+
 PUBLISHED_DATA_FILES = (
     RAW_INPUT_FILES
     + STATIC_DATA_FILES
@@ -105,6 +112,7 @@ PUBLISHED_DATA_FILES = (
     + UNMAPPED_OUTPUT_FILES
     + tuple(f'toplot/{file_name}' for file_name in TOPLOT_OUTPUT_FILES)
     + DOWNLOAD_OUTPUT_FILES
+    + FILTER_CACHE_OUTPUT_FILES
 )
 
 RAW_REQUIRED_COLUMNS = {
@@ -2462,6 +2470,7 @@ def _implementation_fingerprints(repository_path):
     implementation_files = (
         'generate_data.py',
         'app/DataLoader.py',
+        'app/DashboardFilters.py',
         'funder_pipeline.py',
         'data/funders/funder_cleaner.json',
     )
@@ -2646,6 +2655,7 @@ def validate_generated_release(data_path, static_bundle_path):
             )
 
     funder_files = funder_pipeline.validate_funder_artifacts(data_path)
+    validate_precomputed_filter_archive(data_path)
     published_files = PUBLISHED_DATA_FILES + funder_files
     return {
         'raw_fingerprints': raw_fingerprints,
@@ -2995,8 +3005,22 @@ def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
             os.path.join(previous_data_path, 'todownload')
             if previous_data_path else None
         )
+
+    def filter_progress(number, total, kind, identifier):
+        if number == 1 or number == total or number % 100 == 0:
+            diversity_logger.info(
+                'Prepared %d/%d dashboard filters (%s/%s)',
+                number, total, kind, identifier
+            )
+
+    build_precomputed_filter_archive(
+        data_path, progress=filter_progress
+    )
+    manifest = validate_precomputed_filter_archive(data_path)
     diversity_logger.info(
-        'Build of %d funder dashboards: Complete', len(index['funders'])
+        'Build of %d funder dashboards and %d precomputed filters: Complete',
+        len(index['funders']),
+        manifest['funderCount'] + manifest['cohortCount'],
     )
 
 

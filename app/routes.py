@@ -251,6 +251,7 @@ def getFilteredDashboardReport():
         store = get_dashboard_filter_store(published_path)
         try:
             dashboard = store.dashboard(cohort_ids, funder_slugs)
+            report = store.report(cohort_ids, funder_slugs)
         except KeyError:
             abort(404)
 
@@ -285,7 +286,7 @@ def getFilteredDashboardReport():
             title=f"{report_title} report",
             report_title=report_title,
             report_subtitle=report_subtitle,
-            report=dashboard["report"],
+            report=report,
             download_url=download_url,
             report_note=report_note,
         )
