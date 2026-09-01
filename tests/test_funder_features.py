@@ -1,3 +1,4 @@
+import ast
 import json
 import tempfile
 import unittest
@@ -35,6 +36,26 @@ from funder_pipeline import (
     validate_funder_artifacts,
 )
 import generate_data
+
+
+class DataImagePackagingTests(unittest.TestCase):
+    def test_data_image_copies_generate_data_app_dependencies(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        source = (repository_root / "generate_data.py").read_text()
+        dockerfile = (
+            repository_root / "deploy" / "data.Dockerfile"
+        ).read_text()
+        app_modules = {
+            node.module.split(".", 1)[1]
+            for node in ast.walk(ast.parse(source))
+            if isinstance(node, ast.ImportFrom)
+            and node.module
+            and node.module.startswith("app.")
+        }
+
+        for module in app_modules:
+            copy_instruction = f"COPY app/{module}.py app/{module}.py"
+            self.assertIn(copy_instruction, dockerfile)
 
 
 class PubMedFundingTests(unittest.TestCase):
