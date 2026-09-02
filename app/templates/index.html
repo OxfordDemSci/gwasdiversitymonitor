@@ -96,6 +96,10 @@
 			setDescription();
 			initFunderFilter();
 			initDatasetFilter();
+			if (!filterOptionsPrefetched) {
+				filterOptionsPrefetched = true;
+				prefetchInitialFilterOptions();
+			}
 
 			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
 				if (error) return;
@@ -295,12 +299,13 @@
 		}
 
 		function prefetchInitialFilterOptions() {
-			let stage = activeStageName();
-			prefetchFilterOptions('/api/funders', {
-				search: '', cohorts: '', stage: stage, page: 1
-			});
-			prefetchFilterOptions('/api/cohorts', {
-				search: '', funders: '', stage: stage, page: 1
+			['initial', 'replication'].forEach(function(stage) {
+				prefetchFilterOptions('/api/funders', {
+					search: '', cohorts: '', stage: stage, page: 1
+				});
+				prefetchFilterOptions('/api/cohorts', {
+					search: '', funders: '', stage: stage, page: 1
+				});
 			});
 		}
 

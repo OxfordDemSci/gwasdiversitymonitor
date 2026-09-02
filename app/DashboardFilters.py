@@ -15,11 +15,17 @@ import pandas as pd
 import funder_pipeline
 
 
-FILTER_SCHEMA_VERSION = 4
+FILTER_SCHEMA_VERSION = 5
 PRECOMPUTED_FILTER_ARCHIVE = os.path.join(
     "filter-cache", "individual-dashboards.zip"
 )
 PRECOMPUTED_FILTER_MANIFEST = "manifest.json"
+PRECOMPUTED_FILTER_OPTION_MEMBERS = {
+    ("funders", "initial"): "options/funders-initial.json",
+    ("funders", "replication"): "options/funders-replication.json",
+    ("cohorts", "initial"): "options/cohorts-initial.json",
+    ("cohorts", "replication"): "options/cohorts-replication.json",
+}
 COHORT_CLEANER_FILE = os.path.join("support", "cohort_cleaner.json")
 BUBBLE_PAYLOAD_ROW_LIMIT = 5000
 
@@ -119,6 +125,7 @@ class DashboardFilterStore:
         self._precomputed_archive = os.path.join(
             self.data_path, PRECOMPUTED_FILTER_ARCHIVE
         ) if use_precomputed else None
+        self._precomputed_options = {}
 
     def _build_cache_root(self):
         source_paths = (
@@ -210,6 +217,31 @@ class DashboardFilterStore:
         except (KeyError, OSError, TypeError, ValueError,
                 zipfile.BadZipFile, json.JSONDecodeError):
             return None
+
+    def _load_precomputed_options(self, kind, stage):
+        stage = self._normalise_stage(stage)
+        member = PRECOMPUTED_FILTER_OPTION_MEMBERS.get((kind, stage))
+        if not member or not self._precomputed_archive \
+                or not os.path.isfile(self._precomputed_archive):
+            return None
+        cache_key = (kind, stage)
+        with self._lock:
+            cached = self._precomputed_options.get(cache_key)
+            if cached is not None:
+                return cached
+        try:
+            with zipfile.ZipFile(self._precomputed_archive) as archive:
+                payload = json.loads(archive.read(member))
+            if payload.get("version") != FILTER_SCHEMA_VERSION \
+                    or not isinstance(payload.get("entries"), list):
+                return None
+            entries = tuple(payload["entries"])
+        except (KeyError, OSError, TypeError, ValueError,
+                zipfile.BadZipFile, json.JSONDecodeError):
+            return None
+        with self._lock:
+            self._precomputed_options[cache_key] = entries
+        return entries
 
     def _load_studies(self):
         studies = pd.read_csv(
@@ -648,9 +680,22 @@ class DashboardFilterStore:
         return accessions
 
     def cohorts(self, search="", funder_slugs=None, stage=None):
+        funder_slugs = _selection_ids(funder_slugs)
+        stage_name = self._normalise_stage(stage)
+        needle = normalize_cohort_name(search)
+        if not funder_slugs and stage_name:
+            precomputed = self._load_precomputed_options(
+                "cohorts", stage_name
+            )
+            if precomputed is not None:
+                return [
+                    entry.copy() for entry in precomputed
+                    if not needle
+                    or needle in normalize_cohort_name(entry["name"])
+                    or needle in entry["id"].casefold()
+                ]
         self._ensure_dataset_index()
-        if not _selection_ids(funder_slugs) and not self._normalise_stage(stage):
-            needle = normalize_cohort_name(search)
+        if not funder_slugs and not stage_name:
             results = [
                 entry.copy() for entry in self._dataset_entries
                 if not needle
@@ -660,9 +705,7 @@ class DashboardFilterStore:
             results.sort(key=self._entry_sort_key)
             return results
         self._ensure_facet_indexes()
-        needle = normalize_cohort_name(search)
         opposite = self._funder_union(funder_slugs)
-        stage_name = self._normalise_stage(stage)
         if stage_name:
             opposite &= self._stage_accessions[stage_name]
 
@@ -694,10 +737,22 @@ class DashboardFilterStore:
         return self.cohort(dataset_id)
 
     def funders(self, search="", cohort_ids=None, stage=None):
-        self._ensure_funder_index()
-        needle = str(search or "").strip().casefold()
-        opposite = self._cohort_union(cohort_ids)
+        cohort_ids = _selection_ids(cohort_ids)
         stage_name = self._normalise_stage(stage)
+        needle = str(search or "").strip().casefold()
+        if not cohort_ids and stage_name:
+            precomputed = self._load_precomputed_options(
+                "funders", stage_name
+            )
+            if precomputed is not None:
+                return [
+                    entry.copy() for entry in precomputed
+                    if not needle
+                    or needle in entry["name"].casefold()
+                    or needle in entry["slug"].casefold()
+                ]
+        self._ensure_funder_index()
+        opposite = self._cohort_union(cohort_ids)
         if stage_name:
             opposite &= self._stage_accessions[stage_name]
 
@@ -1016,10 +1071,25 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
     )
     os.close(descriptor)
     members = []
+    option_members = []
     try:
         with zipfile.ZipFile(
                 temporary, "w", compression=zipfile.ZIP_DEFLATED,
                 compresslevel=6) as archive:
+            option_builders = {
+                "funders": store.funders,
+                "cohorts": store.cohorts,
+            }
+            for (kind, stage), member in \
+                    PRECOMPUTED_FILTER_OPTION_MEMBERS.items():
+                entries = option_builders[kind]("", (), stage)
+                archive.writestr(member, json.dumps({
+                    "version": FILTER_SCHEMA_VERSION,
+                    "entries": entries,
+                }, separators=(",", ":")))
+                option_members.append(member)
+                members.append(member)
+
             total = len(selections)
             for number, (kind, identifier, cohorts, funders) in enumerate(
                     selections, 1):
@@ -1044,6 +1114,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                 "cohortCount": sum(
                     member.startswith("cohorts/") for member in members
                 ),
+                "optionMembers": option_members,
                 "members": members,
             }, separators=(",", ":")))
         os.replace(temporary, output)
@@ -1063,17 +1134,26 @@ def validate_precomputed_filter_archive(data_path="data", path=None):
             raise ValueError("The precomputed filter archive is corrupt")
         manifest = json.loads(archive.read(PRECOMPUTED_FILTER_MANIFEST))
         members = manifest.get("members")
+        option_members = manifest.get("optionMembers")
         if manifest.get("version") != FILTER_SCHEMA_VERSION \
-                or not isinstance(members, list):
+                or not isinstance(members, list) \
+                or not isinstance(option_members, list):
             raise ValueError("The precomputed filter manifest is invalid")
+        expected_option_members = set(
+            PRECOMPUTED_FILTER_OPTION_MEMBERS.values()
+        )
+        if set(option_members) != expected_option_members \
+                or not expected_option_members.issubset(members):
+            raise ValueError("The precomputed filter options differ")
         expected = set(members) | {PRECOMPUTED_FILTER_MANIFEST}
         if len(expected) != len(members) + 1 \
                 or set(archive.namelist()) != expected:
             raise ValueError("The precomputed filter members differ")
-        if any(
-                not re.fullmatch(r"(?:funders|cohorts)/[a-z0-9._-]+\.json",
-                                 member)
-                for member in members):
+        if any(not (
+                re.fullmatch(
+                    r"(?:funders|cohorts)/[a-z0-9._-]+\.json", member
+                ) or member in expected_option_members
+                ) for member in members):
             raise ValueError("The precomputed filter archive has unsafe names")
         if manifest.get("funderCount") != sum(
                 member.startswith("funders/") for member in members) \
@@ -1081,6 +1161,11 @@ def validate_precomputed_filter_archive(data_path="data", path=None):
                     member.startswith("cohorts/") for member in members
                 ):
             raise ValueError("The precomputed filter counts differ")
+        for member in expected_option_members:
+            payload = json.loads(archive.read(member))
+            if payload.get("version") != FILTER_SCHEMA_VERSION \
+                    or not isinstance(payload.get("entries"), list):
+                raise ValueError("The precomputed filter options are invalid")
     return manifest
 
 

@@ -151,6 +151,9 @@ def getFilterFunders():
     stage = (request.args.get("stage") or "").strip()
     page = max(request.args.get("page", default=1, type=int), 1)
     page_size = 50
+    complete_list = not cohort_ids and stage.casefold() in {
+        "initial", "discovery", "replication",
+    }
     with DataLoader.published_data_lock() as published_path:
         store = get_dashboard_filter_store(published_path)
         try:
@@ -159,15 +162,17 @@ def getFilterFunders():
             abort(404)
         except ValueError:
             abort(400)
-        start = (page - 1) * page_size
-        page_entries = entries[start:start + page_size]
+        start = 0 if complete_list else (page - 1) * page_size
+        page_entries = entries if complete_list \
+            else entries[start:start + page_size]
         return jsonify(results=[{
             "id": entry["slug"],
             "text": entry["name"],
             "studyCount": entry["studyCount"],
             "publicationCount": entry["publicationCount"],
         } for entry in page_entries], pagination={
-            "more": start + page_size < len(entries),
+            "more": False if complete_list \
+            else start + page_size < len(entries),
         })
 
 
@@ -183,6 +188,9 @@ def getFilterDatasets():
     stage = (request.args.get("stage") or "").strip()
     page = max(request.args.get("page", default=1, type=int), 1)
     page_size = 50
+    complete_list = not funder_slugs and stage.casefold() in {
+        "initial", "discovery", "replication",
+    }
     with DataLoader.published_data_lock() as published_path:
         store = get_dashboard_filter_store(published_path)
         try:
@@ -191,15 +199,17 @@ def getFilterDatasets():
             abort(404)
         except ValueError:
             abort(400)
-        start = (page - 1) * page_size
-        page_entries = entries[start:start + page_size]
+        start = 0 if complete_list else (page - 1) * page_size
+        page_entries = entries if complete_list \
+            else entries[start:start + page_size]
         return jsonify(results=[{
             "id": entry["id"],
             "text": entry["name"],
             "studyCount": entry["studyCount"],
             "publicationCount": entry["publicationCount"],
         } for entry in page_entries], pagination={
-            "more": start + page_size < len(entries),
+            "more": False if complete_list \
+            else start + page_size < len(entries),
         })
 
 

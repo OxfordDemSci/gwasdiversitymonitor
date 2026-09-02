@@ -15,6 +15,7 @@ from app.DashboardFilters import (
     FILTER_SCHEMA_VERSION,
     PRECOMPUTED_FILTER_ARCHIVE,
     PRECOMPUTED_FILTER_MANIFEST,
+    PRECOMPUTED_FILTER_OPTION_MEMBERS,
     canonical_cohort_name,
     load_cohort_cleaner,
     normalize_cohort_name,
@@ -446,21 +447,37 @@ class DatasetFilterTests(unittest.TestCase):
                 "selection": {"studyCount": 3},
             }
             member = "funders/wellcome.json"
+            option_members = list(
+                PRECOMPUTED_FILTER_OPTION_MEMBERS.values()
+            )
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr(member, json.dumps(payload))
+                for option_member in option_members:
+                    archive.writestr(option_member, json.dumps({
+                        "version": FILTER_SCHEMA_VERSION,
+                        "entries": [{
+                            "slug": "wellcome", "name": "Wellcome",
+                            "studyCount": 3, "publicationCount": 1,
+                        }],
+                    }))
                 archive.writestr(PRECOMPUTED_FILTER_MANIFEST, json.dumps({
                     "version": FILTER_SCHEMA_VERSION,
                     "funderCount": 1,
                     "cohortCount": 0,
-                    "members": [member],
+                    "optionMembers": option_members,
+                    "members": [member] + option_members,
                 }))
 
             store = DashboardFilterStore(directory)
             loaded = store._load_precomputed_dashboard((), ("wellcome",))
+            loaded_options = store._load_precomputed_options(
+                "funders", "initial"
+            )
             manifest = validate_precomputed_filter_archive(directory)
 
         self.assertEqual(loaded, payload)
         self.assertEqual(manifest["funderCount"], 1)
+        self.assertEqual(loaded_options[0]["name"], "Wellcome")
         self.assertIsNone(
             store._load_precomputed_dashboard(
                 ("ukb",), ("wellcome",)
@@ -481,6 +498,34 @@ class DatasetFilterTests(unittest.TestCase):
         sources.assert_called_once_with()
         cohorts.assert_called_once_with()
         funders.assert_called_once_with()
+
+    def test_baseline_options_use_the_precomputed_archive(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        funders = ({
+            "slug": "wellcome", "name": "Wellcome Trust",
+            "studyCount": 10, "publicationCount": 2,
+        },)
+        cohorts = ({
+            "id": "ukb", "name": "UKB",
+            "studyCount": 20, "publicationCount": 3,
+        },)
+        with mock.patch.object(
+                store, "_load_precomputed_options",
+                side_effect=[funders, cohorts]) as precomputed, \
+                mock.patch.object(
+                    store, "_ensure_funder_index"
+                ) as funder_index, \
+                mock.patch.object(
+                    store, "_ensure_dataset_index"
+                ) as cohort_index:
+            funder_results = store.funders("well", (), "initial")
+            cohort_results = store.cohorts("UK", (), "replication")
+
+        self.assertEqual(funder_results[0]["slug"], "wellcome")
+        self.assertEqual(cohort_results[0]["id"], "ukb")
+        self.assertEqual(precomputed.call_count, 2)
+        funder_index.assert_not_called()
+        cohort_index.assert_not_called()
 
     def test_cohort_normalization_is_case_based_not_fuzzy(self):
         self.assertEqual(
@@ -1105,6 +1150,57 @@ class FunderRouteTests(unittest.TestCase):
             ["World Health Organization"],
         )
         store.funders.assert_called_once_with("world-health", (), "")
+
+    def test_baseline_funder_list_is_returned_without_pagination(self):
+        store = mock.Mock()
+        store.funders.return_value = [{
+            "slug": f"funder-{number}", "name": f"Funder {number}",
+            "studyCount": number, "publicationCount": 1,
+        } for number in range(60)]
+        with mock.patch(
+                "app.routes.get_dashboard_filter_store",
+                return_value=store):
+            response = self.client.get(
+                "/api/funders?stage=initial&page=1"
+            )
+
+        payload = response.get_json()
+        self.assertEqual(len(payload["results"]), 60)
+        self.assertFalse(payload["pagination"]["more"])
+
+    def test_conditional_funder_list_remains_paginated(self):
+        store = mock.Mock()
+        store.funders.return_value = [{
+            "slug": f"funder-{number}", "name": f"Funder {number}",
+            "studyCount": number, "publicationCount": 1,
+        } for number in range(60)]
+        with mock.patch(
+                "app.routes.get_dashboard_filter_store",
+                return_value=store):
+            response = self.client.get(
+                "/api/funders?cohorts=ukb&stage=initial&page=1"
+            )
+
+        payload = response.get_json()
+        self.assertEqual(len(payload["results"]), 50)
+        self.assertTrue(payload["pagination"]["more"])
+
+    def test_baseline_cohort_list_is_returned_without_pagination(self):
+        store = mock.Mock()
+        store.cohorts.return_value = [{
+            "id": f"cohort-{number}", "name": f"Cohort {number}",
+            "studyCount": number, "publicationCount": 1,
+        } for number in range(60)]
+        with mock.patch(
+                "app.routes.get_dashboard_filter_store",
+                return_value=store):
+            response = self.client.get(
+                "/api/cohorts?stage=replication&page=1"
+            )
+
+        payload = response.get_json()
+        self.assertEqual(len(payload["results"]), 60)
+        self.assertFalse(payload["pagination"]["more"])
 
     def test_cohort_search_forwards_funders_and_stage(self):
         store = mock.Mock()
