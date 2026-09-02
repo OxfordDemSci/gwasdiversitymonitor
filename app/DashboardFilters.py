@@ -15,11 +15,13 @@ import pandas as pd
 import funder_pipeline
 
 
-FILTER_SCHEMA_VERSION = 3
+FILTER_SCHEMA_VERSION = 4
 PRECOMPUTED_FILTER_ARCHIVE = os.path.join(
     "filter-cache", "individual-dashboards.zip"
 )
 PRECOMPUTED_FILTER_MANIFEST = "manifest.json"
+COHORT_CLEANER_FILE = os.path.join("support", "cohort_cleaner.json")
+BUBBLE_PAYLOAD_ROW_LIMIT = 5000
 
 
 class DashboardSelectionUnavailable(RuntimeError):
@@ -36,6 +38,39 @@ def normalize_cohort_name(value):
     """Return a conservative key without fuzzy or plural matching."""
     text = unicodedata.normalize("NFKC", str(value or ""))
     return re.sub(r"\s+", " ", text).strip().casefold()
+
+
+def cohort_cleaner_path(data_path="data"):
+    return os.path.join(data_path, COHORT_CLEANER_FILE)
+
+
+def load_cohort_cleaner(data_path="data"):
+    try:
+        with open(cohort_cleaner_path(data_path), encoding="utf-8") as source:
+            raw = json.load(source)
+    except (OSError, TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    return {
+        normalize_cohort_name(alias): re.sub(
+            r"\s+", " ", unicodedata.normalize("NFKC", str(canonical))
+        ).strip()
+        for alias, canonical in raw.items()
+        if normalize_cohort_name(alias) and str(canonical).strip()
+    }
+
+
+def canonical_cohort_name(value, cleaner):
+    name = re.sub(
+        r"\s+", " ", unicodedata.normalize("NFKC", str(value or ""))
+    ).strip()
+    visited = set()
+    while name:
+        key = normalize_cohort_name(name)
+        if key in visited or key not in cleaner:
+            break
+        visited.add(key)
+        name = cleaner[key]
+    return name
 
 
 def _selection_ids(values):
@@ -69,6 +104,9 @@ class DashboardFilterStore:
         self._all_accessions = None
         self._accession_pmids = None
         self._stage_accessions = None
+        self._recorded_stage_accessions = None
+        self._bubble_stage_accessions = None
+        self._bubble_accession_row_counts = None
         self._dataset_entries = None
         self._dataset_accessions = None
         self._dataset_by_id = None
@@ -95,6 +133,7 @@ class DashboardFilterStore:
                 self.data_path, "funders", "pubmed_grants.json"
             ),
             funder_pipeline.funder_cleaner_path(self.data_path),
+            cohort_cleaner_path(self.data_path),
         )
         signature = [
             self.data_path,
@@ -236,6 +275,7 @@ class DashboardFilterStore:
             self._facet_studies = studies
             accession_pmids = defaultdict(set)
             variants = defaultdict(lambda: defaultdict(set))
+            cohort_cleaner = load_cohort_cleaner(self.data_path)
             for row in studies[
                     ["STUDY ACCESSION", "PUBMEDID", "COHORT"]
             ].itertuples(index=False, name=None):
@@ -246,6 +286,9 @@ class DashboardFilterStore:
                 if pmid:
                     accession_pmids[accession].add(str(pmid))
                 for cohort_name in split_cohorts(cohort_value):
+                    cohort_name = canonical_cohort_name(
+                        cohort_name, cohort_cleaner
+                    )
                     key = normalize_cohort_name(cohort_name)
                     if key:
                         variants[key][cohort_name].add(accession)
@@ -329,6 +372,22 @@ class DashboardFilterStore:
                 ].dropna().astype(str)
             ),
         }
+        if "Broader" in ancestry.columns:
+            broader = ancestry["Broader"].fillna("").astype(str).str.strip()
+            recorded = broader.ne("") & broader.str.casefold().ne(
+                "in part not recorded"
+            )
+            self._recorded_stage_accessions = {
+                stage: frozenset(
+                    ancestry.loc[
+                        stage_values.eq(stage) & recorded,
+                        "STUDY ACCESSION",
+                    ].dropna().astype(str)
+                )
+                for stage in ("initial", "replication")
+            }
+        else:
+            self._recorded_stage_accessions = dict(self._stage_accessions)
 
     def _ensure_facet_indexes(self):
         with self._lock:
@@ -348,7 +407,7 @@ class DashboardFilterStore:
                         "Cat_Anc_wBroader.tsv",
                     ),
                     sep="\t", dtype=str,
-                    usecols=["STUDY ACCESSION", "STAGE"],
+                    usecols=["STUDY ACCESSION", "STAGE", "Broader"],
                 )
             self._set_facet_indexes(studies, ancestry)
 
@@ -365,6 +424,25 @@ class DashboardFilterStore:
                 ancestry.set_index("STUDY ACCESSION", drop=False),
                 bubbles.set_index("ACCESSION", drop=False),
             )
+            bubble_stages = bubbles["STAGE"].fillna("").astype(
+                str
+            ).str.casefold() if "STAGE" in bubbles.columns else pd.Series(
+                "initial", index=bubbles.index
+            )
+            self._bubble_stage_accessions = {
+                stage: frozenset(
+                    bubbles.loc[
+                        bubble_stages.eq(stage), "ACCESSION"
+                    ].dropna().astype(str)
+                )
+                for stage in ("initial", "replication")
+            }
+            self._bubble_accession_row_counts = {
+                str(accession): int(count)
+                for accession, count in bubbles[
+                    "ACCESSION"
+                ].dropna().astype(str).value_counts().items()
+            }
             if self._all_accessions is None:
                 self._set_facet_indexes(studies, ancestry)
 
@@ -479,7 +557,39 @@ class DashboardFilterStore:
         return {
             "studyCount": len(matching),
             "publicationCount": self._publication_count(matching),
+            "recordedAncestryStudyCount": len(
+                matching & self._recorded_stage_accessions[stage]
+            ) if stage else len(
+                matching & frozenset().union(
+                    *self._recorded_stage_accessions.values()
+                )
+            ),
         }
+
+    def _dashboard_stage_counts(self, accessions):
+        self._ensure_sources()
+        selected = frozenset(accessions)
+        result = {}
+        for stage in ("initial", "replication"):
+            counts = self._counts(selected, stage)
+            counts["bubbleStudyCount"] = len(
+                selected & self._bubble_stage_accessions[stage]
+            )
+            result[stage] = counts
+        return result
+
+    def _filtered_bubble_payload(self, accessions):
+        self._ensure_sources()
+        selected = frozenset(accessions)
+        row_count = sum(
+            self._bubble_accession_row_counts.get(accession, 0)
+            for accession in selected
+        )
+        if row_count > BUBBLE_PAYLOAD_ROW_LIMIT:
+            return None
+        return funder_pipeline.build_bubble_payload(
+            self._select_accessions(2, selected)
+        )
 
     def _cohort_union(self, cohort_ids):
         self._ensure_dataset_index()
@@ -724,10 +834,7 @@ class DashboardFilterStore:
         ).dt.year.max())
 
         overall_counts = self._counts(selected_accessions)
-        stage_counts = {
-            stage: self._counts(selected_accessions, stage)
-            for stage in ("initial", "replication")
-        }
+        stage_counts = self._dashboard_stage_counts(selected_accessions)
         selection = {
             "cohorts": cohorts,
             "funders": funders,
@@ -755,6 +862,9 @@ class DashboardFilterStore:
             ),
             "summary": funder_pipeline.build_summary(ancestry),
         }
+        bubble_payload = self._filtered_bubble_payload(selected_accessions)
+        if bubble_payload is not None:
+            payload["bubbleGraph"] = bubble_payload
         self._atomic_json(cache_path, payload)
         with self._lock:
             self._payload_cache[cache_key] = payload
@@ -987,10 +1097,16 @@ def get_dashboard_filter_store(data_path="data"):
         ),
         os.path.join(absolute_path, "funders", "pubmed_grants.json"),
         funder_pipeline.funder_cleaner_path(absolute_path),
+        cohort_cleaner_path(absolute_path),
     )
-    signature = tuple(
-        (path, os.path.getmtime(path)) for path in source_paths
-    )
+    signature = []
+    for path in source_paths:
+        try:
+            modified = os.path.getmtime(path)
+        except OSError:
+            modified = None
+        signature.append((path, modified))
+    signature = tuple(signature)
     with _stores_lock:
         store = _stores.get(signature)
         if store is None:

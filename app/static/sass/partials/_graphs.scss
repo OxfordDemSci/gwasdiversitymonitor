@@ -20,6 +20,11 @@ svg.responsive-chart-svg {
     z-index: 3;
     pointer-events: auto;
   }
+
+  .bubble-empty-state {
+    fill: $blue-grey;
+    font-size: $regular-size;
+  }
 }
 
 svg#bubbleSVG circle {

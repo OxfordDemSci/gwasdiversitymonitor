@@ -15,6 +15,8 @@ from app.DashboardFilters import (
     FILTER_SCHEMA_VERSION,
     PRECOMPUTED_FILTER_ARCHIVE,
     PRECOMPUTED_FILTER_MANIFEST,
+    canonical_cohort_name,
+    load_cohort_cleaner,
     normalize_cohort_name,
     split_cohorts,
     validate_precomputed_filter_archive,
@@ -33,6 +35,7 @@ from funder_pipeline import (
     normalize_funding_records,
     parse_pubmed_grants,
     funder_artifact_files,
+    load_funder_cleaner,
     validate_funder_artifacts,
 )
 import generate_data
@@ -56,6 +59,12 @@ class DataImagePackagingTests(unittest.TestCase):
         for module in app_modules:
             copy_instruction = f"COPY app/{module}.py app/{module}.py"
             self.assertIn(copy_instruction, dockerfile)
+
+        self.assertIn(
+            "COPY data/support/cohort_cleaner.json "
+            "data/support/cohort_cleaner.json",
+            dockerfile,
+        )
 
 
 class PubMedFundingTests(unittest.TestCase):
@@ -87,6 +96,28 @@ class PubMedFundingTests(unittest.TestCase):
         self.assertEqual(records["1"], ["A"])
         self.assertEqual(records["3"], ["Other funders"])
         self.assertEqual(counts["A"], 2)
+
+    def test_wellcome_aliases_resolve_to_one_canonical_funder(self):
+        repository_root = Path(__file__).resolve().parents[1]
+        cleaner = load_funder_cleaner(
+            repository_root / "data" / "funders" / "funder_cleaner.json"
+        )
+        aliases = (
+            "Wellcome Trust", "wellcome trust (wellcome)",
+            "Wellcome Trust (WT)", "Wellcome Trust Discovery Award",
+            "Wellcome Trust Investigator Award",
+        )
+        cache = {"records": {
+            str(number): {"grants": [{"agency": alias}]}
+            for number, alias in enumerate(aliases, 1)
+        }}
+
+        by_publication = funding_names_by_publication(cache, cleaner)
+
+        self.assertEqual(
+            {tuple(names) for names in by_publication.values()},
+            {("Wellcome Trust",)},
+        )
 
     def test_doughnut_grouping_preserves_recorded_share_denominators(self):
         merged = pd.DataFrame([
@@ -371,13 +402,22 @@ class DatasetFilterTests(unittest.TestCase):
             )
         ])
         ancestry = pd.DataFrame([
-            {"STUDY ACCESSION": "A", "STAGE": "initial"},
-            {"STUDY ACCESSION": "B", "STAGE": "replication"},
-            {"STUDY ACCESSION": "C", "STAGE": "initial"},
-            {"STUDY ACCESSION": "D", "STAGE": "replication"},
+            {"STUDY ACCESSION": "A", "STAGE": "initial",
+             "Broader": "European"},
+            {"STUDY ACCESSION": "B", "STAGE": "replication",
+             "Broader": "European"},
+            {"STUDY ACCESSION": "C", "STAGE": "initial",
+             "Broader": "Asian"},
+            {"STUDY ACCESSION": "D", "STAGE": "replication",
+             "Broader": "In Part Not Recorded"},
         ])
         bubbles = pd.DataFrame([
-            {"ACCESSION": accession} for accession in ("A", "B", "C", "D")
+            {"ACCESSION": accession, "STAGE": stage,
+             "DATE": "2020-01-01", "N": 100}
+            for accession, stage in (
+                ("A", "initial"), ("B", "replication"),
+                ("C", "initial"),
+            )
         ])
         store._sources = (
             studies, ancestry, pd.DataFrame(), bubbles, pd.DataFrame()
@@ -452,6 +492,46 @@ class DatasetFilterTests(unittest.TestCase):
             for value in ("GRAD", "GRAAD", "GRADS")
         }), 3)
 
+    def test_cohort_cleaner_supports_curated_aliases(self):
+        with tempfile.TemporaryDirectory() as directory:
+            support = Path(directory) / "support"
+            support.mkdir()
+            (support / "cohort_cleaner.json").write_text(json.dumps({
+                "UKBB": "UKB", "UK Biobank": "UKB",
+            }))
+            cleaner = load_cohort_cleaner(directory)
+
+        self.assertEqual(canonical_cohort_name("ukbb", cleaner), "UKB")
+        self.assertEqual(
+            canonical_cohort_name("UK Biobank", cleaner), "UKB"
+        )
+        self.assertEqual(canonical_cohort_name("UKB-PPP", cleaner), "UKB-PPP")
+
+    def test_cohort_index_unions_curated_alias_accessions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            raw = root / "catalog" / "raw"
+            support = root / "support"
+            raw.mkdir(parents=True)
+            support.mkdir()
+            (support / "cohort_cleaner.json").write_text(
+                '{"UKBB":"UKB","UK Biobank":"UKB"}'
+            )
+            pd.DataFrame([
+                {"PUBMED ID": "1", "STUDY ACCESSION": "A",
+                 "COHORT": "UKB", "ASSOCIATION COUNT": "1"},
+                {"PUBMED ID": "2", "STUDY ACCESSION": "B",
+                 "COHORT": "UKBB", "ASSOCIATION COUNT": "1"},
+                {"PUBMED ID": "3", "STUDY ACCESSION": "C",
+                 "COHORT": "UK Biobank", "ASSOCIATION COUNT": "1"},
+            ]).to_csv(raw / "Cat_Stud.tsv", sep="\t", index=False)
+            store = DashboardFilterStore(directory)
+            store._ensure_dataset_index()
+
+        self.assertEqual(len(store._dataset_entries), 1)
+        self.assertEqual(store._dataset_entries[0]["id"], "ukb")
+        self.assertEqual(store._dataset_entries[0]["studyCount"], 3)
+
     def test_cohort_index_merges_case_variants_only(self):
         with tempfile.TemporaryDirectory() as directory:
             raw = Path(directory) / "catalog" / "raw"
@@ -495,7 +575,7 @@ class DatasetFilterTests(unittest.TestCase):
         self.assertEqual(
             set(ancestry["STUDY ACCESSION"]), {"A", "B", "D"}
         )
-        self.assertEqual(set(bubbles["ACCESSION"]), {"A", "B", "D"})
+        self.assertEqual(set(bubbles["ACCESSION"]), {"A", "B"})
 
     def test_option_counts_follow_opposite_facet_and_stage(self):
         store = self._store()
@@ -516,6 +596,36 @@ class DatasetFilterTests(unittest.TestCase):
             ["publicationCount"],
             1,
         )
+
+    def test_stage_counts_explain_non_plottable_selected_studies(self):
+        store = self._store()
+
+        counts = store._dashboard_stage_counts({"D"})["replication"]
+
+        self.assertEqual(counts["studyCount"], 1)
+        self.assertEqual(counts["publicationCount"], 1)
+        self.assertEqual(counts["recordedAncestryStudyCount"], 0)
+        self.assertEqual(counts["bubbleStudyCount"], 0)
+
+    def test_small_bubble_subsets_are_embedded_without_large_payloads(self):
+        store = self._store()
+
+        empty = store._filtered_bubble_payload({"D"})
+        small = store._filtered_bubble_payload({"A", "B"})
+        with mock.patch(
+                "app.DashboardFilters.BUBBLE_PAYLOAD_ROW_LIMIT", 1):
+            large = store._filtered_bubble_payload({"A", "B"})
+
+        self.assertEqual(
+            empty["bubblegraph_initial"]["meta"]["rowCount"], 0
+        )
+        self.assertEqual(
+            small["bubblegraph_initial"]["meta"]["rowCount"], 1
+        )
+        self.assertEqual(
+            small["bubblegraph_replication"]["meta"]["rowCount"], 1
+        )
+        self.assertIsNone(large)
 
     def test_cohort_list_is_ordered_by_study_count(self):
         store = DashboardFilterStore("/tmp/not-used")
@@ -811,8 +921,11 @@ class FunderArtifactTests(unittest.TestCase):
             staged = root / "staged"
             previous = root / "previous"
             source_funders = root / "data" / "funders"
+            source_support = root / "data" / "support"
             source_funders.mkdir(parents=True)
+            source_support.mkdir(parents=True)
             (source_funders / "funder_cleaner.json").write_text("{}")
+            (source_support / "cohort_cleaner.json").write_text("{}")
             (previous / "funders").mkdir(parents=True)
             staged.mkdir()
             cache_payload = {"version": 1, "records": {"123": {"grants": []}}}
@@ -842,6 +955,10 @@ class FunderArtifactTests(unittest.TestCase):
             )
             self.assertEqual(
                 (staged / "funders" / "funder_cleaner.json").read_text(),
+                "{}",
+            )
+            self.assertEqual(
+                (staged / "support" / "cohort_cleaner.json").read_text(),
                 "{}",
             )
             collect.assert_called_once_with(

@@ -350,6 +350,15 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         .attr("class", "axis-y")
         .call(d3.axisLeft(yScale).ticks(tickMax, "s"));
 
+    if (!data.length) {
+        svg.append("text")
+            .attr("class", "bubble-empty-state")
+            .attr("x", width / 2)
+            .attr("y", height / 2)
+            .attr("text-anchor", "middle")
+            .text("No mapped bubble records for this selection");
+    }
+
     var bubbleDataGroup = svg.append("g").attr("id", "bubbleData");
 
     bubbleDataGroup.append("rect")

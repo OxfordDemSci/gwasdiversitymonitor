@@ -248,11 +248,40 @@
       overflow-y: auto;
     }
 
+    .select2-container--default .select2-selection--multiple
+    .select2-selection__rendered {
+      @include flexbox;
+      @include align-items(center);
+      flex-wrap: wrap;
+    }
+
     .select2-selection__choice {
-      max-width: 170px;
+      max-width: calc(100% - 24px);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .select2-container--default .select2-search--inline {
+      float: none;
+      flex: 0 0 12px;
+      width: 12px;
+      overflow: hidden;
+
+      .select2-search__field {
+        width: 12px !important;
+        margin-left: 0;
+      }
+    }
+
+    .select2-container--default.select2-container--open
+    .select2-search--inline {
+      flex-basis: 100%;
+      width: 100%;
+
+      .select2-search__field {
+        width: 100% !important;
+      }
     }
   }
 

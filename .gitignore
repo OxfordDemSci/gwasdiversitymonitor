@@ -1,8 +1,11 @@
-# Generated data. Keep the hand-maintained funder normalization map tracked.
+# Generated data. Keep hand-maintained normalization maps tracked.
 data/*
 !data/funders/
 data/funders/*
 !data/funders/funder_cleaner.json
+!data/support/
+data/support/*
+!data/support/cohort_cleaner.json
 backups/
 /config.py
 *.log

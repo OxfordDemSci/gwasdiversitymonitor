@@ -320,19 +320,37 @@
         function updateSelectionStatus(selection) {
             if (!selection) {
                 $('#funder-status').text('All published GWAS');
+                $('#world-map-stage-note').text('Both Stages');
                 return;
             }
             let stage = activeStageName();
             let counts = (selection.stageCounts || {})[stage] || selection;
             let stageLabel = stage === 'replication'
                 ? 'Replication' : 'Discovery';
+            let detail = '';
+            if (Number(counts.studyCount || 0) > 0 &&
+                    counts.bubbleStudyCount !== undefined &&
+                    Number(counts.bubbleStudyCount) === 0) {
+                detail = Number(counts.recordedAncestryStudyCount || 0) === 0
+                    ? ' · no plot-ready ancestry/trait records'
+                    : ' · no mapped trait records';
+            } else if (Number(counts.studyCount || 0) > 0 &&
+                    counts.recordedAncestryStudyCount !== undefined &&
+                    Number(counts.recordedAncestryStudyCount) === 0) {
+                detail = ' · ancestry not recorded';
+            }
             $('#funder-status').text(
                 formattedCount(counts.studyCount, 'study', 'studies') +
                 ' · ' + formattedCount(
                     counts.publicationCount,
                     'publication',
                     'publications'
-                ) + ' (' + stageLabel + ')'
+                ) + ' (' + stageLabel + ')' + detail
+            );
+            $('#world-map-stage-note').text(
+                'Both Stages · ' + formattedCount(
+                    selection.studyCount, 'selected study', 'selected studies'
+                )
             );
         }
 

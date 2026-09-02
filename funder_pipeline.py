@@ -284,8 +284,15 @@ def _clean_agency_text(value):
 
 def load_funder_cleaner(path):
     raw = _load_json(path, {})
-    return {_clean_agency_text(key): _clean_agency_text(value)
-            for key, value in raw.items()}
+    cleaner = {}
+    for key, value in raw.items():
+        key = _clean_agency_text(key)
+        value = _clean_agency_text(value)
+        if not key or not value:
+            continue
+        cleaner[key] = value
+        cleaner.setdefault(key.casefold(), value)
+    return cleaner
 
 
 def canonical_agency(value, cleaner):
@@ -295,18 +302,28 @@ def canonical_agency(value, cleaner):
     if "veteran" in agency.casefold():
         agency = "Veterans Affairs"
 
-    visited = set()
-    while agency in cleaner and agency not in visited:
-        visited.add(agency)
-        agency = cleaner[agency]
-    if agency in visited:
-        return sorted(visited, key=lambda item: (len(item), item))[0]
+    visited = []
+    visited_keys = set()
+    while agency:
+        identity = agency.casefold()
+        if identity in visited_keys:
+            return sorted(
+                visited, key=lambda item: (len(item), item.casefold(), item)
+            )[0]
+        target = cleaner.get(agency)
+        if target is None:
+            target = cleaner.get(identity)
+        if target is None:
+            break
+        visited.append(agency)
+        visited_keys.add(identity)
+        agency = target
     return agency
 
 
-def funding_names_by_publication(cache, cleaner):
-    """Return every canonical funding agency associated with each PMID."""
-    by_publication = {}
+def _canonical_funding_names(cache, cleaner):
+    raw_by_publication = {}
+    variants = defaultdict(Counter)
     for pmid, record in cache.get("records", {}).items():
         names = {
             canonical_agency(grant.get("agency"), cleaner)
@@ -314,10 +331,35 @@ def funding_names_by_publication(cache, cleaner):
         }
         names.discard("")
         names.discard("Unclear")
-        by_publication[normalize_pmid(pmid)] = sorted(
-            names, key=str.casefold
-        )
-    return by_publication
+        raw_by_publication[normalize_pmid(pmid)] = names
+        for name in names:
+            variants[name.casefold()][name] += 1
+
+    display_names = {
+        identity: sorted(
+            spellings,
+            key=lambda name: (
+                -spellings[name], len(name), name.casefold(), name
+            ),
+        )[0]
+        for identity, spellings in variants.items()
+    }
+    return {
+        pmid: {
+            display_names[name.casefold()] for name in names
+        }
+        for pmid, names in raw_by_publication.items()
+    }
+
+
+def funding_names_by_publication(cache, cleaner):
+    """Return every canonical funding agency associated with each PMID."""
+    return {
+        pmid: sorted(names, key=str.casefold)
+        for pmid, names in _canonical_funding_names(
+            cache, cleaner
+        ).items()
+    }
 
 
 def attach_funding_metadata(frame, funding_by_publication):
@@ -343,16 +385,9 @@ def write_bubble_funding_metadata(data_path, cache, cleaner):
 
 
 def normalize_funding_records(cache, cleaner, min_studies):
-    raw_by_publication = {}
+    raw_by_publication = _canonical_funding_names(cache, cleaner)
     counts = Counter()
-    for pmid, record in cache.get("records", {}).items():
-        names = {
-            canonical_agency(grant.get("agency"), cleaner)
-            for grant in record.get("grants", [])
-        }
-        names.discard("")
-        names.discard("Unclear")
-        raw_by_publication[normalize_pmid(pmid)] = names
+    for names in raw_by_publication.values():
         counts.update(names)
 
     retained = {name for name, count in counts.items()

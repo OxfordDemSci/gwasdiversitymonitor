@@ -30,8 +30,10 @@ from app.DataLoader import (
     published_data_lock,
 )
 from app.DashboardFilters import (
+    COHORT_CLEANER_FILE,
     PRECOMPUTED_FILTER_ARCHIVE,
     build_precomputed_filter_archive,
+    cohort_cleaner_path,
     validate_precomputed_filter_archive,
 )
 import funder_pipeline
@@ -103,6 +105,7 @@ DOWNLOAD_OUTPUT_FILES = (
 )
 
 FILTER_CACHE_OUTPUT_FILES = (PRECOMPUTED_FILTER_ARCHIVE,)
+FILTER_CONFIGURATION_FILES = (COHORT_CLEANER_FILE,)
 
 PUBLISHED_DATA_FILES = (
     RAW_INPUT_FILES
@@ -112,6 +115,7 @@ PUBLISHED_DATA_FILES = (
     + UNMAPPED_OUTPUT_FILES
     + tuple(f'toplot/{file_name}' for file_name in TOPLOT_OUTPUT_FILES)
     + DOWNLOAD_OUTPUT_FILES
+    + FILTER_CONFIGURATION_FILES
     + FILTER_CACHE_OUTPUT_FILES
 )
 
@@ -2473,6 +2477,7 @@ def _implementation_fingerprints(repository_path):
         'app/DashboardFilters.py',
         'funder_pipeline.py',
         'data/funders/funder_cleaner.json',
+        'data/support/cohort_cleaner.json',
     )
     return _fingerprint_files(repository_path, implementation_files)
 
@@ -2966,6 +2971,10 @@ def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
         os.path.join(repository_path, 'data')
     )
     cleaner_path = funder_pipeline.funder_cleaner_path(data_path)
+    cohort_cleaner_source = cohort_cleaner_path(
+        os.path.join(repository_path, 'data')
+    )
+    cohort_cleaner_target = cohort_cleaner_path(data_path)
     cache_path = os.path.join(funder_root, 'pubmed_grants.json')
     previous_cache = os.path.join(
         previous_data_path or '', 'funders', 'pubmed_grants.json'
@@ -2977,6 +2986,15 @@ def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
         )
     if os.path.abspath(cleaner_source) != os.path.abspath(cleaner_path):
         shutil.copy2(cleaner_source, cleaner_path)
+    if not os.path.isfile(cohort_cleaner_source):
+        raise FileNotFoundError(
+            'Missing cohort normalization configuration: '
+            f'{cohort_cleaner_source}'
+        )
+    os.makedirs(os.path.dirname(cohort_cleaner_target), exist_ok=True)
+    if os.path.abspath(cohort_cleaner_source) != os.path.abspath(
+            cohort_cleaner_target):
+        shutil.copy2(cohort_cleaner_source, cohort_cleaner_target)
     if not os.path.isfile(cache_path) and os.path.isfile(previous_cache):
         shutil.copy2(previous_cache, cache_path)
         diversity_logger.info('Reused the previous PubMed funding cache.')
