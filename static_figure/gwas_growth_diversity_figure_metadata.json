@@ -2,7 +2,7 @@
   "figure": "GWAS Diversity Monitor: growth and representation, 2005–2026",
   "dataGeneratedAt": "2026-08-30 23:01:58",
   "latestPublicationDate": "2026-07-30",
-  "gitRevision": "5bd8c65",
+  "gitRevision": "f1aaf41",
   "publicationCount": 7797,
   "accessionCount": 229900,
   "ancestryRecordCount": 298217,
@@ -29,9 +29,9 @@
     }
   ],
   "partialYear": 2026,
-  "visibleFunderCount": 39,
+  "allAnalyzedFunderCount": 1138,
   "meaningfulCohortCount": 1426,
-  "fundingMetadataCoveragePercentage": 66.4358,
+  "fundingMetadataCoveragePercentage": 71.8225,
   "cohortMetadataCoveragePercentage": 88.7268,
   "topFunders": [
     "Medical Research Council (UK)",
@@ -57,8 +57,18 @@
     "KoGES",
     "MESA"
   ],
-  "allFunderFigureCount": 39,
+  "allFunderFigureCount": 1138,
   "allCohortFigureCount": 1407,
+  "funderConcentration": {
+    "Gini": 0.9211,
+    "Top 10 share (%)": 56.0671,
+    "Effective number": 24.8559
+  },
+  "cohortConcentration": {
+    "Gini": 0.6622,
+    "Top 10 share (%)": 26.3353,
+    "Effective number": 43.5791
+  },
   "ancestryOrder": [
     "European",
     "Asian",
