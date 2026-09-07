@@ -569,7 +569,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
         if (!currentYear || isAllNull) {
             noDataSpan.innerText = currentYear ?
                 'No data found for '+parentTerm+' in '+currentYear :
-                'No data for this selection';
+                'No ancestry distribution data available for this selection';
             dateSpan.innerHTML = currentYear || 'No data';
             for (let i = 0; i < nextButtons.length; i++) nextButtons[i].disabled = true;
             for (let i = 0; i < previousButtons.length; i++) previousButtons[i].disabled = true;

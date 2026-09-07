@@ -356,7 +356,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
             .attr("x", width / 2)
             .attr("y", height / 2)
             .attr("text-anchor", "middle")
-            .text("No mapped bubble records for this selection");
+            .text("No trait data available for this selection");
     }
 
     var bubbleDataGroup = svg.append("g").attr("id", "bubbleData");

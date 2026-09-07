@@ -57,7 +57,10 @@ function drawTimeSeries(json, id, studies, replication) {
     addGrid(svg, width, tickMax, yAxis);
 
     // Add graph
-    addGraph(data, svg, width, yAxis, xScale);
+    if (hasTimeSeriesData(data)) {
+        addGraph(data, svg, width, yAxis, xScale);
+    }
+    updateTimeSeriesEmptyState(data, svg, width, height);
 
     // Filters
     insideFilters.off('change.timeSeries').on('change.timeSeries', function() {
@@ -141,6 +144,29 @@ function addGraph(data, svg, width, yAxis, xScale) {
     });
 }
 
+function hasTimeSeriesData(data) {
+    return Object.keys(data || {}).some(function(key) {
+        return Object.keys(data[key] || {}).some(function(rowKey) {
+            return Number(data[key][rowKey].value) > 0;
+        });
+    });
+}
+
+function updateTimeSeriesEmptyState(data, svg, width, height) {
+    svg.selectAll('.time-series-empty-state').remove();
+    if (hasTimeSeriesData(data)) return;
+
+    svg.append('text')
+        .attr('class', 'time-series-empty-state')
+        .attr('x', width / 2)
+        .attr('y', height / 2)
+        .attr('text-anchor', 'middle')
+        .attr('fill', '#516777')
+        .attr('font-size', Math.max(14, width / 55))
+        .attr('font-weight', 700)
+        .text('No longitudinal ancestry data available for this selection');
+}
+
 function filterRecord(json, recordFilter, studies, replication) {
     if(recordFilter[0]['checked'] == true) {
         if(studies) {
@@ -196,7 +222,10 @@ function redrawTimeSeries(data, svg, width, height, tickMax, xScale) {
     grid.remove();
     rescaleAxis(svg, newMax, tickMax, yAxis);
     addGrid(svg, width, tickMax, yAxis);
-    addGraph(data, svg, width, yAxis, xScale);
+    if (hasTimeSeriesData(data)) {
+        addGraph(data, svg, width, yAxis, xScale);
+    }
+    updateTimeSeriesEmptyState(data, svg, width, height);
 }
 
 function rescaleAxis(svg, newMax, tickMax, yAxis) {

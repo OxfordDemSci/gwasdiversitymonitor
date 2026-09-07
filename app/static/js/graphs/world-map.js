@@ -508,7 +508,7 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
                 .append('tspan')
                 .attr('x', width / 2)
                 .attr('dy', '-0.3em')
-                .text('No country of recruitment data');
+                .text('No country-of-recruitment data available');
             mainSvg.select('.world-map-empty-state')
                 .append('tspan')
                 .attr('x', width / 2)
