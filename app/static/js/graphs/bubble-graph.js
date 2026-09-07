@@ -327,12 +327,14 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         .domain(timeAxis.domain)
         .range([maxRadius, width - maxRadius]);
 
-    svg.append("g")
-        .attr('class', 'axis-x')
-        .attr("transform", "translate(0," + height + ")")
-        .call(d3.axisBottom(xScale)
-            .ticks(timeAxis.ticks)
-            .tickFormat(timeAxis.format));
+    if (data.length) {
+        svg.append("g")
+            .attr('class', 'axis-x')
+            .attr("transform", "translate(0," + height + ")")
+            .call(d3.axisBottom(xScale)
+                .ticks(timeAxis.ticks)
+                .tickFormat(timeAxis.format));
+    }
 
     const yScale = d3.scaleLinear()
         .domain([0, max])
