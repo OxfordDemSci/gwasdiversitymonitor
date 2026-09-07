@@ -16,6 +16,7 @@ from app.DashboardFilters import (
     PRECOMPUTED_FILTER_ARCHIVE,
     PRECOMPUTED_FILTER_MANIFEST,
     PRECOMPUTED_FILTER_OPTION_MEMBERS,
+    build_cohort_normalization_audit,
     canonical_cohort_name,
     load_cohort_cleaner,
     normalize_cohort_name,
@@ -26,10 +27,13 @@ from funder_pipeline import (
     ARTIFACT_VERSION,
     _promote_funder_artifacts,
     attach_funding_metadata,
+    build_country_map,
     build_doughnut,
     build_funder_artifacts,
+    build_funder_normalization_audit,
     build_heat_map,
     build_report,
+    build_study_parent_map,
     build_summary,
     canonical_agency,
     funding_names_by_publication,
@@ -120,6 +124,55 @@ class PubMedFundingTests(unittest.TestCase):
             {("Wellcome Trust",)},
         )
 
+    def test_veterans_names_are_only_merged_by_reviewed_aliases(self):
+        cleaner = {
+            "U.S. Department of Veterans Affairs": "Veterans Affairs"
+        }
+
+        self.assertEqual(
+            canonical_agency(
+                "U.S. Department of Veterans Affairs", cleaner
+            ),
+            "Veterans Affairs",
+        )
+        self.assertEqual(
+            canonical_agency("Taipei Veterans General Hospital", cleaner),
+            "Taipei Veterans General Hospital",
+        )
+
+    def test_structured_nih_paths_resolve_to_their_component(self):
+        self.assertEqual(
+            canonical_agency(
+                "U.S. Department of Health & Human Services | NIH | "
+                "National Institute of Mental Health (NIMH)",
+                {},
+            ),
+            "NIMH NIH HHS",
+        )
+        self.assertEqual(
+            canonical_agency(
+                "U.S. Department of Health & Human Services | National "
+                "Institutes of Health (NIH)",
+                {},
+            ),
+            "NIH (Other)",
+        )
+
+    def test_funder_normalization_audit_lists_applied_merges(self):
+        cache = {"records": {
+            "1": {"grants": [{"agency": "Wellcome Trust"}]},
+            "2": {"grants": [{"agency": "Wellcome Trust (WT)"}]},
+        }}
+        audit = build_funder_normalization_audit(
+            cache, {"Wellcome Trust (WT)": "Wellcome Trust"}
+        )
+
+        self.assertEqual(audit["canonicalNameCount"], 1)
+        self.assertEqual(
+            audit["mergedGroups"][0]["sourceNames"],
+            ["Wellcome Trust", "Wellcome Trust (WT)"],
+        )
+
     def test_doughnut_grouping_preserves_recorded_share_denominators(self):
         merged = pd.DataFrame([
             {"Year": 2020, "parentterm": "Cancer", "STAGE": "initial",
@@ -184,6 +237,117 @@ class PubMedFundingTests(unittest.TestCase):
 
 
 class FunderSummaryTests(unittest.TestCase):
+    def test_parent_mapping_uses_mapped_trait_and_uri_fallbacks(self):
+        studies = pd.DataFrame([
+            {
+                "STUDY ACCESSION": "A",
+                "DISEASE/TRAIT": "Study-specific protein description",
+                "MAPPED_TRAIT": "  BLOOD   PROTEIN amount ",
+                "MAPPED_TRAIT_URI": "",
+                "ASSOCIATION COUNT": 2,
+            },
+            {
+                "STUDY ACCESSION": "B",
+                "DISEASE/TRAIT": "Another new description",
+                "MAPPED_TRAIT": "Unknown mapped label",
+                "MAPPED_TRAIT_URI": " HTTP://EXAMPLE.ORG/EFO_2 ",
+                "ASSOCIATION COUNT": 1,
+            },
+            {
+                "STUDY ACCESSION": "C",
+                "DISEASE/TRAIT": "No crosswalk available",
+                "MAPPED_TRAIT": "",
+                "MAPPED_TRAIT_URI": "",
+                "ASSOCIATION COUNT": 0,
+            },
+            {
+                "STUDY ACCESSION": "D",
+                "DISEASE/TRAIT": "New multi-trait description",
+                "MAPPED_TRAIT": "First trait, second trait",
+                "MAPPED_TRAIT_URI": (
+                    "http://example.org/efo_2, "
+                    "http://example.org/efo_1"
+                ),
+                "ASSOCIATION COUNT": 3,
+            },
+        ])
+        mappings = pd.DataFrame([
+            {
+                "Disease trait": "Catalog wording",
+                "EFO term": "blood protein amount",
+                "EFO URI": "http://example.org/efo_1",
+                "Parent term": "Other measurement",
+            },
+            {
+                "Disease trait": "Different catalog wording",
+                "EFO term": "different EFO term",
+                "EFO URI": "http://example.org/efo_2",
+                "Parent term": "Hematological measurement",
+            },
+        ])
+
+        result = build_study_parent_map(studies, mappings).set_index(
+            "STUDY ACCESSION"
+        )
+
+        self.assertEqual(result.loc["A", "parentterm"], "Other measurement")
+        self.assertEqual(
+            result.loc["B", "parentterm"], "Hematological measurement"
+        )
+        self.assertTrue(pd.isna(result.loc["C", "parentterm"]))
+        self.assertEqual(
+            result.loc["D", "parentterm"], "Hematological measurement"
+        )
+        self.assertEqual((result.index == "D").sum(), 1)
+
+    def test_country_map_separates_discovery_and_replication(self):
+        ancestry = pd.DataFrame([
+            {
+                "DATE": "2024-01-01", "N": 100, "STAGE": "initial",
+                "COUNTRY OF RECRUITMENT": "United Kingdom",
+            },
+            {
+                "DATE": "2024-02-01", "N": 25,
+                "STAGE": "replication",
+                "COUNTRY OF RECRUITMENT": "United Kingdom",
+            },
+        ])
+        countries = pd.DataFrame([{
+            "Country": "United Kingdom", "2017population": 66000000,
+        }])
+
+        result = build_country_map(ancestry, countries, 2024)
+
+        self.assertEqual(
+            result["initial"]["2024"]["0"]["participants"], 100
+        )
+        self.assertEqual(
+            result["replication"]["2024"]["0"]["participants"], 25
+        )
+
+    def test_country_map_only_emits_years_with_country_data(self):
+        ancestry = pd.DataFrame([
+            {
+                "DATE": "2022-01-01", "N": 100, "STAGE": "initial",
+                "COUNTRY OF RECRUITMENT": "U.S.",
+            },
+            {
+                "DATE": "2025-01-01", "N": 50, "STAGE": "replication",
+                "COUNTRY OF RECRUITMENT": "NR",
+            },
+        ])
+        countries = pd.DataFrame([{
+            "Country": "United States", "2017population": 325000000,
+        }])
+
+        result = build_country_map(ancestry, countries, 2026)
+
+        self.assertEqual(list(result["initial"]), ["2022"])
+        self.assertEqual(
+            result["initial"]["2022"]["0"]["country"], "United States"
+        )
+        self.assertEqual(result["replication"], {})
+
     def test_summary_tracks_metric_and_stage_modes(self):
         ancestry = pd.DataFrame([
             {"Broader": "European", "N": 90, "STAGE": "initial"},
@@ -214,6 +378,31 @@ class FunderSummaryTests(unittest.TestCase):
 
         self.assertEqual(list(heatmap), ["2024"])
         self.assertEqual(heatmap["2024"]["1"]["value"], "0.0")
+
+    def test_heatmap_allows_valid_selections_without_plot_ready_rows(self):
+        merged = pd.DataFrame(columns=[
+            "Year", "Broader", "parentterm", "STAGE", "N",
+        ])
+
+        heatmap = build_heat_map(
+            merged, ["European", "Asian"], ["Cancer"], 2026
+        )
+
+        self.assertTrue(heatmap)
+        self.assertTrue(all(not years for years in heatmap.values()))
+
+    def test_doughnut_allows_valid_selections_without_plot_ready_rows(self):
+        merged = pd.DataFrame(columns=[
+            "Year", "Broader", "parentterm", "STAGE", "N",
+            "ASSOCIATION COUNT",
+        ])
+
+        doughnut = build_doughnut(
+            merged, ["European", "Asian"], ["Cancer"], 2026
+        )
+
+        self.assertTrue(doughnut)
+        self.assertTrue(all(not years for years in doughnut.values()))
 
     def test_detailed_report_covers_output_participants_and_metadata(self):
         studies = pd.DataFrame([
@@ -450,6 +639,10 @@ class DatasetFilterTests(unittest.TestCase):
             option_members = list(
                 PRECOMPUTED_FILTER_OPTION_MEMBERS.values()
             )
+            conditional_members = [
+                "options/cohorts-by-funder/initial/wellcome.json",
+                "options/cohorts-by-funder/replication/wellcome.json",
+            ]
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr(member, json.dumps(payload))
                 for option_member in option_members:
@@ -460,12 +653,25 @@ class DatasetFilterTests(unittest.TestCase):
                             "studyCount": 3, "publicationCount": 1,
                         }],
                     }))
+                for conditional_member in conditional_members:
+                    archive.writestr(conditional_member, json.dumps({
+                        "version": FILTER_SCHEMA_VERSION,
+                        "entries": [{
+                            "id": "ukb", "name": "UKB",
+                            "studyCount": 2, "publicationCount": 1,
+                        }],
+                    }))
                 archive.writestr(PRECOMPUTED_FILTER_MANIFEST, json.dumps({
                     "version": FILTER_SCHEMA_VERSION,
                     "funderCount": 1,
                     "cohortCount": 0,
+                    "selectorFunderCount": 1,
+                    "selectorCohortCount": 0,
                     "optionMembers": option_members,
-                    "members": [member] + option_members,
+                    "conditionalOptionMembers": conditional_members,
+                    "members": [
+                        member, *conditional_members, *option_members,
+                    ],
                 }))
 
             store = DashboardFilterStore(directory)
@@ -473,11 +679,16 @@ class DatasetFilterTests(unittest.TestCase):
             loaded_options = store._load_precomputed_options(
                 "funders", "initial"
             )
+            loaded_conditional = \
+                store._load_precomputed_conditional_options(
+                    "cohorts", "initial", ("wellcome",)
+                )
             manifest = validate_precomputed_filter_archive(directory)
 
         self.assertEqual(loaded, payload)
         self.assertEqual(manifest["funderCount"], 1)
         self.assertEqual(loaded_options[0]["name"], "Wellcome")
+        self.assertEqual(loaded_conditional[0]["name"], "UKB")
         self.assertIsNone(
             store._load_precomputed_dashboard(
                 ("ukb",), ("wellcome",)
@@ -527,6 +738,38 @@ class DatasetFilterTests(unittest.TestCase):
         funder_index.assert_not_called()
         cohort_index.assert_not_called()
 
+    def test_single_opposite_selection_uses_precomputed_options(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        cohorts = ({
+            "id": "ukb", "name": "UKB",
+            "studyCount": 2, "publicationCount": 1,
+        },)
+        funders = ({
+            "slug": "wellcome", "name": "Wellcome Trust",
+            "studyCount": 2, "publicationCount": 1,
+        },)
+        with mock.patch.object(
+                store, "_load_precomputed_conditional_options",
+                side_effect=[cohorts, funders]) as precomputed, \
+                mock.patch.object(
+                    store, "_ensure_funder_index"
+                ) as funder_index, \
+                mock.patch.object(
+                    store, "_ensure_dataset_index"
+                ) as cohort_index:
+            cohort_results = store.cohorts(
+                "UK", ("wellcome",), "initial"
+            )
+            funder_results = store.funders(
+                "well", ("ukb",), "replication"
+            )
+
+        self.assertEqual(cohort_results[0]["id"], "ukb")
+        self.assertEqual(funder_results[0]["slug"], "wellcome")
+        self.assertEqual(precomputed.call_count, 2)
+        funder_index.assert_not_called()
+        cohort_index.assert_not_called()
+
     def test_cohort_normalization_is_case_based_not_fuzzy(self):
         self.assertEqual(
             normalize_cohort_name(" 23ANDME "),
@@ -551,6 +794,25 @@ class DatasetFilterTests(unittest.TestCase):
             canonical_cohort_name("UK Biobank", cleaner), "UKB"
         )
         self.assertEqual(canonical_cohort_name("UKB-PPP", cleaner), "UKB-PPP")
+
+    def test_cohort_normalization_audit_lists_case_and_curated_merges(self):
+        studies = pd.DataFrame([
+            {"STUDY ACCESSION": "A", "COHORT": "UKB"},
+            {"STUDY ACCESSION": "B", "COHORT": "ukb|UKBB"},
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            support = Path(directory) / "support"
+            support.mkdir()
+            (support / "cohort_cleaner.json").write_text(json.dumps({
+                "UKBB": "UKB",
+            }))
+            audit = build_cohort_normalization_audit(directory, studies)
+
+        self.assertEqual(audit["canonicalNameCount"], 1)
+        self.assertEqual(
+            set(audit["mergedGroups"][0]["sourceNames"]),
+            {"UKB", "ukb", "UKBB"},
+        )
 
     def test_cohort_index_unions_curated_alias_accessions(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -746,6 +1008,11 @@ class FunderArtifactTests(unittest.TestCase):
         (funders / "pubmed_grants.json").write_text(json.dumps({
             "version": 1, "records": {"123": {"grants": []}}
         }))
+        (funders / "normalization-audit.json").write_text(json.dumps({
+            "version": 1,
+            "mergedGroups": [],
+            "sourceNamesWithoutExplicitAlias": [],
+        }))
         (funders / "index.json").write_text(json.dumps({
             "version": ARTIFACT_VERSION,
             "funders": [{
@@ -830,6 +1097,7 @@ class FunderArtifactTests(unittest.TestCase):
             (live / "dashboards" / "old.json").write_text("old")
             (staging / "dashboards" / "new.json").write_text("new")
             (staging / "downloads" / "new.zip").write_text("zip")
+            (staging / "normalization-audit.json").write_text("{}")
             (staging / "index.json").write_text('{"funders": []}')
 
             _promote_funder_artifacts(str(staging), str(live))
@@ -989,7 +1257,11 @@ class FunderArtifactTests(unittest.TestCase):
                         generate_data, "build_precomputed_filter_archive"
                     ) as precompute, mock.patch.object(
                         generate_data, "validate_precomputed_filter_archive",
-                        return_value={"funderCount": 1, "cohortCount": 1}
+                        return_value={
+                            "funderCount": 1, "cohortCount": 1,
+                            "selectorFunderCount": 2,
+                            "selectorCohortCount": 3,
+                        }
                     ):
                 generate_data._run_funder_wrangling(
                     str(root), str(staged), str(previous)
@@ -1168,7 +1440,7 @@ class FunderRouteTests(unittest.TestCase):
         self.assertEqual(len(payload["results"]), 60)
         self.assertFalse(payload["pagination"]["more"])
 
-    def test_conditional_funder_list_remains_paginated(self):
+    def test_single_cohort_funder_list_is_returned_without_pagination(self):
         store = mock.Mock()
         store.funders.return_value = [{
             "slug": f"funder-{number}", "name": f"Funder {number}",
@@ -1179,6 +1451,23 @@ class FunderRouteTests(unittest.TestCase):
                 return_value=store):
             response = self.client.get(
                 "/api/funders?cohorts=ukb&stage=initial&page=1"
+            )
+
+        payload = response.get_json()
+        self.assertEqual(len(payload["results"]), 60)
+        self.assertFalse(payload["pagination"]["more"])
+
+    def test_multi_cohort_funder_list_remains_paginated(self):
+        store = mock.Mock()
+        store.funders.return_value = [{
+            "slug": f"funder-{number}", "name": f"Funder {number}",
+            "studyCount": number, "publicationCount": 1,
+        } for number in range(60)]
+        with mock.patch(
+                "app.routes.get_dashboard_filter_store",
+                return_value=store):
+            response = self.client.get(
+                "/api/funders?cohorts=ukb,clsa&stage=initial&page=1"
             )
 
         payload = response.get_json()
@@ -1196,6 +1485,23 @@ class FunderRouteTests(unittest.TestCase):
                 return_value=store):
             response = self.client.get(
                 "/api/cohorts?stage=replication&page=1"
+            )
+
+        payload = response.get_json()
+        self.assertEqual(len(payload["results"]), 60)
+        self.assertFalse(payload["pagination"]["more"])
+
+    def test_single_funder_cohort_list_is_returned_without_pagination(self):
+        store = mock.Mock()
+        store.cohorts.return_value = [{
+            "id": f"cohort-{number}", "name": f"Cohort {number}",
+            "studyCount": number, "publicationCount": 1,
+        } for number in range(60)]
+        with mock.patch(
+                "app.routes.get_dashboard_filter_store",
+                return_value=store):
+            response = self.client.get(
+                "/api/cohorts?funders=wellcome&stage=initial&page=1"
             )
 
         payload = response.get_json()

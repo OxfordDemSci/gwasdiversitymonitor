@@ -36,6 +36,32 @@ FUNDER_DOWNLOAD_MEMBERS = {
 }
 FUNDER_DIRECTORY = "funders"
 FUNDER_CLEANER_FILE = "funder_cleaner.json"
+FUNDER_NORMALIZATION_AUDIT_FILE = "normalization-audit.json"
+FUNDER_NORMALIZATION_AUDIT_VERSION = 1
+NIH_COMPONENT_ALIASES = (
+    ("NHLBI", "NHLBI NIH HHS"),
+    ("NHGRI", "NHGRI NIH HHS"),
+    ("NIDDK", "NIDDK NIH HHS"),
+    ("NIEHS", "NIEHS NIH HHS"),
+    ("NICHD", "NICHD NIH HHS"),
+    ("NCATS", "NCATS NIH HHS"),
+    ("NIAMS", "NIAMS NIH HHS"),
+    ("NIAAA", "NIAAA NIH HHS"),
+    ("NIMHD", "NIMHD NIH HHS"),
+    ("NIGMS", "NIGMS NIH HHS"),
+    ("NINDS", "NINDS NIH HHS"),
+    ("NIAID", "NIAID NIH HHS"),
+    ("NIDCR", "NIDCR NIH HHS"),
+    ("NIBIB", "NIBIB NIH HHS"),
+    ("NINR", "NINR NIH HHS"),
+    ("NIMH", "NIMH NIH HHS"),
+    ("NIDA", "NIDA NIH HHS"),
+    ("NLM", "NLM NIH HHS"),
+    ("FIC", "FIC NIH HHS"),
+    ("CSR", "CSR NIH HHS"),
+    ("OER", "OER NIH HHS"),
+    ("NCI", "NCI NIH HHS"),
+)
 
 REPORT_REQUIRED_KEYS = frozenset({
     "schemaVersion", "funder", "studyCount", "publicationCount",
@@ -123,6 +149,12 @@ REPORT_ROW_SCHEMAS = {
 def funder_cleaner_path(data_path):
     """Return the canonical funder-normalization configuration path."""
     return os.path.join(data_path, FUNDER_DIRECTORY, FUNDER_CLEANER_FILE)
+
+
+def funder_normalization_audit_path(data_path):
+    return os.path.join(
+        data_path, FUNDER_DIRECTORY, FUNDER_NORMALIZATION_AUDIT_FILE
+    )
 
 
 def normalize_pmid(value):
@@ -299,8 +331,6 @@ def canonical_agency(value, cleaner):
     agency = _clean_agency_text(value)
     if not agency:
         return ""
-    if "veteran" in agency.casefold():
-        agency = "Veterans Affairs"
 
     visited = []
     visited_keys = set()
@@ -318,7 +348,94 @@ def canonical_agency(value, cleaner):
         visited.append(agency)
         visited_keys.add(identity)
         agency = target
+    normalized = agency.casefold()
+    is_hhs_nih_path = (
+        "department of health" in normalized
+        and (
+            "| nih |" in normalized
+            or "national institutes of health" in normalized
+        )
+    )
+    if is_hhs_nih_path:
+        for acronym, canonical in NIH_COMPONENT_ALIASES:
+            if re.search(rf"\b{re.escape(acronym)}\b", agency, re.I):
+                return canonical
+        for phrase, canonical in (
+            ("center for scientific review", "CSR NIH HHS"),
+            ("office of extramural research", "OER NIH HHS"),
+            ("national institute on aging", "NIA NIH HHS"),
+            ("national institute of diabetes", "NIDDK NIH HHS"),
+        ):
+            if phrase in normalized:
+                return canonical
+        return "NIH (Other)"
     return agency
+
+
+def build_funder_normalization_audit(cache, cleaner):
+    """Describe every source-to-canonical decision without fuzzy merging."""
+    source_publications = defaultdict(set)
+    canonical_publications = defaultdict(set)
+    source_to_canonical = {}
+    for pmid, record in cache.get("records", {}).items():
+        pmid = normalize_pmid(pmid)
+        for grant in record.get("grants", []):
+            source = _clean_agency_text(grant.get("agency"))
+            if not source:
+                continue
+            canonical = canonical_agency(source, cleaner)
+            if not canonical or canonical == "Unclear":
+                continue
+            source_publications[source].add(pmid)
+            canonical_publications[canonical].add(pmid)
+            source_to_canonical[source] = canonical
+
+    grouped_sources = defaultdict(list)
+    for source, canonical in source_to_canonical.items():
+        grouped_sources[canonical].append(source)
+
+    merged_groups = []
+    for canonical, sources in grouped_sources.items():
+        aliases = sorted(set(sources), key=str.casefold)
+        if len(aliases) > 1 or aliases[0] != canonical:
+            merged_groups.append({
+                "canonical": canonical,
+                "sourceNames": aliases,
+                "publicationCount": len(canonical_publications[canonical]),
+            })
+    merged_groups.sort(
+        key=lambda entry: (
+            -entry["publicationCount"], entry["canonical"].casefold()
+        )
+    )
+
+    unaliased = [
+        {
+            "source": source,
+            "publicationCount": len(publications),
+        }
+        for source, publications in source_publications.items()
+        if source_to_canonical[source] == source
+    ]
+    unaliased.sort(
+        key=lambda entry: (
+            -entry["publicationCount"], entry["source"].casefold()
+        )
+    )
+    return {
+        "version": FUNDER_NORMALIZATION_AUDIT_VERSION,
+        "generatedAt": datetime.datetime.now(
+            datetime.timezone.utc
+        ).isoformat(),
+        "method": (
+            "Unicode/whitespace normalization, case-insensitive exact "
+            "matching, and reviewed aliases only; no fuzzy merging"
+        ),
+        "sourceNameCount": len(source_publications),
+        "canonicalNameCount": len(canonical_publications),
+        "mergedGroups": merged_groups,
+        "sourceNamesWithoutExplicitAlias": unaliased,
+    }
 
 
 def _canonical_funding_names(cache, cleaner):
@@ -548,13 +665,98 @@ def build_time_series(ancestry, ancestry_order, final_year):
     return result
 
 
-def build_study_parent_map(studies, mappings):
-    study_columns = ["STUDY ACCESSION", "DISEASE/TRAIT", "ASSOCIATION COUNT"]
-    mapped = studies[study_columns].merge(
-        mappings[["Disease trait", "Parent term"]], how="left",
-        left_on="DISEASE/TRAIT", right_on="Disease trait"
-    )
-    mapped = mapped.rename(columns={"Parent term": "parentterm"})
+def _normalise_mapping_text(values):
+    return values.fillna("").astype(str).str.strip().str.replace(
+        r"\s+", " ", regex=True
+    ).str.casefold()
+
+
+def _normalise_mapping_uri(values):
+    return values.fillna("").astype(str).str.strip().str.casefold()
+
+
+def _parent_lookup(mappings, column, normaliser):
+    if column not in mappings.columns or "Parent term" not in mappings.columns:
+        return pd.Series(dtype=object)
+    values = mappings[[column, "Parent term"]].copy()
+    values["__key"] = normaliser(values[column])
+    values["Parent term"] = values["Parent term"].fillna("").astype(
+        str
+    ).str.strip()
+    values = values[
+        values["__key"].ne("") & values["Parent term"].ne("")
+    ]
+    return values.drop_duplicates("__key").set_index(
+        "__key"
+    )["Parent term"]
+
+
+def build_parent_term_lookups(mappings):
+    return {
+        "disease": _parent_lookup(
+            mappings, "Disease trait", _normalise_mapping_text
+        ),
+        "efo_term": _parent_lookup(
+            mappings, "EFO term", _normalise_mapping_text
+        ),
+        "efo_uri": _parent_lookup(
+            mappings, "EFO URI", _normalise_mapping_uri
+        ),
+    }
+
+
+def _map_first_trait_uri(values, lookup):
+    token_lists = values.fillna("").astype(str).reset_index(
+        drop=True
+    ).str.split(r"\s*,\s*", regex=True)
+    tokens = token_lists.explode()
+    matches = _normalise_mapping_uri(tokens).map(lookup).dropna()
+    first_matches = matches.groupby(level=0, sort=False).first()
+    result = pd.Series(index=range(len(values)), dtype=object)
+    result.loc[first_matches.index] = first_matches
+    result.index = values.index
+    return result
+
+
+def build_study_parent_map(studies, mappings=None, parent_lookups=None):
+    required = {"STUDY ACCESSION", "DISEASE/TRAIT"}
+    missing = required - set(studies.columns)
+    if missing:
+        raise KeyError(f"Study data missing required columns: {sorted(missing)}")
+
+    mapped = studies[["STUDY ACCESSION", "DISEASE/TRAIT"]].copy()
+    if "ASSOCIATION COUNT" in studies.columns:
+        mapped["ASSOCIATION COUNT"] = studies["ASSOCIATION COUNT"]
+    else:
+        mapped["ASSOCIATION COUNT"] = 0
+
+    if parent_lookups is None:
+        if mappings is None:
+            raise ValueError("Mappings or prepared parent lookups are required")
+        parent_lookups = build_parent_term_lookups(mappings)
+    disease_lookup = parent_lookups["disease"]
+    efo_term_lookup = parent_lookups["efo_term"]
+    efo_uri_lookup = parent_lookups["efo_uri"]
+
+    disease_keys = _normalise_mapping_text(studies["DISEASE/TRAIT"])
+    parent = disease_keys.map(disease_lookup)
+    parent = parent.combine_first(disease_keys.map(efo_term_lookup))
+    if "MAPPED_TRAIT" in studies.columns:
+        mapped_trait_keys = _normalise_mapping_text(
+            studies["MAPPED_TRAIT"]
+        )
+        parent = parent.combine_first(mapped_trait_keys.map(disease_lookup))
+        parent = parent.combine_first(mapped_trait_keys.map(efo_term_lookup))
+    if "MAPPED_TRAIT_URI" in studies.columns:
+        mapped_uri_keys = _normalise_mapping_uri(
+            studies["MAPPED_TRAIT_URI"]
+        )
+        parent = parent.combine_first(mapped_uri_keys.map(efo_uri_lookup))
+        parent = parent.combine_first(_map_first_trait_uri(
+            studies["MAPPED_TRAIT_URI"], efo_uri_lookup
+        ))
+
+    mapped["parentterm"] = parent
     mapped["ASSOCIATION COUNT"] = pd.to_numeric(
         mapped["ASSOCIATION COUNT"], errors="coerce"
     ).fillna(0)
@@ -777,27 +979,49 @@ def build_country_map(ancestry, country_lookup, final_year):
     frame = frame[frame["country"] != ""]
     frame["Year"] = pd.to_datetime(frame["DATE"], errors="coerce").dt.year
     frame["N"] = pd.to_numeric(frame["N"], errors="coerce").fillna(0)
+    if "STAGE" in frame:
+        frame["__stage"] = (
+            frame["STAGE"].fillna("").astype(str).str.casefold()
+            .replace({"discovery": "initial"})
+        )
+    else:
+        frame["__stage"] = "initial"
     populations = country_lookup.set_index("Country")["2017population"].to_dict()
-    result = {}
-    for year in range(2008, final_year + 1):
-        current = frame[frame["Year"] == year]
-        if current.empty:
-            continue
-        grouped = current.groupby("country")["N"].agg(["sum", "count"])
-        total_n = grouped["sum"].sum()
-        total_count = grouped["count"].sum()
-        rows = {}
-        for index, (country, values) in enumerate(grouped.iterrows()):
-            rows[str(index)] = {
-                "country": country,
-                "population": _json_value(populations.get(country, 0)) or 0,
-                "studies": int(values["count"]),
-                "studiesPercentage": _percentage(values["count"], total_count),
-                "participants": float(values["sum"]),
-                "participantsPercentage": _percentage(values["sum"], total_n),
-            }
-        result[str(year)] = rows
-    return result
+
+    def stage_map(stage):
+        stage_frame = frame[frame["__stage"] == stage]
+        result = {}
+        for year in range(2008, final_year + 1):
+            current = stage_frame[stage_frame["Year"] == year]
+            if current.empty:
+                continue
+            grouped = current.groupby("country")["N"].agg(["sum", "count"])
+            total_n = grouped["sum"].sum()
+            total_count = grouped["count"].sum()
+            rows = {}
+            for index, (country, values) in enumerate(grouped.iterrows()):
+                rows[str(index)] = {
+                    "country": country,
+                    "population": _json_value(
+                        populations.get(country, 0)
+                    ) or 0,
+                    "studies": int(values["count"]),
+                    "studiesPercentage": _percentage(
+                        values["count"], total_count
+                    ),
+                    "participants": float(values["sum"]),
+                    "participantsPercentage": _percentage(
+                        values["sum"], total_n
+                    ),
+                }
+            if rows:
+                result[str(year)] = rows
+        return result
+
+    return {
+        "initial": stage_map("initial"),
+        "replication": stage_map("replication"),
+    }
 
 
 SUMMARY_KEYS = {
@@ -1364,6 +1588,10 @@ def _promote_funder_artifacts(staging_root, live_root):
             os.replace(staged_path, live_path)
 
         os.replace(
+            os.path.join(staging_root, FUNDER_NORMALIZATION_AUDIT_FILE),
+            os.path.join(live_root, FUNDER_NORMALIZATION_AUDIT_FILE),
+        )
+        os.replace(
             os.path.join(staging_root, "index.json"),
             os.path.join(live_root, "index.json"),
         )
@@ -1521,6 +1749,7 @@ def build_funder_artifacts(
         cache, cleaner, min_studies
     )
     studies, ancestry, mappings, bubbles, countries = _load_sources(data_path)
+    parent_term_lookups = build_parent_term_lookups(mappings)
     bubbles = attach_funding_metadata(
         bubbles, funding_names_by_publication(cache, cleaner)
     )
@@ -1541,6 +1770,10 @@ def build_funder_artifacts(
         shutil.rmtree(root)
     os.makedirs(os.path.join(root, "dashboards"), exist_ok=True)
     os.makedirs(os.path.join(root, "downloads"), exist_ok=True)
+    _atomic_json(
+        os.path.join(root, FUNDER_NORMALIZATION_AUDIT_FILE),
+        build_funder_normalization_audit(cache, cleaner),
+    )
 
     entries = []
     used_slugs = set()
@@ -1568,7 +1801,9 @@ def build_funder_artifacts(
         if selected_studies.empty or selected_ancestry.empty:
             continue
 
-        study_parent_map = build_study_parent_map(selected_studies, mappings)
+        study_parent_map = build_study_parent_map(
+            selected_studies, parent_lookups=parent_term_lookups
+        )
         merged = study_parent_map.merge(
             selected_ancestry, how="inner", on="STUDY ACCESSION"
         )
@@ -1666,6 +1901,7 @@ def funder_artifact_files(data_path):
 
     return (
         "funders/funder_cleaner.json",
+        f"funders/{FUNDER_NORMALIZATION_AUDIT_FILE}",
         "funders/pubmed_grants.json",
         *(f"funders/dashboards/{slug}.json" for slug in slugs),
         *(f"funders/downloads/{slug}.zip" for slug in slugs),
@@ -1688,6 +1924,15 @@ def validate_funder_artifacts(data_path):
             isinstance(alias, str) and isinstance(canonical, str)
             for alias, canonical in cleaner.items()):
         raise ValueError("The funder normalization configuration is invalid")
+
+    audit = _load_json(funder_normalization_audit_path(data_path), None)
+    if not isinstance(audit, dict) \
+            or audit.get("version") != FUNDER_NORMALIZATION_AUDIT_VERSION \
+            or not isinstance(audit.get("mergedGroups"), list) \
+            or not isinstance(
+                audit.get("sourceNamesWithoutExplicitAlias"), list
+            ):
+        raise ValueError("The funder normalization audit is invalid")
 
     cache = _load_json(
         os.path.join(data_path, "funders", "pubmed_grants.json"), None

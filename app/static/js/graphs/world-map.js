@@ -1,4 +1,4 @@
-function drawWorldMapChart(data, withMetric, preservedState) {
+function drawWorldMapChart(data, withMetric, replication, preservedState) {
 	let selector = "#worldMap"
 	let svg_id = 'worldMapSVG'
     let svg_selector = `#${svg_id}`
@@ -129,16 +129,26 @@ function drawWorldMapChart(data, withMetric, preservedState) {
 
     let path = d3.geoPath().projection(projection);
 
-    let dataWM = data;
+    let stageKey = replication ? 'replication' : 'initial';
+    let hasStageMaps = data && data.initial && data.replication;
+    let dataWM = (hasStageMaps ? data[stageKey] : data) || {};
+    d3.select('#worldMap .stage-title')
+        .text(replication ? 'Replication' : 'Discovery');
+    d3.select('#worldMap .metric-title')
+        .text(window.withMetric ? 'Studies' : 'Participants');
 
     // Changing year
-    let dataKeys = Object.keys(dataWM);
+    let dataKeys = Object.keys(dataWM).filter(function(year) {
+        return dataWM[year] && Object.keys(dataWM[year]).length > 0;
+    }).sort(function(a, b) {
+        return Number(a) - Number(b);
+    });
     let requestedYear = preservedState && String(preservedState.year);
     let currentYear = requestedYear && dataKeys.indexOf(requestedYear) !== -1 ?
         requestedYear :
         dataKeys[dataKeys.length-1];
     let dateSpan = document.querySelector('.world-map-change-year span');
-    dateSpan.innerHTML = currentYear;
+    dateSpan.textContent = currentYear || 'No data';
 
     let nextButtons = document.querySelectorAll('.world-map-change-year button.next');
     let previousButtons = document.querySelectorAll('.world-map-change-year button.previous');
@@ -149,23 +159,23 @@ function drawWorldMapChart(data, withMetric, preservedState) {
         .attr('class', 'legend');
 
     window.wmpreviousYear = function() {
-        currentYear--;
-        updateGraph(currentYear);
+        moveYear(-1);
     };
 
     window.wmnextYear = function() {
-        currentYear++;
-        updateGraph(currentYear);
+        moveYear(1);
     };
 
     window.wmfirstYear = function() {
+        if (!dataKeys.length) return;
         currentYear = dataKeys[0];
-        updateGraph(currentYear);
+        updateGraph();
     };
 
     window.wmlastestYear = function() {
+        if (!dataKeys.length) return;
         currentYear = dataKeys[dataKeys.length-1];
-        updateGraph(currentYear);
+        updateGraph();
     };
 
     svg.call(tip);
@@ -475,36 +485,65 @@ function drawWorldMapChart(data, withMetric, preservedState) {
     }
 
     function updateGraph() {
-        dateSpan.innerHTML = currentYear;
+        d3.selectAll('.world-map-empty-state').remove();
 
-        if (currentYear >= dataKeys[dataKeys.length-1]) {
-            for (let i = 0; i < nextButtons.length; i++) {
-                nextButtons[i].disabled = true;
-            }
-            for (let i = 0; i < previousButtons.length; i++) {
-                previousButtons[i].disabled = false;
-            }
-        } else if (currentYear <= dataKeys[0]) {
-            for (let i = 0; i < previousButtons.length; i++) {
-                previousButtons[i].disabled = true;
-            }
-            for (let i = 0; i < nextButtons.length; i++) {
-                nextButtons[i].disabled = false;
-            }
-        } else {
-            for (let i = 0; i < previousButtons.length; i++) {
-                previousButtons[i].disabled = false;
-            }
-            for (let i = 0; i < nextButtons.length; i++) {
-                nextButtons[i].disabled = false;
-            }
+        if (!dataKeys.length) {
+            dateSpan.textContent = 'No data';
+            legend.style('display', 'none');
+            Array.prototype.forEach.call(nextButtons, function(button) {
+                button.disabled = true;
+            });
+            Array.prototype.forEach.call(previousButtons, function(button) {
+                button.disabled = true;
+            });
+            getGraphPerYear(null);
+            mainSvg.append('text')
+                .attr('class', 'world-map-empty-state')
+                .attr('x', width / 2)
+                .attr('y', height / 2)
+                .attr('text-anchor', 'middle')
+                .attr('fill', '#516777')
+                .attr('font-size', Math.max(14, width / 55))
+                .attr('font-weight', 700)
+                .append('tspan')
+                .attr('x', width / 2)
+                .attr('dy', '-0.3em')
+                .text('No country of recruitment data');
+            mainSvg.select('.world-map-empty-state')
+                .append('tspan')
+                .attr('x', width / 2)
+                .attr('dy', '1.3em')
+                .text('for this selection');
+            return;
         }
+
+        legend.style('display', null);
+        dateSpan.textContent = currentYear;
+        let currentIndex = dataKeys.indexOf(String(currentYear));
+        Array.prototype.forEach.call(nextButtons, function(button) {
+            button.disabled = currentIndex >= dataKeys.length - 1;
+        });
+        Array.prototype.forEach.call(previousButtons, function(button) {
+            button.disabled = currentIndex <= 0;
+        });
 
         getGraphPerYear(currentYear);
     }
 
+    function moveYear(offset) {
+        if (!dataKeys.length) return;
+        let currentIndex = dataKeys.indexOf(String(currentYear));
+        let nextIndex = Math.max(
+            0,
+            Math.min(dataKeys.length - 1, currentIndex + offset)
+        );
+        currentYear = dataKeys[nextIndex];
+        updateGraph();
+    }
+
     function getGraphPerYear(year) {
-        let val = dataWM[year];
+        let val = dataWM[year] || {};
+        let hasYearData = Object.keys(val).length > 0;
 
         val = Object.keys(val).map(function (_) {
             return val[_];
@@ -550,13 +589,13 @@ function drawWorldMapChart(data, withMetric, preservedState) {
                     if(d.studies) {
                         return colorStudies(d.studies);
                     } else {
-                        return '#ffffff';
+                        return hasYearData ? '#ffffff' : '#eef0f3';
                     }
                 } else {
                     if (d.participants) {
                         return colorParticipants(d.participants);
                     } else {
-                        return '#ffffff';
+                        return hasYearData ? '#ffffff' : '#eef0f3';
                     }
                 }
             })

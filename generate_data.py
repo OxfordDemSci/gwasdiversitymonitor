@@ -31,6 +31,7 @@ from app.DataLoader import (
 )
 from app.DashboardFilters import (
     COHORT_CLEANER_FILE,
+    COHORT_NORMALIZATION_AUDIT_FILE,
     PRECOMPUTED_FILTER_ARCHIVE,
     build_precomputed_filter_archive,
     cohort_cleaner_path,
@@ -106,6 +107,7 @@ DOWNLOAD_OUTPUT_FILES = (
 
 FILTER_CACHE_OUTPUT_FILES = (PRECOMPUTED_FILTER_ARCHIVE,)
 FILTER_CONFIGURATION_FILES = (COHORT_CLEANER_FILE,)
+FILTER_AUDIT_OUTPUT_FILES = (COHORT_NORMALIZATION_AUDIT_FILE,)
 
 PUBLISHED_DATA_FILES = (
     RAW_INPUT_FILES
@@ -116,6 +118,7 @@ PUBLISHED_DATA_FILES = (
     + tuple(f'toplot/{file_name}' for file_name in TOPLOT_OUTPUT_FILES)
     + DOWNLOAD_OUTPUT_FILES
     + FILTER_CONFIGURATION_FILES
+    + FILTER_AUDIT_OUTPUT_FILES
     + FILTER_CACHE_OUTPUT_FILES
 )
 
@@ -1029,23 +1032,31 @@ def make_heatmap_dfs(data_path):
         Make the heatmap dfs
     """
     try:
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
-                                            'raw', 'Cat_Stud.tsv'),
-                               usecols = ['STUDY ACCESSION', 'DISEASE/TRAIT'],
-                               sep='\t')
-        Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
-                                           'raw', 'Cat_Map.tsv'),
-                              sep='\t',
-                              usecols = ['Disease trait', 'Parent term'])
-        Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
-                               left_on='DISEASE/TRAIT',
-                               right_on='Disease trait')
+        study_path = os.path.join(
+            data_path, 'catalog', 'raw', 'Cat_Stud.tsv'
+        )
+        study_header = pd.read_csv(study_path, sep='\t', nrows=0)
+        study_columns = ['STUDY ACCESSION', 'DISEASE/TRAIT']
+        study_columns.extend(
+            column for column in ('MAPPED_TRAIT', 'MAPPED_TRAIT_URI')
+            if column in study_header.columns
+        )
+        Cat_Stud = pd.read_csv(
+            study_path, usecols=study_columns, sep='\t'
+        )
+        Cat_Map = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'raw', 'Cat_Map.tsv'),
+            sep='\t', dtype=str
+        )
+        Cat_StudMap = funder_pipeline.build_study_parent_map(
+            Cat_Stud, Cat_Map
+        )
         Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                         'Disease_to_Parent_Mappings.tsv'),
-                           sep='\t')
-        Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION',
-                                   'DISEASE/TRAIT']].drop_duplicates()
-        Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
+                           sep='\t', index=False)
+        Cat_StudMap = Cat_StudMap[
+            ['parentterm', 'STUDY ACCESSION', 'DISEASE/TRAIT']
+        ].drop_duplicates()
         Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path,
                                                     'catalog',
                                                     'synthetic',
@@ -1126,28 +1137,46 @@ def make_choro_df(data_path):
         )
 
         frames = []
-        for year in range(2008, final_year + 1):
-            tmp = Clean_CoR[Clean_CoR['Year'] == year]
-            if tmp.empty:
-                continue
+        for stage in ('initial', 'replication'):
+            stage_rows = Clean_CoR[
+                Clean_CoR['STAGE'].fillna('').astype(str).str.casefold()
+                == stage
+            ]
+            for year in range(2008, final_year + 1):
+                tmp = stage_rows[stage_rows['Year'] == year]
+                if tmp.empty:
+                    continue
 
-            # Aggregate by country
-            agg_sum  = tmp.groupby('Cleaned Country')['N'].sum().to_frame('N')
-            agg_cnt  = tmp.groupby('Cleaned Country')['N'].count().to_frame('Count')
-            tempdf_merged = agg_sum.join(agg_cnt, how='outer')  # keep all countries observed
-            tempdf_merged['Year'] = year
+                agg_sum = tmp.groupby(
+                    'Cleaned Country'
+                )['N'].sum().to_frame('N')
+                agg_cnt = tmp.groupby(
+                    'Cleaned Country'
+                )['N'].count().to_frame('Count')
+                tempdf_merged = agg_sum.join(agg_cnt, how='outer')
+                tempdf_merged['Year'] = year
+                tempdf_merged['Stage'] = stage
 
-            # LEFT join from data to lookup; don’t drop unknown names
-            merged = tempdf_merged.merge(countrylookup, left_index=True, right_index=True, how='left')
-            merged = merged.reset_index().rename(columns={'index': 'Country'})
+                # Keep observed countries even when lookup metadata are absent.
+                merged = tempdf_merged.merge(
+                    countrylookup, left_index=True, right_index=True,
+                    how='left'
+                )
+                merged = merged.reset_index().rename(
+                    columns={'index': 'Country'}
+                )
 
-            # Percentages (guard against zero totals)
-            totN = merged['N'].sum()
-            totC = merged['Count'].sum()
-            merged['Count (%)'] = (merged['Count'] / totC * 100).round(2) if totC else 0.0
-            merged['N (%)']     = (merged['N']     / totN * 100).round(2) if totN else 0.0
+                # Percentages are calculated within each stage and year.
+                totN = merged['N'].sum()
+                totC = merged['Count'].sum()
+                merged['Count (%)'] = (
+                    merged['Count'] / totC * 100
+                ).round(2) if totC else 0.0
+                merged['N (%)'] = (
+                    merged['N'] / totN * 100
+                ).round(2) if totN else 0.0
 
-            frames.append(merged)
+                frames.append(merged)
 
         if frames:
             annual_df = pd.concat(frames, ignore_index=True)
@@ -1422,43 +1451,11 @@ def make_doughnut_df(data_path):
 
         diversity_logger.debug(f'Cat_Map: {Cat_Map.shape}')
 
-        # ---------- Normalized keys & mapping dicts ----------
-        def _norm_text(s: pd.Series) -> pd.Series:
-            return (s.astype(str).str.strip().str.replace(r'\s+',' ', regex=True).str.casefold())
-        def _norm_uri(s: pd.Series) -> pd.Series:
-            return s.astype(str).str.strip().str.casefold()
-
-        Cat_Stud['_DT_norm']  = _norm_text(Cat_Stud['DISEASE/TRAIT'])
-        if 'MAPPED_TRAIT' in Cat_Stud.columns:
-            Cat_Stud['_MT_norm']  = _norm_text(Cat_Stud['MAPPED_TRAIT'])
-        else:
-            Cat_Stud['_MT_norm']  = ''
-        if 'MAPPED_TRAIT_URI' in Cat_Stud.columns:
-            Cat_Stud['_MTU_norm'] = _norm_uri(Cat_Stud['MAPPED_TRAIT_URI'])
-        else:
-            Cat_Stud['_MTU_norm'] = ''
-
-        Cat_Map['_DT_norm']   = _norm_text(Cat_Map['Disease trait'])
-        Cat_Map['_ET_norm']   = _norm_text(Cat_Map['EFO term'])
-        Cat_Map['_EURI_norm'] = _norm_uri (Cat_Map['EFO URI'])
-
-        # mapping Series (use first occurrence)
-        map_DT   = Cat_Map.dropna(subset=['_DT_norm'])  .drop_duplicates('_DT_norm').set_index('_DT_norm')['Parent term']
-        map_ET   = Cat_Map.dropna(subset=['_ET_norm'])  .drop_duplicates('_ET_norm').set_index('_ET_norm')['Parent term']
-        map_EURI = Cat_Map.dropna(subset=['_EURI_norm']).drop_duplicates('_EURI_norm').set_index('_EURI_norm')['Parent term']
-
-        # ---------- Build Cat_StudMap (no merge misalignment) ----------
-        Cat_StudMap = Cat_Stud[['STUDY ACCESSION','DISEASE/TRAIT','ASSOCIATION COUNT']].copy()
-        # successive fallbacks
-        parent = Cat_Stud['_DT_norm'].map(map_DT)
-        parent = parent.fillna(Cat_Stud['_DT_norm'].map(map_ET))
-        if 'MAPPED_TRAIT' in Cat_Stud.columns:
-            parent = parent.fillna(Cat_Stud['_MT_norm'].map(map_DT))
-            parent = parent.fillna(Cat_Stud['_MT_norm'].map(map_ET))
-        if 'MAPPED_TRAIT_URI' in Cat_Stud.columns:
-            parent = parent.fillna(Cat_Stud['_MTU_norm'].map(map_EURI))
-
-        Cat_StudMap['parentterm'] = parent
+        # Use the same conservative fallback mapping as filtered dashboards,
+        # heat maps, and bubble data.
+        Cat_StudMap = funder_pipeline.build_study_parent_map(
+            Cat_Stud, Cat_Map
+        )
         diversity_logger.debug(f'Cat_StudMap parentterm coverage overall={Cat_StudMap["parentterm"].notna().mean():.3f}')
 
         # Write-through (as before) for traceability
@@ -1585,11 +1582,21 @@ def make_doughnut_df(data_path):
 def make_bubbleplot_df(data_path):
     """ Make data for the bubbleplot """
     try:
-        Cat_Stud = pd.read_csv(os.path.join(data_path, 'catalog',
-                                            'raw', 'Cat_Stud.tsv'),
-                               sep='\t',
-                               usecols=['STUDY ACCESSION', 'DISEASE/TRAIT',
-                                        'COHORT', 'JOURNAL'])
+        study_path = os.path.join(
+            data_path, 'catalog', 'raw', 'Cat_Stud.tsv'
+        )
+        study_header = pd.read_csv(study_path, sep='\t', nrows=0)
+        study_columns = [
+            'STUDY ACCESSION', 'DISEASE/TRAIT', 'COHORT', 'JOURNAL'
+        ]
+        study_columns.extend(
+            column for column in (
+                'ASSOCIATION COUNT', 'MAPPED_TRAIT', 'MAPPED_TRAIT_URI'
+            ) if column in study_header.columns
+        )
+        Cat_Stud = pd.read_csv(
+            study_path, sep='\t', usecols=study_columns
+        )
         study_metadata = Cat_Stud[
             ['STUDY ACCESSION', 'COHORT', 'JOURNAL']
         ].copy()
@@ -1608,20 +1615,20 @@ def make_bubbleplot_df(data_path):
         study_metadata = study_metadata.groupby(
             'STUDY ACCESSION', as_index=False, sort=False
         ).agg({'COHORT': join_metadata, 'JOURNAL': join_metadata})
-        Cat_Stud = Cat_Stud[['STUDY ACCESSION', 'DISEASE/TRAIT']]
-        Cat_Map = pd.read_csv(os.path.join(data_path, 'catalog',
-                                           'raw', 'Cat_Map.tsv'),
-                              sep='\t',
-                              usecols = ['Disease trait', 'Parent term'])
-        Cat_StudMap = pd.merge(Cat_Stud, Cat_Map, how='left',
-                               left_on='DISEASE/TRAIT',
-                               right_on='Disease trait')
+        Cat_Map = pd.read_csv(
+            os.path.join(data_path, 'catalog', 'raw', 'Cat_Map.tsv'),
+            sep='\t', dtype=str
+        )
+        Cat_StudMap = funder_pipeline.build_study_parent_map(
+            Cat_Stud, Cat_Map
+        )
         Cat_StudMap.to_csv(os.path.join(data_path, 'catalog', 'synthetic',
                                         'Disease_to_Parent_Mappings.tsv'),
-                           sep='\t')
-        Cat_StudMap = Cat_StudMap[['Parent term', 'STUDY ACCESSION', 'DISEASE/TRAIT']]
+                           sep='\t', index=False)
+        Cat_StudMap = Cat_StudMap[
+            ['parentterm', 'STUDY ACCESSION', 'DISEASE/TRAIT']
+        ]
         Cat_StudMap = Cat_StudMap.drop_duplicates()
-        Cat_StudMap = Cat_StudMap.rename(columns={"Parent term": "parentterm"})
         Cat_Anc_wBroader = pd.read_csv(os.path.join(data_path, 'catalog',
                                                     'synthetic',
                                                     'Cat_Anc_wBroader.tsv'),
@@ -2076,7 +2083,9 @@ def make_clean_CoR(Cat_Anc, data_path):
     canonical country. One record in -> one record out.
     """
     try:
-        req_base = ['DATE', 'PUBMEDID', 'COUNTRY OF RECRUITMENT']
+        req_base = [
+            'DATE', 'PUBMEDID', 'STAGE', 'COUNTRY OF RECRUITMENT'
+        ]
         missing = [c for c in req_base if c not in Cat_Anc.columns]
         if missing:
             raise KeyError(f"Cat_Anc missing columns: {missing}")
@@ -2123,12 +2132,20 @@ def make_clean_CoR(Cat_Anc, data_path):
         for k, v in repl.items():
             df['Cleaned Country'] = df['Cleaned Country'].str.replace(k, v, regex=True)
 
-        # Persist (same schema/paths as before)
+        # Persist the stage so the map can follow the dashboard stage toggle.
         out_csv = os.path.join(data_path, 'catalog', 'synthetic', 'ancestry_CoR.csv')
-        df[['DATE', 'PUBMEDID', 'N', 'Cleaned Country']].rename(columns={'DATE': 'Date'}).to_csv(out_csv, index=False)
+        output_columns = [
+            'DATE', 'PUBMEDID', 'STAGE', 'N', 'Cleaned Country'
+        ]
+        output_names = {'DATE': 'Date', 'STAGE': 'Stage'}
+        df[output_columns].rename(columns=output_names).to_csv(
+            out_csv, index=False
+        )
 
         out_tsv = os.path.join(data_path, 'catalog', 'synthetic', 'GWAScatalogue_CleanedCountry.tsv')
-        df[['DATE', 'PUBMEDID', 'N', 'Cleaned Country']].rename(columns={'DATE': 'Date'}).to_csv(out_tsv, sep='\t', index=False)
+        df[output_columns].rename(columns=output_names).to_csv(
+            out_tsv, sep='\t', index=False
+        )
 
         # Return with 'Date' column name for downstream
         return df.rename(columns={'DATE': 'Date'})
@@ -3036,9 +3053,11 @@ def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
     )
     manifest = validate_precomputed_filter_archive(data_path)
     diversity_logger.info(
-        'Build of %d funder dashboards and %d precomputed filters: Complete',
-        len(index['funders']),
-        manifest['funderCount'] + manifest['cohortCount'],
+        'Built %d standalone high-volume funder reports (minimum %d '
+        'publications); the dashboard selector includes all %d canonical '
+        'funders and %d cohorts.',
+        len(index['funders']), funder_pipeline.DEFAULT_MIN_STUDIES,
+        manifest['selectorFunderCount'], manifest['selectorCohortCount'],
     )
 
 

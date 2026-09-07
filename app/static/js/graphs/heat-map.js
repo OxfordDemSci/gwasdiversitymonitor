@@ -10,6 +10,8 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
 	let svg_id = 'heatmapSVG'
     let svg_selector = `#${svg_id}`
 
+    d3.select("#heatMap svg").remove();
+
     let mainSvg = d3.select("#heatMap")
         .append("svg")
         .attr("id", svg_id)
@@ -27,63 +29,51 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
     let previousButtons = document.querySelectorAll('.heat-map-change-year button.previous');
 
     // Define the div for the tooltip
+    d3.selectAll('.d3-tooltip.heat-map-tooltip').remove();
     let d3Tooltip = d3.select("body").append("div")
-        .attr("class", "d3-tooltip")
+        .attr("class", "d3-tooltip heat-map-tooltip")
         .style("opacity", 0);
 
     let specificData;
     let dataKeys;
     let currentYear;
+    let dataKey;
 
     if (!withMetric && withStage) {
-        setUpSettings('heatmap_replication_participants');
-        specificDataGraph('heatmap_replication_participants');
+        dataKey = 'heatmap_replication_participants';
     } else if (!withMetric && !withStage) {
-        setUpSettings('heatmap_discovery_participants');
-        specificDataGraph('heatmap_discovery_participants');
+        dataKey = 'heatmap_discovery_participants';
     } else if (withMetric && withStage) {
-        setUpSettings('heatmap_replication_studies');
-        specificDataGraph('heatmap_replication_studies');
+        dataKey = 'heatmap_replication_studies';
     } else if (withMetric && !withStage) {
-        setUpSettings('heatmap_discovery_studies');
-        specificDataGraph('heatmap_discovery_studies');
+        dataKey = 'heatmap_discovery_studies';
     }
+
+    setUpSettings(dataKey);
 
     // Functions changing dates
     window.hmpreviousYear = function() {
-        currentYear--;
-        updateGraph(currentYear);
+        moveYear(-1);
     };
 
     window.hmnextYear = function() {
-        currentYear++;
-        updateGraph(currentYear);
+        moveYear(1);
     };
 
     window.hmfirstYear = function() {
+        if (!dataKeys.length) return;
         currentYear = dataKeys[0];
-        updateGraph(currentYear);
+        updateGraph();
     };
 
     window.hmlastestYear = function() {
+        if (!dataKeys.length) return;
         currentYear = dataKeys[dataKeys.length-1];
-        updateGraph(currentYear);
+        updateGraph();
     };
 
     let dateSpan = document.querySelector('.heat-map-change-year span');
-    currentYear ? dateSpan.innerHTML = currentYear : null;
-
-    updateGraph(currentYear);
-
-    let svgs = document.querySelectorAll('#heatMap svg');
-    if (svgs.length > 1) {
-        if(isIE()) {
-            let child = document.querySelector('#heatMap svg');
-            child.parentNode.removeChild(child);
-        } else {
-            document.querySelector('#heatMap svg').remove();
-        }
-    }
+    updateGraph();
 
 	bindImageDownload('#heat-map-controls', selector, svg_id);
 
@@ -158,46 +148,80 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
     }
 
     function setUpSettings(key) {
-        specificData = data[key];
-        dataKeys = Object.keys(specificData);
+        specificData = data && data[key] ? data[key] : {};
+        dataKeys = Object.keys(specificData).filter(function(year) {
+            return specificData[year] &&
+                Object.keys(specificData[year]).length > 0;
+        }).sort(function(a, b) {
+            return Number(a) - Number(b);
+        });
         var requestedYear = preservedState && String(preservedState.year);
         currentYear = requestedYear && dataKeys.indexOf(requestedYear) !== -1 ?
             requestedYear :
             dataKeys[dataKeys.length-1];
     }
 
-    function specificDataGraph(key) {
-        specificData = data[key];
-        getGraphPerYear(specificData, currentYear);
+    function setYearButtonsDisabled(disabled) {
+        Array.prototype.forEach.call(nextButtons, function(button) {
+            button.disabled = disabled;
+        });
+        Array.prototype.forEach.call(previousButtons, function(button) {
+            button.disabled = disabled;
+        });
+    }
+
+    function drawEmptyState() {
+        mainSvg.selectAll('.heat-map-empty-state').remove();
+        mainSvg.append('text')
+            .attr('class', 'heat-map-empty-state')
+            .attr('x', width / 2)
+            .attr('y', height / 2)
+            .attr('text-anchor', 'middle')
+            .attr('fill', '#516777')
+            .attr('font-size', 13)
+            .attr('font-weight', 700)
+            .append('tspan')
+            .attr('x', width / 2)
+            .attr('dy', '-0.3em')
+            .text('No heat-map data');
+        mainSvg.select('.heat-map-empty-state')
+            .append('tspan')
+            .attr('x', width / 2)
+            .attr('dy', '1.3em')
+            .text('for this selection');
     }
 
     function updateGraph() {
-        dateSpan.innerHTML = currentYear;
+        mainSvg.selectAll('.heat-map-empty-state').remove();
 
-        if (currentYear >= dataKeys[dataKeys.length-1]) {
-            for (let i = 0; i < nextButtons.length; i++) {
-                nextButtons[i].disabled = true;
-            }
-            for (let i = 0; i < previousButtons.length; i++) {
-                previousButtons[i].disabled = false;
-            }
-        } else if (currentYear <= dataKeys[0]) {
-            for (let i = 0; i < previousButtons.length; i++) {
-                previousButtons[i].disabled = true;
-            }
-            for (let i = 0; i < nextButtons.length; i++) {
-                nextButtons[i].disabled = false;
-            }
-        } else {
-            for (let i = 0; i < previousButtons.length; i++) {
-                previousButtons[i].disabled = false;
-            }
-            for (let i = 0; i < nextButtons.length; i++) {
-                nextButtons[i].disabled = false;
-            }
+        if (!dataKeys.length) {
+            dateSpan.textContent = 'No data';
+            setYearButtonsDisabled(true);
+            drawEmptyState();
+            return;
         }
 
+        dateSpan.textContent = currentYear;
+        let currentIndex = dataKeys.indexOf(String(currentYear));
+        Array.prototype.forEach.call(nextButtons, function(button) {
+            button.disabled = currentIndex >= dataKeys.length - 1;
+        });
+        Array.prototype.forEach.call(previousButtons, function(button) {
+            button.disabled = currentIndex <= 0;
+        });
+
         getGraphPerYear(specificData, currentYear);
+    }
+
+    function moveYear(offset) {
+        if (!dataKeys.length) return;
+        let currentIndex = dataKeys.indexOf(String(currentYear));
+        let nextIndex = Math.max(
+            0,
+            Math.min(dataKeys.length - 1, currentIndex + offset)
+        );
+        currentYear = dataKeys[nextIndex];
+        updateGraph();
     }
 
     function drawGraph(val, category, containerClass, rectClass, x, logColour_scale, logScale) {
@@ -245,12 +269,21 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
     }
 
     function getGraphPerYear(data, year) {
-        let valArray = Object.keys(specificData[currentYear]).map(function (_) {
-            return specificData[currentYear][_];
-        });
-        let maxValue =  Math.max.apply(Math, valArray.map(function(o) { return o.value; }));
+        let yearData = data && data[year] ? data[year] : {};
+        if (!Object.keys(yearData).length) {
+            drawEmptyState();
+            return;
+        }
 
-        let val = data[year];
+        let valArray = Object.keys(yearData).map(function (_) {
+            return yearData[_];
+        });
+        let maxValue = Math.max.apply(Math, valArray.map(function(o) {
+            return Number(o.value) || 0;
+        }));
+        maxValue = Math.max(1, maxValue);
+
+        let val = yearData;
 
         val = Object.keys(val).map(function (_) {
             return val[_];

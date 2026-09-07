@@ -33,7 +33,7 @@
         </div>
 
         <div class="tile col-xs-12 col-lg-6">
-            <div class="box only-metric world-map" id="worldMap">
+            <div class="box metric-stage world-map" id="worldMap">
                 {% include 'tiles/world-map.html' %}
             </div>
         </div>
@@ -123,7 +123,7 @@
 				if (error) return;
 				mapData = data;
 				baseDashboardData.chloroMap = data;
-				drawWorldMapChart(mapData);
+				drawWorldMapChart(mapData, false, false);
 				markBaseDashboardReady();
 			});
 			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
@@ -203,6 +203,7 @@
 		const dashboardFilterRequests = new Map();
 		const filterOptionCache = new Map();
 		const filterOptionCacheLimit = 12;
+		const filterOptionRequests = new Map();
 
         function cachedDashboardFilter(query) {
             if (!dashboardFilterCache.has(query)) return null;
@@ -246,21 +247,15 @@
 			return request;
 		}
 
-		function prefetchFirstDashboardOption(facet, entries) {
-			let first = (entries || []).find(function(entry) {
-				return entry && entry.id;
-			});
-			if (!first || !baseDashboardReady) return;
-			let query = filterSelectionQuery(facet, first.id);
-			if (dashboardFilterCache.has(query) ||
-					dashboardFilterRequests.has(query)) return;
-			setTimeout(function() {
-				requestDashboardFilter(query);
-			}, 0);
-		}
-
 		function filterOptionCacheKey(url, data) {
-			return url + '?' + $.param(data || {});
+			data = data || {};
+			return url + '?' + $.param({
+				search: data.search || data.term || '',
+				cohorts: data.cohorts || '',
+				funders: data.funders || '',
+				stage: data.stage || '',
+				page: data.page || 1
+			});
 		}
 
 		function cacheFilterOptions(key, payload) {
@@ -269,6 +264,51 @@
 			while (filterOptionCache.size > filterOptionCacheLimit) {
 				filterOptionCache.delete(filterOptionCache.keys().next().value);
 			}
+		}
+
+		function normalizeFilterSearch(value) {
+			let text = String(value || '');
+			if (text.normalize) text = text.normalize('NFKC');
+			return text.replace(/\s+/g, ' ').trim().toLocaleLowerCase();
+		}
+
+		function locallyFilteredOptions(url, data) {
+			data = data || {};
+			let needle = normalizeFilterSearch(data.search || data.term);
+			if (!needle) return null;
+			let baseline = $.extend({}, data, {
+				search: '', term: '', page: 1
+			});
+			let payload = filterOptionCache.get(
+				filterOptionCacheKey(url, baseline)
+			);
+			if (!payload || (payload.pagination && payload.pagination.more)) {
+				return null;
+			}
+			return {
+				results: (payload.results || []).filter(function(entry) {
+					return normalizeFilterSearch(entry.text).includes(needle) ||
+						normalizeFilterSearch(entry.id).includes(needle);
+				}),
+				pagination: {more: false}
+			};
+		}
+
+		function requestFilterOptions(params, key) {
+			if (filterOptionRequests.has(key)) {
+				return filterOptionRequests.get(key);
+			}
+			let request = $.ajax(params);
+			filterOptionRequests.set(key, request);
+			request.done(function(payload) {
+				cacheFilterOptions(key, payload);
+			});
+			request.always(function() {
+				if (filterOptionRequests.get(key) === request) {
+					filterOptionRequests.delete(key);
+				}
+			});
+			return request;
 		}
 
 		function filterOptionTransport(params, success, failure) {
@@ -281,21 +321,33 @@
 				return { abort: function() {} };
 			}
 
-			let request = $.ajax(params);
+			let localPayload = locallyFilteredOptions(
+				params.url, params.data
+			);
+			if (localPayload) {
+				setTimeout(function() { success(localPayload); }, 0);
+				return { abort: function() {} };
+			}
+
+			let active = true;
+			let request = requestFilterOptions(params, key);
 			request.done(function(payload) {
-				cacheFilterOptions(key, payload);
-				success(payload);
+				if (active) success(payload);
 			});
-			request.fail(failure);
-			return request;
+			request.fail(function(xhr, status, error) {
+				if (active) failure(xhr, status, error);
+			});
+			return { abort: function() { active = false; } };
 		}
 
 		function prefetchFilterOptions(url, data) {
 			let key = filterOptionCacheKey(url, data);
-			if (filterOptionCache.has(key)) return;
-			$.getJSON(url, data).done(function(payload) {
-				cacheFilterOptions(key, payload);
-			});
+			if (filterOptionCache.has(key) || filterOptionRequests.has(key)) {
+				return;
+			}
+			requestFilterOptions({
+				url: url, data: data, dataType: 'json'
+			}, key);
 		}
 
 		function prefetchInitialFilterOptions() {
@@ -307,6 +359,22 @@
 					search: '', funders: '', stage: stage, page: 1
 				});
 			});
+		}
+
+		function prefetchComplementaryFilterOptions() {
+			let stage = activeStageName();
+			let cohorts = selectedFilterValues('#dataset-filter');
+			let funders = selectedFilterValues('#funder-filter');
+			if (funders.length === 1 && cohorts.length === 0) {
+				prefetchFilterOptions('/api/cohorts', {
+					search: '', funders: funders[0], stage: stage, page: 1
+				});
+			}
+			if (cohorts.length === 1 && funders.length === 0) {
+				prefetchFilterOptions('/api/funders', {
+					search: '', cohorts: cohorts[0], stage: stage, page: 1
+				});
+			}
 		}
 
         function formattedCount(value, singular, plural) {
@@ -325,7 +393,6 @@
         function updateSelectionStatus(selection) {
             if (!selection) {
                 $('#funder-status').text('All published GWAS');
-                $('#world-map-stage-note').text('Both Stages');
                 return;
             }
             let stage = activeStageName();
@@ -337,7 +404,7 @@
                     counts.bubbleStudyCount !== undefined &&
                     Number(counts.bubbleStudyCount) === 0) {
                 detail = Number(counts.recordedAncestryStudyCount || 0) === 0
-                    ? ' · no plot-ready ancestry/trait records'
+                    ? ' · ancestry is not recorded, so no coloured bubble can be drawn'
                     : ' · no mapped trait records';
             } else if (Number(counts.studyCount || 0) > 0 &&
                     counts.recordedAncestryStudyCount !== undefined &&
@@ -351,11 +418,6 @@
                     'publication',
                     'publications'
                 ) + ' (' + stageLabel + ')' + detail
-            );
-            $('#world-map-stage-note').text(
-                'Both Stages · ' + formattedCount(
-                    selection.studyCount, 'selected study', 'selected studies'
-                )
             );
         }
 
@@ -460,7 +522,9 @@
 			bubbleData = payload.bubbleGraph;
 				activeSummaryData = payload.summary;
 
-            drawWorldMapChart(mapData, switches.metric, state.worldMap);
+            drawWorldMapChart(
+                mapData, switches.metric, switches.stage, state.worldMap
+            );
             drawTimeSeries(timeseriesData, '#timeSeries', switches.metric, switches.stage);
             drawHeatMap(heatData, switches.metric, switches.stage, ancestriesData, state.heatMap);
             drawDoughnutGraph('#doughnutGraph', doughnutData, switches.metric, switches.stage, state.doughnut);
@@ -468,6 +532,19 @@
             updateSummaryFromFunder(payload.summary, switches.metric, switches.stage);
             filtersTitle(switches.metric, switches.stage);
             setDescription();
+        }
+
+        function renderSelectedDashboard(payload) {
+            activeSelectionData = payload.selection;
+            try {
+                redrawDashboardData(payload);
+                updateSelectionStatus(payload.selection);
+                return true;
+            } catch (error) {
+                console.error('Could not render dashboard selection', error);
+                $('#funder-status').text('Could not render this selection');
+                return false;
+            }
         }
 
         function applyDashboardFilters() {
@@ -494,9 +571,7 @@
 			let selectionQuery = filterSelectionQuery();
 			let cachedPayload = cachedDashboardFilter(selectionQuery);
 			if (cachedPayload) {
-				activeSelectionData = cachedPayload.selection;
-				redrawDashboardData(cachedPayload);
-				updateSelectionStatus(cachedPayload.selection);
+				renderSelectedDashboard(cachedPayload);
 				$('.funder-toolbar').removeClass('is-loading');
 				return;
 			}
@@ -505,9 +580,7 @@
             request
                 .done(function(payload) {
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
-					activeSelectionData = payload.selection;
-					redrawDashboardData(payload);
-					updateSelectionStatus(payload.selection);
+					renderSelectedDashboard(payload);
                 })
                 .fail(function(xhr, status) {
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
@@ -525,11 +598,19 @@
                 });
         }
 
+        function syncFilterInputState(select) {
+            let values = select.val() || [];
+            select.next('.select2-container').toggleClass(
+                'has-filter-values',
+                values.length > 0
+            );
+        }
+
         function initFunderFilter() {
             let select = $('#funder-filter');
 			select.select2({
 				width: '100%',
-				placeholder: 'All funders',
+				placeholder: 'All Funders',
 				allowClear: true,
 				closeOnSelect: true,
 				dropdownAutoWidth: true,
@@ -549,7 +630,6 @@
 							};
 						},
 					processResults: function(data) {
-						prefetchFirstDashboardOption('funder', data.results);
 						return {
 							results: data.results,
 							pagination: data.pagination
@@ -565,8 +645,13 @@
 			});
 			select.on(
 				'select2:select select2:unselect select2:clear',
-				applyDashboardFilters
+				function() {
+					syncFilterInputState(select);
+					prefetchComplementaryFilterOptions();
+					applyDashboardFilters();
+				}
 			);
+			syncFilterInputState(select);
 			select.on('select2:open', function() {
 				$('#dataset-filter').select2('close');
 				$('.select2-container--open .select2-dropdown')
@@ -578,7 +663,7 @@
             let select = $('#dataset-filter');
 			select.select2({
 				width: '100%',
-				placeholder: 'All cohorts',
+				placeholder: 'All Cohorts',
 				allowClear: true,
 				closeOnSelect: true,
 				dropdownAutoWidth: true,
@@ -598,7 +683,6 @@
                         };
                     },
                     processResults: function(data) {
-						prefetchFirstDashboardOption('cohort', data.results);
                         return {
                             results: data.results,
                             pagination: data.pagination
@@ -614,8 +698,13 @@
 			});
 			select.on(
 				'select2:select select2:unselect select2:clear',
-				applyDashboardFilters
+				function() {
+					syncFilterInputState(select);
+					prefetchComplementaryFilterOptions();
+					applyDashboardFilters();
+				}
 			);
+			syncFilterInputState(select);
 			select.on('select2:open', function() {
 				$('#funder-filter').select2('close');
 				$('.select2-container--open .select2-dropdown')
@@ -636,7 +725,10 @@
             let viewState = captureDashboardState();
 
             // Redraw with Studies
-            drawWorldMapChart(mapData, switchMetric.checked, viewState.worldMap);
+            drawWorldMapChart(
+                mapData, switchMetric.checked, switchStage.checked,
+                viewState.worldMap
+            );
             drawTimeSeries(timeseriesData, '#timeSeries', switchMetric.checked, switchStage.checked);
             drawHeatMap(heatData, switchMetric.checked, switchStage.checked, ancestriesData, viewState.heatMap);
             drawDoughnutGraph("#doughnutGraph", doughnutData, switchMetric.checked, switchStage.checked, viewState.doughnut);
@@ -658,6 +750,7 @@
             } else {
                 var box = $('.only-stage');
                 drawBubbleGraph("#bubbleGraph", bubbleData, switchStage.checked, true);
+				prefetchComplementaryFilterOptions();
             }
             highlight(both);
             highlight(box);

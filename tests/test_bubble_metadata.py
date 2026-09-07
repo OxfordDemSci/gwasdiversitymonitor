@@ -60,6 +60,56 @@ class BubbleMetadataGenerationTests(unittest.TestCase):
             )
             self.assertEqual(bubbles.loc[0, "JOURNAL"], "Example Journal")
 
+    def test_bubble_rows_use_mapped_trait_when_study_text_is_new(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "catalog" / "raw").mkdir(parents=True)
+            (root / "catalog" / "synthetic").mkdir(parents=True)
+            (root / "summary").mkdir()
+            (root / "toplot").mkdir()
+
+            pd.DataFrame([{
+                "STUDY ACCESSION": "GCST000002",
+                "DISEASE/TRAIT": "Study-specific protein description",
+                "MAPPED_TRAIT": "Blood protein amount",
+                "MAPPED_TRAIT_URI": "http://example.org/efo_1",
+                "COHORT": "MGBB",
+                "JOURNAL": "Example Journal",
+            }]).to_csv(
+                root / "catalog" / "raw" / "Cat_Stud.tsv",
+                sep="\t", index=False,
+            )
+            pd.DataFrame([{
+                "Disease trait": "Different catalog wording",
+                "EFO term": "blood protein amount",
+                "EFO URI": "http://example.org/efo_1",
+                "Parent term": "Other measurement",
+            }]).to_csv(
+                root / "catalog" / "raw" / "Cat_Map.tsv",
+                sep="\t", index=False,
+            )
+            pd.DataFrame([{
+                "STUDY ACCESSION": "GCST000002",
+                "PUBMEDID": "41310232",
+                "FIRST AUTHOR": "Example A",
+                "DATE": "2025-11-27",
+                "STAGE": "initial",
+                "N": 500,
+                "Broader": "Other/Mixed",
+            }]).to_csv(
+                root / "catalog" / "synthetic" / "Cat_Anc_wBroader.tsv",
+                sep="\t", index=False,
+            )
+
+            with mock.patch.object(
+                generate_data, "diversity_logger", mock.Mock(), create=True
+            ):
+                generate_data.make_bubbleplot_df(str(root))
+            bubbles = pd.read_csv(root / "toplot" / "bubble_df.csv")
+
+            self.assertEqual(len(bubbles), 1)
+            self.assertEqual(bubbles.loc[0, "parentterm"], "Other measurement")
+
     def test_loader_uses_column_names_and_preserves_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

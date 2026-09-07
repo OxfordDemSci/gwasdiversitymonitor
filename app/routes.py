@@ -151,7 +151,7 @@ def getFilterFunders():
     stage = (request.args.get("stage") or "").strip()
     page = max(request.args.get("page", default=1, type=int), 1)
     page_size = 50
-    complete_list = not cohort_ids and stage.casefold() in {
+    complete_list = len(cohort_ids) <= 1 and stage.casefold() in {
         "initial", "discovery", "replication",
     }
     with DataLoader.published_data_lock() as published_path:
@@ -188,7 +188,7 @@ def getFilterDatasets():
     stage = (request.args.get("stage") or "").strip()
     page = max(request.args.get("page", default=1, type=int), 1)
     page_size = 50
-    complete_list = not funder_slugs and stage.casefold() in {
+    complete_list = len(funder_slugs) <= 1 and stage.casefold() in {
         "initial", "discovery", "replication",
     }
     with DataLoader.published_data_lock() as published_path:

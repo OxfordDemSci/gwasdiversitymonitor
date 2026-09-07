@@ -106,24 +106,33 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
 
     // Functions changing dates
     window.dgpreviousYear = function() {
-        currentYear--;
-        drawDgOnYearChange();
+        moveYear(-1);
     };
 
     window.dgnextYear = function() {
-        currentYear++;
-        drawDgOnYearChange();
+        moveYear(1);
     };
 
     window.dgfirstYear = function() {
+        if (!dataKeys.length) return;
         currentYear = dataKeys[0];
         drawDgOnYearChange();
     };
 
     window.dglastestYear = function() {
+        if (!dataKeys.length) return;
         currentYear = dataKeys[dataKeys.length-1];
         drawDgOnYearChange();
     };
+
+    function moveYear(offset) {
+        if (!dataKeys.length) return;
+        let currentIndex = dataKeys.indexOf(String(currentYear));
+        if (currentIndex === -1) currentIndex = dataKeys.length - 1;
+        let nextIndex = Math.max(0, Math.min(dataKeys.length - 1, currentIndex + offset));
+        currentYear = dataKeys[nextIndex];
+        drawDgOnYearChange();
+    }
 
     $('#doughnutGraph').find(".filter select[name='parentTerms']").change(function(e) {
         selected = $(this).find('option:selected');
@@ -143,6 +152,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
             parentTerm = 'All';
         }
 
+        updateAvailableYears(parentTerm, currentYear);
         drawDoughnutPerYearPerAncestry(specificData, currentYear, parentTerm);
 
         if (associationSwitch.checked) {
@@ -337,7 +347,12 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
     }
 
     function drawDoughnutAssociation(dataByType, currentYear, parentTerm) {
-        let val = dataByType[currentYear][parentTerm];
+        let yearData = dataByType && currentYear !== undefined ? dataByType[currentYear] : null;
+        let val = yearData && yearData[parentTerm] ? yearData[parentTerm] : {};
+
+        d3.selectAll('.doughnutPartAssociation').remove();
+        if (!Object.keys(val).length) return;
+
         // The radius of the pieplot is half the width or half the height (smallest one). I subtract a bit of margin.
         let radius = Math.min(width, height) / 3 - margin;
         // set the color scale
@@ -488,15 +503,38 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
     }
 
 
+    function doughnutValues(dataByType, year, parentTerm) {
+        let yearData = dataByType && year !== undefined ? dataByType[year] : null;
+        return yearData && yearData[parentTerm] ? yearData[parentTerm] : {};
+    }
+
+    function hasDoughnutData(values) {
+        return Object.keys(values || {}).some(function(key) {
+            let value = Number(values[key] && values[key].value);
+            return Number.isFinite(value) && value > 0;
+        });
+    }
+
+    function updateAvailableYears(parentTerm, preferredYear) {
+        dataKeys = Object.keys(specificData || {})
+            .filter(function(year) {
+                return hasDoughnutData(
+                    doughnutValues(specificData, year, parentTerm)
+                );
+            })
+            .sort(function(a, b) { return Number(a) - Number(b); });
+        currentYear = preferredYear &&
+                dataKeys.indexOf(String(preferredYear)) !== -1 ?
+            String(preferredYear) :
+            dataKeys[dataKeys.length - 1];
+    }
+
     function specificDataGraph(type) {
-        specificData = data[type];
-        dataKeys = Object.keys(specificData);
-        currentYear = requestedYear && dataKeys.indexOf(requestedYear) !== -1 ?
-            requestedYear :
-            dataKeys[dataKeys.length-1];
+        specificData = data && data[type] ? data[type] : {};
 
         var parentTerm = selected && selected.length ? selected[0].label : 'All parent terms';
         if (parentTerm === 'All parent terms') parentTerm = 'All';
+        updateAvailableYears(parentTerm, requestedYear);
 
         drawDoughnutPerYearPerAncestry(specificData, currentYear, parentTerm);
         if (associationSwitch.checked) {
@@ -508,23 +546,34 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
      * @return {boolean}
      */
     function IsAllPropertiesNull(obj) {
-        let values = Object.keys(obj).map(function(e) {
-            return obj[e]
-        });
-        return values.every(function(v) { return v.value === ""; });
+        return !hasDoughnutData(obj);
     }
 
     function drawDoughnutPerYearPerAncestry(dataByType, currentYear, parentTerm) {
-        let val = dataByType[currentYear][parentTerm];
+        let val = doughnutValues(dataByType, currentYear, parentTerm);
 
         noDataSpan = document.querySelector('.doughnut-graph-no-data');
         noDataSpan.innerText = '';
 
         associationSwitch.checked ? noDataSpan.classList.add('associations') : noDataSpan.classList.remove('associations');
 
+        let doughnutParts = document.querySelectorAll('.doughnutPart');
+        if (doughnutParts && doughnutParts.length > 0) {
+            for (let i=0; i < doughnutParts.length; i++) {
+                doughnutParts[i].parentNode.removeChild(doughnutParts[i]);
+            }
+        }
+        d3.select('#doughnutSVG .doughnut-legend').remove();
+
         let isAllNull = IsAllPropertiesNull(val);
-        if (isAllNull) {
-            noDataSpan.innerText = 'No data found for '+parentTerm+' in '+currentYear;
+        if (!currentYear || isAllNull) {
+            noDataSpan.innerText = currentYear ?
+                'No data found for '+parentTerm+' in '+currentYear :
+                'No data for this selection';
+            dateSpan.innerHTML = currentYear || 'No data';
+            for (let i = 0; i < nextButtons.length; i++) nextButtons[i].disabled = true;
+            for (let i = 0; i < previousButtons.length; i++) previousButtons[i].disabled = true;
+            return;
         }
 
         // The radius of the pieplot is half the width or half the height (smallest one). I subtract a bit of margin.
@@ -535,14 +584,15 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
             .domain(val)
             .range(["#ed7892", "#5fabdd", "#f59c44", "#fece59", "#c190c1", "#54bdbe"]);
 
-        if (currentYear >= dataKeys[dataKeys.length-1]) {
+        let currentIndex = dataKeys.indexOf(String(currentYear));
+        if (currentIndex >= dataKeys.length - 1) {
             for (let i = 0; i < nextButtons.length; i++) {
                 nextButtons[i].disabled = true;
             }
             for (let i = 0; i < previousButtons.length; i++) {
                 previousButtons[i].disabled = false;
             }
-        } else if (currentYear <= dataKeys[0]) {
+        } else if (currentIndex <= 0) {
             for (let i = 0; i < previousButtons.length; i++) {
                 previousButtons[i].disabled = true;
             }
@@ -564,13 +614,6 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
         let pie = d3.pie()
             .value(function(d) { return d.value.value; });
         let data_ready = pie(d3.entries(val));
-
-        let doughnutParts = document.querySelectorAll('.doughnutPart');
-        if (doughnutParts && doughnutParts.length > 0) {
-            for (let i=0; i < doughnutParts.length; i++) {
-                doughnutParts[i].parentNode.removeChild(doughnutParts[i]);
-            }
-        }
 
         // Build the pie chart: Basically, each part of the pie is a path that we build using the arc function.
         svg.selectAll('.doughnutPart')
@@ -599,7 +642,6 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
                     .style("opacity", 0);
             });
 
-        d3.select('#doughnutSVG .doughnut-legend').remove();
         legend = d3.select('#doughnutSVG').append('g')
             .attr('class', 'doughnut-legend');
 

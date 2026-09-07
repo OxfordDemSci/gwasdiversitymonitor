@@ -2926,14 +2926,41 @@ button, .btn {
       align-items: center;
       -webkit-flex-wrap: wrap;
       -ms-flex-wrap: wrap;
-      flex-wrap: wrap; }
+      flex-wrap: wrap;
+      position: relative; }
+    .funder-toolbar__field .select2-container--default.has-filter-values .select2-selection__rendered {
+      padding-right: 28px; }
+    .funder-toolbar__field .select2-selection__clear {
+      position: absolute;
+      z-index: 1;
+      top: 50%;
+      right: 6px;
+      margin: 0;
+      line-height: 1;
+      -webkit-transform: translateY(-50%);
+      -moz-transform: translateY(-50%);
+      -ms-transform: translateY(-50%);
+      -o-transform: translateY(-50%);
+      transform: translateY(-50%); }
     .funder-toolbar__field .select2-selection__choice {
-      max-width: calc(100% - 24px);
+      min-width: 0;
+      max-width: calc(100% - 20px);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap; }
     .funder-toolbar__field .select2-container--default .select2-search--inline {
       float: none;
+      -webkit-box-flex: 0;
+      -webkit-flex: 1 1 100%;
+      -moz-box-flex: 0;
+      -moz-flex: 1 1 100%;
+      -ms-flex: 1 1 100%;
+      flex: 1 1 100%;
+      width: 100%; }
+      .funder-toolbar__field .select2-container--default .select2-search--inline .select2-search__field {
+        width: 100% !important;
+        margin-left: 0; }
+    .funder-toolbar__field .select2-container--default.has-filter-values:not(.select2-container--open) .select2-search--inline {
       -webkit-box-flex: 0;
       -webkit-flex: 0 0 12px;
       -moz-box-flex: 0;
@@ -2942,9 +2969,8 @@ button, .btn {
       flex: 0 0 12px;
       width: 12px;
       overflow: hidden; }
-      .funder-toolbar__field .select2-container--default .select2-search--inline .select2-search__field {
-        width: 12px !important;
-        margin-left: 0; }
+      .funder-toolbar__field .select2-container--default.has-filter-values:not(.select2-container--open) .select2-search--inline .select2-search__field {
+        width: 12px !important; }
     .funder-toolbar__field .select2-container--default.select2-container--open .select2-search--inline {
       -webkit-flex-basis: 100%;
       -moz-flex-basis: 100%;

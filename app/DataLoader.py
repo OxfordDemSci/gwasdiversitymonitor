@@ -293,31 +293,27 @@ class DataLoader:
         return data
 
     def getChloroMap(self):
-        data = {}
+        data = {'initial': {}, 'replication': {}}
         with open(self._path('toplot', 'choro_df.csv'), newline='') as csv_file:
-            csv_reader = csv.reader(csv_file)
-            next(csv_reader, None)  # skip header
-
-            current_year = None
-            i = 0
+            csv_reader = csv.DictReader(csv_file)
+            has_stage = 'Stage' in (csv_reader.fieldnames or [])
+            legacy_data = {}
             for row in csv_reader:
-                year = row[3]  # string is fine; be consistent
-
-                if year != current_year:
-                    current_year = year
-                    data.setdefault(current_year, {})
-                    i = 0
-
-                data[current_year][i] = {
-                    'country': row[0],
-                    'population': row[5],
-                    'studies': row[2],
-                    'studiesPercentage': row[6],
-                    'participants': row[1],
-                    'participantsPercentage': row[7],
+                year = row['Year']
+                stage = str(row.get('Stage', '')).strip().casefold()
+                target = data.setdefault(stage, {}) if has_stage \
+                    else legacy_data
+                year_rows = target.setdefault(year, {})
+                index = len(year_rows)
+                year_rows[index] = {
+                    'country': row['Cleaned Country'],
+                    'population': row['2017population'],
+                    'studies': row['Count'],
+                    'studiesPercentage': row['Count (%)'],
+                    'participants': row['N'],
+                    'participantsPercentage': row['N (%)'],
                 }
-                i += 1
-        return data
+        return data if has_stage else legacy_data
 
     def getTSPlot(self):
         return {

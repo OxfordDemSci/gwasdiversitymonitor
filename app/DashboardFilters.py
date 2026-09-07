@@ -15,7 +15,7 @@ import pandas as pd
 import funder_pipeline
 
 
-FILTER_SCHEMA_VERSION = 5
+FILTER_SCHEMA_VERSION = 7
 PRECOMPUTED_FILTER_ARCHIVE = os.path.join(
     "filter-cache", "individual-dashboards.zip"
 )
@@ -27,6 +27,9 @@ PRECOMPUTED_FILTER_OPTION_MEMBERS = {
     ("cohorts", "replication"): "options/cohorts-replication.json",
 }
 COHORT_CLEANER_FILE = os.path.join("support", "cohort_cleaner.json")
+COHORT_NORMALIZATION_AUDIT_FILE = os.path.join(
+    "support", "cohort-normalization-audit.json"
+)
 BUBBLE_PAYLOAD_ROW_LIMIT = 5000
 
 
@@ -105,6 +108,7 @@ class DashboardFilterStore:
         self.data_path = os.path.abspath(data_path)
         self._lock = threading.RLock()
         self._sources = None
+        self._parent_term_lookups = None
         self._source_indexes = None
         self._facet_studies = None
         self._all_accessions = None
@@ -225,6 +229,50 @@ class DashboardFilterStore:
                 or not os.path.isfile(self._precomputed_archive):
             return None
         cache_key = (kind, stage)
+        with self._lock:
+            cached = self._precomputed_options.get(cache_key)
+            if cached is not None:
+                return cached
+        try:
+            with zipfile.ZipFile(self._precomputed_archive) as archive:
+                payload = json.loads(archive.read(member))
+            if payload.get("version") != FILTER_SCHEMA_VERSION \
+                    or not isinstance(payload.get("entries"), list):
+                return None
+            entries = tuple(payload["entries"])
+        except (KeyError, OSError, TypeError, ValueError,
+                zipfile.BadZipFile, json.JSONDecodeError):
+            return None
+        with self._lock:
+            self._precomputed_options[cache_key] = entries
+        return entries
+
+    @staticmethod
+    def _precomputed_conditional_option_member(kind, stage, opposite_id):
+        stage = DashboardFilterStore._normalise_stage(stage)
+        if kind not in ("funders", "cohorts") or not stage:
+            return None
+        opposite_id = str(opposite_id or "").strip()
+        if not re.fullmatch(r"[a-z0-9._-]+", opposite_id):
+            return None
+        opposite_kind = "cohort" if kind == "funders" else "funder"
+        return (
+            f"options/{kind}-by-{opposite_kind}/{stage}/"
+            f"{opposite_id}.json"
+        )
+
+    def _load_precomputed_conditional_options(
+            self, kind, stage, opposite_ids):
+        opposite_ids = _selection_ids(opposite_ids)
+        if len(opposite_ids) != 1 or not self._precomputed_archive \
+                or not os.path.isfile(self._precomputed_archive):
+            return None
+        member = self._precomputed_conditional_option_member(
+            kind, stage, opposite_ids[0]
+        )
+        if not member:
+            return None
+        cache_key = (kind, self._normalise_stage(stage), opposite_ids[0])
         with self._lock:
             cached = self._precomputed_options.get(cache_key)
             if cached is not None:
@@ -447,6 +495,12 @@ class DashboardFilterStore:
         with self._lock:
             if self._sources is None:
                 self._sources = funder_pipeline._load_sources(self.data_path)
+            if self._parent_term_lookups is None:
+                self._parent_term_lookups = (
+                    funder_pipeline.build_parent_term_lookups(
+                        self._sources[2]
+                    )
+                )
             if self._source_indexes is not None:
                 return
 
@@ -694,6 +748,17 @@ class DashboardFilterStore:
                     or needle in normalize_cohort_name(entry["name"])
                     or needle in entry["id"].casefold()
                 ]
+        if len(funder_slugs) == 1 and stage_name:
+            precomputed = self._load_precomputed_conditional_options(
+                "cohorts", stage_name, funder_slugs
+            )
+            if precomputed is not None:
+                return [
+                    entry.copy() for entry in precomputed
+                    if not needle
+                    or needle in normalize_cohort_name(entry["name"])
+                    or needle in entry["id"].casefold()
+                ]
         self._ensure_dataset_index()
         if not funder_slugs and not stage_name:
             results = [
@@ -743,6 +808,17 @@ class DashboardFilterStore:
         if not cohort_ids and stage_name:
             precomputed = self._load_precomputed_options(
                 "funders", stage_name
+            )
+            if precomputed is not None:
+                return [
+                    entry.copy() for entry in precomputed
+                    if not needle
+                    or needle in entry["name"].casefold()
+                    or needle in entry["slug"].casefold()
+                ]
+        if len(cohort_ids) == 1 and stage_name:
+            precomputed = self._load_precomputed_conditional_options(
+                "funders", stage_name, cohort_ids
             )
             if precomputed is not None:
                 return [
@@ -857,7 +933,7 @@ class DashboardFilterStore:
             studies["STUDY ACCESSION"].dropna().astype(str)
         )
         study_parent_map = funder_pipeline.build_study_parent_map(
-            studies, mappings
+            studies, parent_lookups=self._parent_term_lookups
         )
         merged = study_parent_map.merge(
             ancestry, how="inner", on="STUDY ACCESSION"
@@ -1044,6 +1120,72 @@ class DashboardFilterStore:
         return path
 
 
+def build_cohort_normalization_audit(data_path="data", studies=None):
+    """Persist observed cohort merges for review after every refresh."""
+    data_path = os.path.abspath(data_path)
+    if studies is None:
+        studies = pd.read_csv(
+            os.path.join(data_path, "catalog", "raw", "Cat_Stud.tsv"),
+            sep="\t", dtype=str,
+            usecols=["STUDY ACCESSION", "COHORT"],
+        )
+    cleaner = load_cohort_cleaner(data_path)
+    canonical_variants = defaultdict(lambda: defaultdict(set))
+    source_variants = defaultdict(lambda: defaultdict(set))
+    for accession, cohort_value in studies[
+            ["STUDY ACCESSION", "COHORT"]
+    ].itertuples(index=False, name=None):
+        if pd.isna(accession):
+            continue
+        for source in split_cohorts(cohort_value):
+            canonical = canonical_cohort_name(source, cleaner)
+            identity = normalize_cohort_name(canonical)
+            if identity:
+                canonical_variants[identity][canonical].add(str(accession))
+                source_variants[identity][source].add(str(accession))
+
+    merged_groups = []
+    for identity, sources in source_variants.items():
+        canonical = sorted(
+            canonical_variants[identity],
+            key=lambda value: (
+                -len(canonical_variants[identity][value]),
+                value.casefold(), value,
+            ),
+        )[0]
+        source_names = sorted(sources, key=str.casefold)
+        if len(source_names) > 1 or source_names[0] != canonical:
+            merged_groups.append({
+                "canonical": canonical,
+                "sourceNames": source_names,
+                "studyCount": len(frozenset().union(*sources.values())),
+            })
+    merged_groups.sort(
+        key=lambda entry: (
+            -entry["studyCount"], entry["canonical"].casefold()
+        )
+    )
+    audit = {
+        "version": 1,
+        "generatedAt": datetime.datetime.now(
+            datetime.timezone.utc
+        ).isoformat(),
+        "method": (
+            "Unicode/whitespace normalization, case-insensitive exact "
+            "matching, and reviewed aliases only; no fuzzy merging"
+        ),
+        "sourceNameCount": sum(
+            len(sources) for sources in source_variants.values()
+        ),
+        "canonicalNameCount": len(source_variants),
+        "mergedGroups": merged_groups,
+    }
+    DashboardFilterStore._atomic_json(
+        os.path.join(data_path, COHORT_NORMALIZATION_AUDIT_FILE), audit
+    )
+    return audit
+
+
 def build_precomputed_filter_archive(data_path="data", output_path=None,
                                      progress=None, limit=None):
     """Prepare compact dashboards for every individual cohort and funder."""
@@ -1053,6 +1195,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
     )
     store = DashboardFilterStore(data_path, use_precomputed=False)
     store.warm()
+    build_cohort_normalization_audit(data_path, store._facet_studies)
 
     selections = [
         ("funders", slug, (), (slug,))
@@ -1072,6 +1215,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
     os.close(descriptor)
     members = []
     option_members = []
+    conditional_option_members = []
     try:
         with zipfile.ZipFile(
                 temporary, "w", compression=zipfile.ZIP_DEFLATED,
@@ -1089,6 +1233,34 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                 }, separators=(",", ":")))
                 option_members.append(member)
                 members.append(member)
+
+            conditional_builders = (
+                (
+                    "cohorts", store._funder_entries,
+                    lambda identifier, selected_stage: store.cohorts(
+                        "", (identifier,), selected_stage
+                    ),
+                ),
+                (
+                    "funders",
+                    (entry["id"] for entry in store._dataset_entries),
+                    lambda identifier, selected_stage: store.funders(
+                        "", (identifier,), selected_stage
+                    ),
+                ),
+            )
+            for kind, identifiers, builder in conditional_builders:
+                for identifier in identifiers:
+                    for stage in ("initial", "replication"):
+                        member = store._precomputed_conditional_option_member(
+                            kind, stage, identifier
+                        )
+                        archive.writestr(member, json.dumps({
+                            "version": FILTER_SCHEMA_VERSION,
+                            "entries": builder(identifier, stage),
+                        }, separators=(",", ":")))
+                        conditional_option_members.append(member)
+                        members.append(member)
 
             total = len(selections)
             for number, (kind, identifier, cohorts, funders) in enumerate(
@@ -1114,7 +1286,10 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                 "cohortCount": sum(
                     member.startswith("cohorts/") for member in members
                 ),
+                "selectorFunderCount": len(store._funder_entries),
+                "selectorCohortCount": len(store._dataset_entries),
                 "optionMembers": option_members,
+                "conditionalOptionMembers": conditional_option_members,
                 "members": members,
             }, separators=(",", ":")))
         os.replace(temporary, output)
@@ -1135,9 +1310,13 @@ def validate_precomputed_filter_archive(data_path="data", path=None):
         manifest = json.loads(archive.read(PRECOMPUTED_FILTER_MANIFEST))
         members = manifest.get("members")
         option_members = manifest.get("optionMembers")
+        conditional_option_members = manifest.get(
+            "conditionalOptionMembers"
+        )
         if manifest.get("version") != FILTER_SCHEMA_VERSION \
                 or not isinstance(members, list) \
-                or not isinstance(option_members, list):
+                or not isinstance(option_members, list) \
+                or not isinstance(conditional_option_members, list):
             raise ValueError("The precomputed filter manifest is invalid")
         expected_option_members = set(
             PRECOMPUTED_FILTER_OPTION_MEMBERS.values()
@@ -1145,6 +1324,24 @@ def validate_precomputed_filter_archive(data_path="data", path=None):
         if set(option_members) != expected_option_members \
                 or not expected_option_members.issubset(members):
             raise ValueError("The precomputed filter options differ")
+        if not conditional_option_members \
+                or len(set(conditional_option_members)) != len(
+                    conditional_option_members
+                ) \
+                or not set(conditional_option_members).issubset(members):
+            raise ValueError(
+                "The precomputed conditional filter options differ"
+            )
+        selector_funder_count = manifest.get("selectorFunderCount")
+        selector_cohort_count = manifest.get("selectorCohortCount")
+        expected_conditional_count = 2 * (
+            selector_funder_count + selector_cohort_count
+        ) if isinstance(selector_funder_count, int) \
+            and isinstance(selector_cohort_count, int) else -1
+        if len(conditional_option_members) != expected_conditional_count:
+            raise ValueError(
+                "The precomputed conditional filter option count differs"
+            )
         expected = set(members) | {PRECOMPUTED_FILTER_MANIFEST}
         if len(expected) != len(members) + 1 \
                 or set(archive.namelist()) != expected:
@@ -1153,6 +1350,11 @@ def validate_precomputed_filter_archive(data_path="data", path=None):
                 re.fullmatch(
                     r"(?:funders|cohorts)/[a-z0-9._-]+\.json", member
                 ) or member in expected_option_members
+                or re.fullmatch(
+                    r"options/(?:funders-by-cohort|cohorts-by-funder)/"
+                    r"(?:initial|replication)/[a-z0-9._-]+\.json",
+                    member,
+                )
                 ) for member in members):
             raise ValueError("The precomputed filter archive has unsafe names")
         if manifest.get("funderCount") != sum(
@@ -1166,6 +1368,13 @@ def validate_precomputed_filter_archive(data_path="data", path=None):
             if payload.get("version") != FILTER_SCHEMA_VERSION \
                     or not isinstance(payload.get("entries"), list):
                 raise ValueError("The precomputed filter options are invalid")
+        for member in conditional_option_members:
+            payload = json.loads(archive.read(member))
+            if payload.get("version") != FILTER_SCHEMA_VERSION \
+                    or not isinstance(payload.get("entries"), list):
+                raise ValueError(
+                    "The precomputed conditional filter options are invalid"
+                )
     return manifest
 
 
