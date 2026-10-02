@@ -67,6 +67,7 @@ function drawTimeSeries(json, id, studies, replication) {
         var data = filterRecord(json, recordFilter, studies, replication);
         filterAncestries(data, ancestriesFilter);
         redrawTimeSeries(data, svg, width, height, tickMax, xScale);
+        if (window.gwasChartData) window.gwasChartData.changed('timeSeries');
     });
 
     // Global Metric/Stage changes redraw this chart centrally. Do not clear its
@@ -89,6 +90,46 @@ function drawTimeSeries(json, id, studies, replication) {
     });
 
     bindImageDownload('#time-series-controls', selector, svg_id);
+
+    if (window.gwasChartData) window.gwasChartData.register('timeSeries', function() {
+        var snapshot = filterRecord(json, recordFilter, studies, replication);
+        filterAncestries(snapshot, ancestriesFilter);
+        var rows = [];
+        Object.keys(snapshot).forEach(function(ancestry) {
+            Object.keys(snapshot[ancestry]).forEach(function(key) {
+                var row = snapshot[ancestry][key];
+                rows.push({year: Number(row.year), ancestry: ancestry, percentage: Number(row.value)});
+            });
+        });
+        var includesNotRecorded = recordFilter[0].checked;
+        var ancestryFilter = ancestriesFilter.find('option:selected').attr('name') || 'all';
+        return {
+            id: 'timeSeries',
+            title: 'Ancestry proportions over time',
+            columns: [
+                {key: 'year', label: 'Publication year', type: 'number'},
+                {key: 'ancestry', label: 'Ancestry', type: 'text'},
+                {key: 'percentage', label: 'Share (%)', type: 'number'}
+            ],
+            rowCount: rows.length,
+            rowAt: function(index) { return rows[index]; },
+            settings: {
+                stage: replication ? 'replication' : 'initial',
+                metric: studies ? 'studies' : 'participants',
+                ancestry: ancestryFilter,
+                includeNotRecorded: includesNotRecorded,
+                parentTerm: 'all',
+                years: 'all available publication years'
+            },
+            methodology: [
+                studies ? 'The study metric counts ancestry records, not distinct study accessions.' :
+                    'Participant instances are not deduplicated people.',
+                includesNotRecorded ? 'The Include not recorded option selects the supplied not-recorded series; legacy entity-filtered artifacts may still omit unrecorded ancestry from its denominator. This export preserves the displayed values without recomputing them.' :
+                    'The Include not recorded option is off; values come from the supplied recorded-ancestry series.',
+                'Selecting an ancestry hides other lines without recalculating the annual denominator. Percentages retain the precision supplied to the chart.'
+            ]
+        };
+    });
 }
 
 function addGrid(svg, width, tickMax, yAxis) {

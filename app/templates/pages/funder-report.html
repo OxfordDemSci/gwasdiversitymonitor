@@ -303,6 +303,22 @@
         <strong>About this report</strong>
         <span>{{ report_note }} Counts can overlap where a study reports multiple cohorts,
         technologies, ancestries, traits, or recruitment countries.</span>
+        {% if export_provenance is defined %}
+        <p>{{ export_scope }}</p>
+        <p><strong>Dataset:</strong> {{ export_provenance.datasetId or 'Not recorded' }}<br>
+            <strong>Catalog release:</strong> {{ export_provenance.catalogReleaseDate or 'Not recorded' }}<br>
+            <strong>Generated:</strong> {{ export_provenance.generatedAt or 'Not recorded' }}</p>
+        <p>{{ monitor_citation }}</p>
+        <p>{{ software_citation }}</p>
+        {% if export_view is defined and export_view %}
+        <details>
+            <summary>Requested dashboard view settings (context only)</summary>
+            <p>These chart-specific settings do not restrict the calculations in this entity report.
+                Use Export view for data matching those charts exactly.</p>
+            <pre style="white-space: pre-wrap; overflow-wrap: anywhere;">{{ export_view|tojson(indent=2) }}</pre>
+        </details>
+        {% endif %}
+        {% endif %}
     </footer>
             </td>
         </tr>

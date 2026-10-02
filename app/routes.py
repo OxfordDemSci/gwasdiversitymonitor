@@ -19,6 +19,7 @@ import json
 from app.Comparison import MAX_COMPARISON_BYTES, build_comparison, validate_comparison
 from app.Provenance import (
     provenance_for_release, published_provenance, valid_dataset_id,
+    MONITOR_CITATION, SOFTWARE_CITATION, SOURCE_EXPORT_SCOPE,
 )
 
 
@@ -391,6 +392,7 @@ def getFilteredDashboardDownload():
 def getFilteredDashboardReport():
     cohort_ids = _filter_query_values("cohorts", "dataset")
     funder_slugs = _filter_query_values("funders", "funder")
+    export_view = _report_view_context(cohort_ids, funder_slugs)
     if not cohort_ids and not funder_slugs:
         abort(400)
     with DataLoader.published_data_lock() as published_path:
@@ -436,7 +438,48 @@ def getFilteredDashboardReport():
             report=report,
             download_url=download_url,
             report_note=report_note,
+            export_provenance=published_provenance(published_path),
+            export_view=export_view,
+            export_scope=SOURCE_EXPORT_SCOPE,
+            monitor_citation=MONITOR_CITATION,
+            software_citation=SOFTWARE_CITATION,
         )
+
+
+def _report_view_context(cohort_ids, funder_slugs):
+    raw = request.args.get("viewState")
+    if raw is None:
+        return None
+    try:
+        if len(raw.encode("utf-8")) > 4096:
+            abort(400)
+        value = json.loads(raw)
+        if not isinstance(value, dict) or set(value) - {
+                "version", "metric", "stage", "funders", "cohorts", "heatMap",
+                "worldMap", "doughnut", "timeSeries", "bubble"}:
+            abort(400)
+        if sorted(value.get("cohorts", [])) != sorted(cohort_ids) \
+                or sorted(value.get("funders", [])) != sorted(funder_slugs):
+            abort(400)
+        def bounded(item, depth=0):
+            if depth > 5:
+                return False
+            if isinstance(item, dict):
+                return len(item) <= 30 and all(
+                    isinstance(key, str) and len(key) <= 100 and bounded(child, depth + 1)
+                    for key, child in item.items()
+                )
+            if isinstance(item, list):
+                return len(item) <= 50 and all(bounded(child, depth + 1) for child in item)
+            if isinstance(item, str):
+                return len(item) <= 500 and not any(ord(char) < 32 for char in item)
+            return item is None or type(item) in (bool, int, float)
+        if not bounded(value):
+            abort(400)
+        json.dumps(value, allow_nan=False)
+        return value
+    except (ValueError, TypeError, UnicodeError, RecursionError):
+        abort(400)
 
 
 @app.route("/json/funders/<slug>.json")
@@ -492,6 +535,10 @@ def getFunderReport(slug):
                 "may not capture every source of support acknowledged by "
                 "each publication."
             ),
+            export_provenance=published_provenance(published_path),
+            export_scope=SOURCE_EXPORT_SCOPE,
+            monitor_citation=MONITOR_CITATION,
+            software_citation=SOFTWARE_CITATION,
         )
 
 

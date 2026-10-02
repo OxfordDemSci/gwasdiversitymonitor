@@ -65,6 +65,7 @@
         }
 
         function invalidate() {
+            if (window.gwasChartData) window.gwasChartData.invalidate('comparison');
             cancelPending();
             closeDropdowns();
             results.hidden = true;
@@ -252,6 +253,37 @@
                 'Shared between A and B: ' + number(data.overlap.studyCount) + ' distinct studies and '
                 + number(data.overlap.publicationCount) + ' distinct publications.';
             results.hidden = false;
+            if (window.gwasChartData) {
+                const captured = data;
+                window.gwasChartData.register('comparison', function() {
+                    const sides = ['left', 'right'];
+                    const count = captured.left.ancestries.length;
+                    return {
+                        id: 'comparison', title: 'Side-by-side comparison',
+                        columns: [
+                            {key: 'side', label: 'Side', type: 'text'},
+                            {key: 'selection', label: 'Selection', type: 'text'},
+                            {key: 'ancestry', label: 'Ancestry', type: 'text'},
+                            {key: 'count', label: 'Count', type: 'number'},
+                            {key: 'percentage', label: 'Share (%)', type: 'number'},
+                            {key: 'denominator', label: 'Recorded-ancestry denominator', type: 'number'}
+                        ],
+                        rowCount: count * 2,
+                        rowAt: function(index) {
+                            const side = captured[sides[Math.floor(index / count)]];
+                            const entry = side.ancestries[index % count];
+                            return {side: index < count ? 'A' : 'B', selection: side.label, ancestry: entry.name, count: entry.count,
+                                percentage: entry.percentage, denominator: side.denominator};
+                        },
+                        settings: {comparison: captured.settings, overlap: captured.overlap,
+                            left: Object.assign({}, captured.left, {ancestries: undefined}),
+                            right: Object.assign({}, captured.right, {ancestries: undefined})},
+                        methodology: [captured.methodology.denominator, captured.methodology.note,
+                            captured.methodology.dateBasis,
+                            'Selections use full counting and can overlap. Participant instances are not unique people; unique-person overlap cannot be estimated.']
+                    };
+                });
+            }
         }
 
         opener.addEventListener('click', function() {
@@ -277,6 +309,7 @@
 
         form.addEventListener('submit', async function(event) {
             event.preventDefault();
+            if (window.gwasChartData) window.gwasChartData.invalidate('comparison');
             cancelPending();
             closeDropdowns();
             clearError();

@@ -88,12 +88,13 @@
                     class="funder-toolbar__action" title="Copy a link to this dashboard view">
                 <span>Copy link</span>
             </button>
-            <a id="funder-data-download"
-               class="funder-toolbar__action funder-toolbar__action--primary is-disabled"
-               aria-disabled="true" title="Download selected data">
+            <button id="dashboard-export-open" type="button" data-gwas-export
+               class="funder-toolbar__action funder-toolbar__action--primary"
+               disabled aria-haspopup="dialog" aria-controls="dashboard-export-dialog"
+               title="Download this view with dataset provenance">
                 <i class="icon-download-data" aria-hidden="true"></i>
-                <span>Download data</span>
-            </a>
+                <span>Export view</span>
+            </button>
             <a id="funder-report-link"
                class="funder-toolbar__action is-disabled"
                aria-disabled="true" title="Open selection report">

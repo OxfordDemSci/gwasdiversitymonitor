@@ -179,30 +179,6 @@ function __dcDiseaseClean(d) {
     return d.__DiseaseOrTraitClean || String(d.DiseaseOrTrait || "").replace('>', 'more than').replace('<', 'less than');
 }
 
-function __dcCsvEscape(value) {
-    if (value === undefined || value === null) return "";
-
-    var text = String(value);
-    if (/[",\r\n]/.test(text)) {
-        return '"' + text.replace(/"/g, '""') + '"';
-    }
-
-    return text;
-}
-
-function __dcDownloadText(filename, text, mimeType) {
-    var blob = new Blob([text], { type: mimeType || "text/plain;charset=utf-8" });
-    var url = URL.createObjectURL(blob);
-    var link = document.createElement("a");
-
-    link.href = url;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-}
-
 function __dcBubbleCsvValue(row, column) {
     if (column === "cssclassname") return __dcClass(row);
     if (column === "trait") return __dcTrait(row);
@@ -210,25 +186,6 @@ function __dcBubbleCsvValue(row, column) {
     if (column === "DiseaseOrTrait") return __dcDiseaseClean(row);
 
     return row[column];
-}
-
-function __dcDownloadBubbleCsv() {
-    var state = window.__bubbleCanvasState;
-    var points = state && state.points ? state.points : [];
-    var columns = ["", "Broader", "N", "PUBMEDID", "AUTHOR", "parentterm", "STAGE", "DATE", "ACCESSION", "DiseaseOrTrait", "COHORT", "JOURNAL", "FUNDER", "cssclassname", "trait"];
-    var lines = [columns.map(__dcCsvEscape).join(",")];
-
-    for (var i = 0; i < points.length; i++) {
-        var p = points[i];
-        var row = p.d;
-
-        lines.push(columns.map(function (column) {
-            if (column === "") return p.index;
-            return __dcCsvEscape(__dcBubbleCsvValue(row, column));
-        }).join(","));
-    }
-
-    __dcDownloadText("bubble_df.csv", lines.join("\n") + "\n", "text/csv;charset=utf-8");
 }
 
 function __dcN(d) {
@@ -820,6 +777,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
 
         state.visibleCount = state.points.length;
         state.drawCount += 1;
+        if (window.gwasChartData) window.gwasChartData.changed('bubbleGraph');
     }
 
     state.rebuild = rebuildPointsAndDraw;
@@ -1008,6 +966,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
                 .attr("xlink:href", dataUrl);
         } catch (e) {
             console.warn("Canvas export image update failed", e);
+            throw e;
         }
     }
 
@@ -1015,9 +974,10 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         updateCanvasExportImage();
     });
 
-    $('#bubble-graph-controls .icon-download-data').closest('a').off('click.bubbleCsvDownload').on('click.bubbleCsvDownload', function (event) {
+    $('#bubble-graph-controls .icon-download-data').closest('a, button').off('click.bubbleCsvDownload').on('click.bubbleCsvDownload', function (event) {
         event.preventDefault();
-        __dcDownloadBubbleCsv();
+        event.stopPropagation();
+        if (window.gwasChartData) window.gwasChartData.download('bubbleGraph');
     });
 
     var svgs = bubbleGraph.find('svg');
@@ -1054,6 +1014,59 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     }
 
     updateYAxisAndRedraw();
+
+    if (window.gwasChartData) {
+        window.gwasChartData.register('bubbleGraph', function() {
+            // Rebuild replaces this array, so an export keeps its original view
+            // without allocating a second copy of the potentially large dataset.
+            var points = state.points;
+            var columns = [
+                {key: 'DATE', label: 'Publication date', type: 'text'},
+                {key: 'ACCESSION', label: 'Study accession', type: 'text'},
+                {key: 'PUBMEDID', label: 'PubMed ID', type: 'text'},
+                {key: 'AUTHOR', label: 'First author', type: 'text'},
+                {key: 'STAGE', label: 'Study stage', type: 'text'},
+                {key: 'Broader', label: 'Ancestry', type: 'text'},
+                {key: 'N', label: 'Participant instances', type: 'number'},
+                {key: 'DiseaseOrTrait', label: 'Disease or trait', type: 'text'},
+                {key: 'parentterm', label: 'Parent terms', type: 'text'},
+                {key: 'COHORT', label: 'Cohort', type: 'text'},
+                {key: 'FUNDER', label: 'Funder', type: 'text'},
+                {key: 'JOURNAL', label: 'Journal', type: 'text'}
+            ];
+            return {
+                id: 'bubbleGraph',
+                title: 'Published GWAS participant instances',
+                columns: columns,
+                rowCount: points.length,
+                rowAt: function(index) {
+                    var point = points[index];
+                    if (!point) return undefined;
+                    var row = {};
+                    columns.forEach(function(column) {
+                        row[column.key] = __dcBubbleCsvValue(point.d, column.key);
+                    });
+                    return row;
+                },
+                settings: {
+                    stage: replication ? 'replication' : 'initial',
+                    metric: 'participants',
+                    parentTerm: state.parentFilter,
+                    excludedAncestries: state.ancestryFilters.slice(),
+                    traits: state.selectedTraits.slice(),
+                    years: 'all available publication years'
+                },
+                methodology: [
+                    'Rows are the ancestry records represented by the currently plotted bubbles, after the stage, parent-term, ancestry and trait filters.',
+                    'The bubble chart always shows participant instances, including when other dashboard charts show studies. Participant instances are not deduplicated people.',
+                    'A study accession or publication can occur in multiple ancestry records. Records without finite plotting coordinates are not represented.'
+                ]
+            };
+        });
+        if (window.gwasChartData.setImagePreparation) {
+            window.gwasChartData.setImagePreparation('bubbleGraph', updateCanvasExportImage);
+        }
+    }
 
     window.__bubbleCanvasGetFirstPoint = function() {
         if (!window.__bubbleCanvasState || !window.__bubbleCanvasState.points.length) return null;

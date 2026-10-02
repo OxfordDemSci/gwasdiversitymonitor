@@ -66,42 +66,14 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
     let dateSpan = document.querySelector('.doughnut-graph-change-year span');
     currentYear ? dateSpan.innerHTML = currentYear : null;
 
-    if (!window.withMetric && window.withStage) {
+    if (!withMetric && withStage) {
         specificDataGraph('doughnut_replication_participants');
-        if (associationSwitch.checked && currentYear) {
-            if (selected && selected[0].label) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-            } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
-    } else if (!window.withMetric && !window.withStage) {
+    } else if (!withMetric && !withStage) {
         specificDataGraph('doughnut_discovery_participants');
-        if (associationSwitch.checked && currentYear) {
-            if (selected && selected[0].label) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-            } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
-    } else if (window.withMetric && window.withStage) {
+    } else if (withMetric && withStage) {
         specificDataGraph('doughnut_replication_studies');
-        if (associationSwitch.checked && currentYear) {
-            if (selected && selected[0].label) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-            } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
-    } else if (window.withMetric && !window.withStage) {
+    } else if (withMetric && !withStage) {
         specificDataGraph('doughnut_discovery_studies');
-        if (associationSwitch.checked && currentYear) {
-            if (selected && selected[0].label) {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, selected[0].label);
-            } else {
-                drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
-            }
-        }
     }
 
     // Functions changing dates
@@ -134,7 +106,8 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
         drawDgOnYearChange();
     }
 
-    $('#doughnutGraph').find(".filter select[name='parentTerms']").change(function(e) {
+    $('#doughnutGraph').find(".filter select[name='parentTerms']")
+        .off('change.doughnutData').on('change.doughnutData', function(e) {
         selected = $(this).find('option:selected');
         var parentSVG = $("#doughnutSVG");
 
@@ -158,6 +131,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
         if (associationSwitch.checked) {
             drawDoughnutAssociation(data['doughnut_associations'], currentYear, parentTerm);
         }
+        if (window.gwasChartData) window.gwasChartData.changed('doughnutGraph');
     });
 
 	bindImageDownload('#doughnut-graph-controls', selector, svg_id);
@@ -323,7 +297,61 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
                 });
             }
         }
+        if (window.gwasChartData) window.gwasChartData.changed('doughnutGraph');
     };
+
+    if (window.gwasChartData) window.gwasChartData.register('doughnutGraph', function() {
+        var year = currentYear === undefined ? null : Number(currentYear);
+        var parentTerm = selected && selected.length ? selected[0].label : 'All';
+        if (parentTerm === 'All parent terms') parentTerm = 'All';
+        var showAssociations = associationSwitch.checked;
+        var mainValues = doughnutValues(specificData, currentYear, parentTerm);
+        var rows = [];
+        function appendRows(values, series, stage) {
+            Object.values(values).forEach(function(row) {
+                rows.push({
+                    year: year, parentTerm: parentTerm, series: series, stage: stage,
+                    ancestry: row.ancestry, percentage: Number(row.value)
+                });
+            });
+        }
+        if (hasDoughnutData(mainValues)) {
+            appendRows(mainValues, withMetric ? 'Ancestry-record counts' : 'Participant instances',
+                withStage ? 'replication' : 'initial');
+        }
+        if (showAssociations) {
+            appendRows(doughnutValues(data['doughnut_associations'], currentYear, parentTerm),
+                'Associations', 'initial');
+        }
+        return {
+            id: 'doughnutGraph',
+            title: 'Ancestry distribution by parent term',
+            columns: [
+                {key: 'year', label: 'Publication year', type: 'number'},
+                {key: 'parentTerm', label: 'Parent term', type: 'text'},
+                {key: 'series', label: 'Series', type: 'text'},
+                {key: 'stage', label: 'Study stage', type: 'text'},
+                {key: 'ancestry', label: 'Ancestry', type: 'text'},
+                {key: 'percentage', label: 'Share (%)', type: 'number'}
+            ],
+            rowCount: rows.length,
+            rowAt: function(index) { return rows[index]; },
+            settings: {
+                stage: withStage ? 'replication' : 'initial',
+                metric: withMetric ? 'studies' : 'participants',
+                year: year,
+                parentTerm: parentTerm,
+                associationsShown: showAssociations,
+                associationStage: showAssociations ? 'initial' : null
+            },
+            methodology: [
+                withMetric ? 'The study metric counts ancestry records, not distinct study accessions.' :
+                    'Participant instances are not deduplicated people.',
+                'Percentages use the recorded ancestry data for the selected publication year, parent term and stage, with no extra rounding for this export.',
+                'Association rows are included only when the association chart is shown. Associations are the discovery-stage series, including when the main chart shows replication.'
+            ]
+        };
+    });
 
     function drawDgOnYearChange() {
         if (selected && selected[0].label) {
@@ -344,6 +372,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
             }
         }
+        if (window.gwasChartData) window.gwasChartData.changed('doughnutGraph');
     }
 
     function drawDoughnutAssociation(dataByType, currentYear, parentTerm) {

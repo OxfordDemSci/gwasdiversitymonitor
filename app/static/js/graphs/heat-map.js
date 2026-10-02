@@ -77,6 +77,41 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
 
 	bindImageDownload('#heat-map-controls', selector, svg_id);
 
+    if (window.gwasChartData) window.gwasChartData.register('heatMap', function() {
+        var year = currentYear === undefined ? null : Number(currentYear);
+        var shownAncestries = Object.values(ancestriesOrdered).slice(0, 6);
+        var rows = Object.values(specificData[currentYear] || {}).filter(function(row) {
+            return shownAncestries.indexOf(row.ancestry) !== -1;
+        }).map(function(row) {
+            return {year: year, ancestry: row.ancestry, parentTerm: row.term, count: Number(row.value)};
+        });
+        return {
+            id: 'heatMap',
+            title: 'Parent term by ancestry',
+            columns: [
+                {key: 'year', label: 'Publication year', type: 'number'},
+                {key: 'parentTerm', label: 'Parent term', type: 'text'},
+                {key: 'ancestry', label: 'Ancestry', type: 'text'},
+                {key: 'count', label: withMetric ? 'Ancestry-record count' : 'Participant instances', type: 'number'}
+            ],
+            rowCount: rows.length,
+            rowAt: function(index) { return rows[index]; },
+            settings: {
+                stage: withStage ? 'replication' : 'initial',
+                metric: withMetric ? 'studies' : 'participants',
+                year: year,
+                ancestries: shownAncestries,
+                parentTerm: 'all displayed parent terms'
+            },
+            methodology: [
+                withMetric ? 'The study metric counts ancestry records, not distinct study accessions.' :
+                    'Participant instances are not deduplicated people.',
+                'Rows contain the six ancestry groups displayed by the heat map for the selected publication year. Values are counts; the colour scale is logarithmic.',
+                'A record can be linked to multiple parent terms, so counts across parent terms are not additive.'
+            ]
+        };
+    });
+
     function drawLogScaleColour(range, logColour_scale, maxValue) {
         let legend = svg.append('g').attr('class', 'log-colour-scale');
 
@@ -198,6 +233,7 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
             dateSpan.textContent = 'No data';
             setYearButtonsDisabled(true);
             drawEmptyState();
+            if (window.gwasChartData) window.gwasChartData.changed('heatMap');
             return;
         }
 
@@ -211,6 +247,7 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
         });
 
         getGraphPerYear(specificData, currentYear);
+        if (window.gwasChartData) window.gwasChartData.changed('heatMap');
     }
 
     function moveYear(offset) {

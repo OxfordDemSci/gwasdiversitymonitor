@@ -1,0 +1,42 @@
+<dialog id="dashboard-export-dialog" class="dashboard-comparison"
+        aria-labelledby="dashboard-export-title">
+    <div class="dashboard-comparison__heading">
+        <div>
+            <h2 id="dashboard-export-title">Export this view</h2>
+            <p>Download the values shown in your charts with the exact view settings,
+                dataset version, counting notes and citations.</p>
+        </div>
+        <button id="dashboard-export-close" class="dashboard-comparison__close"
+                type="button" aria-label="Close export" autofocus>&times;</button>
+    </div>
+    <form id="dashboard-export-form">
+        <label for="dashboard-export-charts">Charts to include</label>
+        <select id="dashboard-export-charts">
+            <option value="all">All five dashboard charts</option>
+            <option value="bubbleGraph">Study bubbles</option>
+            <option value="timeSeries">Ancestry over time</option>
+            <option value="heatMap">Ancestry by parent term</option>
+            <option value="worldMap">Recruitment countries</option>
+            <option value="doughnutGraph">Ancestry proportions</option>
+        </select>
+        <div class="dashboard-comparison__actions">
+            <button id="dashboard-export-submit" type="submit" data-gwas-export
+                    class="dashboard-comparison__submit">Download data bundle (ZIP)</button>
+        </div>
+        <p id="dashboard-export-status" role="status" aria-live="polite"></p>
+    </form>
+    <p class="dashboard-comparison__help">Each chart keeps its own year and filters.
+        For a figure, use that chart's image button: SVG and PNG bundles include
+        its plotted CSV and provenance. Bubble SVGs include a raster layer.</p>
+    <aside class="dashboard-comparison__notes">
+        <h3>Selection source data</h3>
+        <p>The source archive contains studies linked to the selected funders and
+            cohorts across all years, traits and both stages. It is broader than
+            the currently displayed chart values.</p>
+        <a id="funder-data-download" class="funder-toolbar__action is-disabled"
+           aria-disabled="true" data-gwas-export title="Download selection source data">
+            <i class="icon-download-data" aria-hidden="true"></i>
+            <span>Download selection source data</span>
+        </a>
+    </aside>
+</dialog>

@@ -92,7 +92,8 @@ class DashboardFilterToolbarTests(unittest.TestCase):
             self.assertIn(f'aria-describedby="{help_id}"', html)
 
         self.assertIn('role="status" aria-live="polite"', html)
-        self.assertIn('<span>Download data</span>', html)
+        self.assertIn('<span>Export view</span>', html)
+        self.assertIn('<span>Download selection source data</span>', html)
         self.assertIn('<span>View report</span>', html)
 
     def test_filter_controls_default_to_all_funders_and_all_cohorts(self):

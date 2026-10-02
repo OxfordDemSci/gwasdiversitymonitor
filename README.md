@@ -37,6 +37,9 @@ selections. The Monitor also provides:
 - A compact **Compare** dialog for two independent funder/cohort selections,
   using the same stage and inclusive publication-year limits. It shows shared
   studies/publications, metadata coverage, absolute counts, and ancestry shares.
+- [Publication-ready exports](docs/PUBLICATION_EXPORTS.md) with exact plotted
+  CSV values, SVG/PNG figures, captured view settings, dataset provenance,
+  methodology, and citations in one ZIP.
 - Daily ingestion of the GWAS Catalog export, with validated and
   atomic publication of each generated release.
 - A reproducible static figure, source-data table, audit metadata, and a

@@ -3,11 +3,7 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
 	let svg_id = 'worldMapSVG'
     let svg_selector = `#${svg_id}`
 
-    if (withMetric === undefined) {
-        window.withMetric = false;
-    } else {
-        window.withMetric = withMetric;
-    }
+    withMetric = !!withMetric;
 
     let format = d3.format(",");
     // Set tooltips
@@ -16,7 +12,7 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
         .attr('class', 'd3-tip')
         .offset([-10, 0])
         .html(function(d) {
-            if (window.withMetric) {
+            if (withMetric) {
                 return "<span><strong>"+d.country+"</strong></span><br>" +"<span>#Studies "+ numberFormatter(d.studies) +"</span>";
             } else {
                 return "<span><strong>"+d.country+"</strong></span><br>" +"<span>#Participants "+ numberFormatter(d.participants) +"</span>";
@@ -135,7 +131,7 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
     d3.select('#worldMap .stage-title')
         .text(replication ? 'Replication' : 'Discovery');
     d3.select('#worldMap .metric-title')
-        .text(window.withMetric ? 'Studies' : 'Participants');
+        .text(withMetric ? 'Studies' : 'Participants');
 
     // Changing year
     let dataKeys = Object.keys(dataWM).filter(function(year) {
@@ -464,6 +460,7 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
 
     applyMobileSettings();
 
+    let renderedRows = [];
     updateGraph(currentYear);
 
     if (!isMobile && preservedState && preservedState.zoom) {
@@ -481,6 +478,44 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
     backRect.attr('height', height);
 
     bindImageDownload('#world-map-controls', selector, svg_id);
+
+    if (window.gwasChartData) window.gwasChartData.register('worldMap', function() {
+        var year = currentYear === undefined ? null : Number(currentYear);
+        var rows = renderedRows.filter(function(row) {
+            return !!row.country;
+        }).map(function(row) {
+            return {
+                year: year,
+                country: row.country,
+                count: Number(withMetric ? row.studies : row.participants),
+                percentage: Number(withMetric ? row.studiesPercentage : row.participantsPercentage)
+            };
+        });
+        return {
+            id: 'worldMap',
+            title: 'Country of recruitment',
+            columns: [
+                {key: 'year', label: 'Publication year', type: 'number'},
+                {key: 'country', label: 'Country of recruitment', type: 'text'},
+                {key: 'count', label: withMetric ? 'Ancestry-record count' : 'Participant instances', type: 'number'},
+                {key: 'percentage', label: 'Share of recorded country data (%)', type: 'number'}
+            ],
+            rowCount: rows.length,
+            rowAt: function(index) { return rows[index]; },
+            settings: {
+                stage: stageKey,
+                metric: withMetric ? 'studies' : 'participants',
+                year: year,
+                geography: 'country of recruitment'
+            },
+            methodology: [
+                withMetric ? 'The study metric counts ancestry records, not distinct study accessions.' :
+                    'Participant instances are not deduplicated people.',
+                'Rows match countries with recorded data bound to the rendered map. Geometry without a matching data record and country records without matching map geometry are excluded.',
+                'Percentages retain the supplied stage/year country-data denominator and precision; they are not recalculated over the displayed subset. Map zoom changes the viewport, not the country data scope.'
+            ]
+        };
+    });
 
     function applyMobileSettings() {
         if (isMobile) {
@@ -582,6 +617,7 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
             arr.push(Object.assign({}, e, val.filter(function(a) { return a.country === e.properties.name })[0]));
             return arr;
         }, []);
+        renderedRows = array;
 
         d3.select('.countries').remove();
 
@@ -592,7 +628,7 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
             .enter().append("path")
             .attr("d", path)
             .style("fill", function(d) {
-                if (window.withMetric) {
+                if (withMetric) {
                     if(d.studies) {
                         return colorStudies(d.studies);
                     } else {
@@ -637,11 +673,12 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
                 }
             });
 
-        if (window.withMetric) {
+        if (withMetric) {
             drawLegend(colorsForStudies);
         } else {
             drawLegend(colorsForParticipants);
         }
+        if (window.gwasChartData) window.gwasChartData.changed('worldMap');
     }
 
     function drawLegend(colorsForArray) {

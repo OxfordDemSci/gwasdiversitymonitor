@@ -26,6 +26,24 @@ _TIMESTAMP_FIELDS = (
     "lastSuccessfulFetchAt", "lastPublicationAt",
 )
 
+MONITOR_CITATION = (
+    "Mills, M. C. & Rahal, C. (2020). The GWAS Diversity Monitor tracks "
+    "diversity by disease in real time. Nature Genetics 52, 242–243. "
+    "https://doi.org/10.1038/s41588-020-0580-y"
+)
+SOFTWARE_CITATION = (
+    "Boef, N., Brunier, Q., Knowles, I., Malowany, A., May, J., Mills, M. C., "
+    "Misseri, L., Nixon, G., Ntova, V., Rahal, C. & Sinclair, C. (2020). "
+    "Source code for the GWAS Diversity Monitor (Version 1.0.0). Zenodo. "
+    "https://doi.org/10.5281/zenodo.3600472"
+)
+SOURCE_EXPORT_SCOPE = (
+    "Entity-selection source data: selected funders and cohorts, all publication "
+    "years, all traits and both discovery and replication stages. Chart-specific "
+    "filters are not applied. Participant counts are participant instances, not "
+    "unique people. Entity attribution uses full counting and totals overlap."
+)
+
 
 def utc_now():
     return datetime.datetime.now(datetime.timezone.utc).isoformat()

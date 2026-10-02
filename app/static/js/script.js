@@ -41,17 +41,18 @@ $(window).scroll(function() {
 
 function imagePopup(id, container, svg_id) {
 	document.getElementById(id).classList.add('active');
-	d3.select('#button_svg').on('click', null).on('click', function () {downloadImage(container, svg_id, false); hidePopup(id); }).text(`${container.replace('#', '')}.svg`)
-	d3.select('#button_png').on('click', null).on('click', function () {downloadImage(container, svg_id, true); hidePopup(id); }).text(`${container.replace('#', '')}.png`)
+	d3.select('#button_svg').on('click', null).on('click', function () {downloadImage(container, svg_id, false).catch(function() {}); hidePopup(id); }).text('SVG + matching data (.zip)');
+	d3.select('#button_png').on('click', null).on('click', function () {downloadImage(container, svg_id, true).catch(function() {}); hidePopup(id); }).text('PNG + matching data (.zip)');
 }
 
 function bindImageDownload(controlSelector, container, svg_id, beforeOpen) {
+	// Refresh canvas artwork at capture, not when the format chooser opens.
+	if (beforeOpen && window.gwasChartData) {
+		window.gwasChartData.setImagePreparation(container.replace('#', ''), beforeOpen);
+	}
 	$(controlSelector).find('.icon-download-image').closest('button').off('click.imageDownload').on('click.imageDownload', function (event) {
 		event.preventDefault();
 		event.stopPropagation();
-		if (beforeOpen) {
-			beforeOpen();
-		}
 		imagePopup('popup-download-image', container, svg_id);
 	});
 }
@@ -91,6 +92,7 @@ function setDescription() {
 // Download image
 
 var d3plusTextPromise;
+var imageExportPending = false;
 
 function loadD3plusText() {
 	if (window.d3plus && window.d3plus.TextBox) {
@@ -115,9 +117,13 @@ function loadD3plusText() {
 				}
 			};
 			script.onerror = function() {
+				script.remove();
 				reject(new Error('The chart-export text library could not be loaded.'));
 			};
 			document.head.appendChild(script);
+		}).catch(function(error) {
+			d3plusTextPromise = null;
+			throw error;
 		});
 	}
 
@@ -125,17 +131,40 @@ function loadD3plusText() {
 }
 
 function downloadImage(selector, svg_selector, png) {
+	var registry = window.gwasChartData;
+	var snapshot;
+	function report(error) {
+		if (registry) registry.reportError(error.message);
+		return Promise.reject(error);
+	}
+	if (imageExportPending) return report(new Error('Another figure is being prepared. Please wait for it to finish.'));
+	try {
+		if (!registry) throw new Error('The chart export tools are not ready. Please retry.');
+		snapshot = registry.snapshot(selector.replace('#', ''));
+	} catch (error) { return report(error); }
+	imageExportPending = true;
+	registry.reportError('Preparing figure and matching chart data…');
 	return loadD3plusText().then(function() {
-		renderDownloadImage(selector, svg_selector, png);
+		return registry.loadExporter();
+	}).then(function(exporter) {
+		registry.assertCurrent(snapshot);
+		registry.prepareImage(snapshot.id);
+		registry.assertCurrent(snapshot);
+		return renderDownloadImage(selector, svg_selector, png, snapshot, exporter);
 	}).catch(function(error) {
-		console.error('Chart export failed', error);
+		registry.reportError(error.message + ' Please retry the export.');
+		throw error;
+	}).finally(function() {
+		imageExportPending = false;
 	});
 }
 
-function renderDownloadImage(selector, svg_selector, png) {
+function renderDownloadImage(selector, svg_selector, png, snapshot, exporter) {
+	window.gwasChartData.assertCurrent(snapshot);
 	let graph = $(selector);
 	let svg = graph.find(`#${svg_selector}`);
 	var sourceSvg = svg[0];
+	if (!sourceSvg) throw new Error('This chart has not finished rendering.');
 	var sourceViewBox = sourceSvg && sourceSvg.viewBox ? sourceSvg.viewBox.baseVal : null;
 	var width = sourceViewBox && sourceViewBox.width ?
 		sourceViewBox.width :
@@ -383,19 +412,23 @@ function renderDownloadImage(selector, svg_selector, png) {
 	}
 
     if(graph.attr('id') === 'worldMap') {
-		var svgContainer = $('#worldMap .svg-container');
-		downloadSvg.attr('height', '750').attr('width', '801');//height from 850 to 750, width from 1000 to 801
-		downloadSvg.select('rect.white-rect').attr('height', '750').attr('width', '801');//height from 850 to 750, width from 1000 to 801
-		downloadSvg.select('.back-rect').attr('height', '540').attr('width', '800').attr('transform', 'translate(-50,0)');
-		downloadSvg.select('.countries').attr('transform', 'translate(-50,130),scale('+800/width+')');//add scale('+800/width+')'
-		//add the if sentence
-		if (height+150*700/width >=600){
-		    downloadSvg.select('.legend').attr('transform', 'translate(0,'+(180*700/width-50)+')');
-		}else{
-		    downloadSvg.select('.legend').attr('transform', 'translate(0,'+180*800/width+')');
-		}
+		// A nested viewport preserves the selected pan/zoom and its clipping.
+		// Move the clone only; do not replace the map's transform or projection.
+		var mapWidth = Math.max(600, width);
+		var mapHeight = height * mapWidth / width;
+		var mapGroup = downloadSvg.select('.svg-container').node();
+		var mapViewport = downloadSvg.append('svg')
+			.attr('class', 'export-map-viewport')
+			.attr('x', 0).attr('y', 100)
+			.attr('width', mapWidth).attr('height', mapHeight)
+			.attr('viewBox', '0 0 ' + width + ' ' + height)
+			.style('width', mapWidth + 'px').style('height', mapHeight + 'px')
+			.style('overflow', 'hidden');
+		mapViewport.node().appendChild(mapGroup);
+		downloadSvg.attr('height', mapHeight + 120).attr('width', mapWidth);
+		downloadSvg.select('rect.white-rect').attr('height', mapHeight + 120).attr('width', mapWidth);
 		downloadSvg.selectAll('.wm-legend-text').attr("style", "font-size: 13px; fill: #4a4a4a;");
-		heightPos = 650; //from 350 to 530+120=650
+		heightPos = mapHeight + 120;
 	}
 
 	if(graph.attr('id') === 'doughnutGraph') {
@@ -448,7 +481,7 @@ function renderDownloadImage(selector, svg_selector, png) {
 		} else {
 			downloadSvg.select('.legend').attr('style', 'transform: translate(0,100px);');
 		}
-	} else {
+	} else if (graph.attr('id') !== 'worldMap') {
 		downloadSvg.select(".svg-container").attr("transform", "translate(50,100)");
 	}
 
@@ -470,57 +503,31 @@ function renderDownloadImage(selector, svg_selector, png) {
 		}
 	}
 
-	let popup = $('#popup-footer p');
-	let citetexts = Array.from(popup.map(i => ({'text': popup[i].textContent})))
-
-	//citetexts[1].lines = 0
-	//new d3plus.TextBox()
-	//  .data([citetexts[0]])
-	//  .select(downloadSvg.node())
-	//  .fontSize(13)
-	//  .fontFamily('')
-	//  .fontColor('4a4a4a')
-	//  .width(width)
-	//  //.x(function(d, i) { return i * 250; })
-	//  //.y(function(d, i) { return i * 20 + heightPos; })
-	//  .y(heightPos)
-	//  .x(10)
-	//  .render();
-
-	//citetexts[1].lines = d3.selectAll('#d3plus-textBox-0 text').size()
-	//new d3plus.TextBox()
-	//  .data([citetexts[1]])
-	//  .select(downloadSvg.node())
-	//  .fontSize(13)
-	//  .fontFamily('')
-	//  .fontColor('4a4a4a')
-	//  .width(width)
-	//  //.x(function(d, i) { return i * 250; })
-	//  //.y(function(d, i) { return i * 20 + heightPos; })
-	//  .y(heightPos)
-	//  .x(10)
-	//  .render();
-
-	//citetexts[2].lines = d3.selectAll('#d3plus-textBox-0 text').size() + citetexts[1].lines
-
-	//svgwidth = downloadSvg.node().getBBox().width
-	svgwidth = downloadSvg.attr("width");
-	new d3plus.TextBox()
-	  .data([citetexts[2]])
-	  .select(downloadSvg.node())
-	  .fontSize(13)
-	  .fontFamily('timesnewroman')
-	  .fontColor('4a4a4a')
-	  .width(parseInt(svgwidth))
-	  //.x(function(d, i) { return i * 250; })
-	  //.y(function(d, i) { return ((d.lines) * 20) + heightPos; })
-	  .y(heightPos)
-	  .padding(10)
-	  .overflow(false)
-	  .render();
-
 	var finalWidth = parseFloat(downloadSvg.attr("width"));
-	var finalHeight = parseFloat(downloadSvg.attr("height"));
+	var imageMetadata = exporter.metadata(snapshot);
+	imageMetadata.image = {
+		format: png ? 'png' : 'svg',
+		embeddedRaster: isBubbleGraph,
+		presentation: 'Chart labels and legends are reflowed for publication. Data scope is unchanged; map pan and zoom are preserved.'
+	};
+	if (isBubbleGraph) imageMetadata.image.rasterNote = 'Bubble points are embedded raster canvas artwork, not vector circles.';
+	// Metadata is literal text, never interpreted as SVG markup.
+	downloadSvg.append('metadata').attr('id', 'gwas-export-metadata').node().textContent = JSON.stringify(imageMetadata);
+	var footerY = Math.max(heightPos, parseFloat(downloadSvg.attr('height'))) + 16;
+	var footer = downloadSvg.append('g').attr('class', 'export-provenance-footer');
+	imageExportFooter(snapshot, imageMetadata).forEach(function(paragraph) {
+		var lines = d3plus.textWrap().fontFamily('Arial').fontSize(12).lineHeight(16)
+			.width(finalWidth - 32).height(4096).overflow(true)(paragraph).lines;
+		lines.forEach(function(line) {
+			footer.append('text').attr('x', 16).attr('y', footerY)
+				.attr('style', 'font: 12px Arial, sans-serif; fill: #4a4a4a;').text(line);
+			footerY += 16;
+		});
+		footerY += 5;
+	});
+	var finalHeight = footerY + 12;
+	downloadSvg.attr('height', finalHeight);
+	downloadSvg.select('rect.white-rect').attr('height', finalHeight).attr('width', finalWidth);
 
 	downloadSvg
 		.attr("viewBox", "0 0 " + finalWidth + " " + finalHeight)
@@ -532,52 +539,62 @@ function renderDownloadImage(selector, svg_selector, png) {
 
 	var html = new XMLSerializer().serializeToString(downloadSvg.node());
 	var svgBlob = new Blob([html], {type: "image/svg+xml;charset=utf-8"});
-	var svgUrl = URL.createObjectURL(svgBlob);
-	var downloadLink = document.createElement("a");
+	var figure = png ? rasterizeExportSvg(svgBlob, finalWidth, finalHeight, snapshot) : Promise.resolve(svgBlob);
+	return figure.then(function(blob) {
+		window.gwasChartData.assertCurrent(snapshot);
+		return exporter.downloadSnapshots([snapshot], {image: {name: snapshot.id + (png ? '.png' : '.svg'), blob: blob}});
+	});
+}
 
-	if (png) {
-	  var canvas = document.getElementById('downloadCanvas');
-      var ctx = canvas.getContext('2d');
-      //var bbox = document.getElementById(svg_selector).getBBox();
-      //  canvas.width = bbox.width;
-      //  canvas.height = bbox.height;
-      canvas.width = downloadSvg.attr("width");
-      canvas.height = downloadSvg.attr("height");
-      //var data = (new XMLSerializer()).serializeToString(svg);
-      //var DOMURL = window.URL || window.webkitURL || window;
-
-      var img = new Image();
-      //var svgBlob = new Blob([data], {type: 'image/svg+xml;charset=utf-8'});
-      //var url = DOMURL.createObjectURL(svgBlob);
-
-      img.onload = function () {
-        ctx.drawImage(img, 0, 0);
-        //DOMURL.revokeObjectURL(url);
-        URL.revokeObjectURL(svgUrl)
-
-        var imgURI = canvas
-            .toDataURL('image/png')
-            .replace('image/png', 'image/octet-stream');
-
-		downloadLink.href = imgURI;
-		downloadLink.download = graph.attr('id') + ".png";
-		document.body.appendChild(downloadLink);
-		downloadLink.click();
-		document.body.removeChild(downloadLink);
-      };
-
-      img.onerror = function (error) {
-        URL.revokeObjectURL(svgUrl);
-        console.error("SVG to PNG export failed", error);
-      };
-
-      img.src = svgUrl;
-	} else {
-		downloadLink.href = svgUrl;
-		downloadLink.download = graph.attr('id') + ".svg";
-		document.body.appendChild(downloadLink);
-		downloadLink.click();
-		document.body.removeChild(downloadLink);
+function imageExportFooter(snapshot, metadata) {
+	function short(value, limit) {
+		var text = typeof value === 'string' ? value : JSON.stringify(value);
+		return text.length > limit ? text.slice(0, limit - 1) + '…' : text;
 	}
+	function entities(values) {
+		return values && values.length ? values.slice(0, 3).map(function(value) { return short(value, 60); }).join(', ')
+			+ (values.length > 3 ? ' (+' + (values.length - 3) + ')' : '') : 'all';
+	}
+	var settings = Object.keys(snapshot.settings).map(function(key) {
+		return key.replace(/([A-Z])/g, ' $1').toLowerCase() + ': ' + short(snapshot.settings[key], 100);
+	}).join('; ');
+	var lines = [
+		'Dataset: ' + snapshot.provenance.datasetId.slice(0, 17) + '… | Exported: ' + snapshot.exportedAt.slice(0, 10),
+		'Funders: ' + entities(snapshot.view.funders) + '; cohorts: ' + entities(snapshot.view.cohorts) + '.',
+		'Chart view: ' + short(settings, 420) + '. Full settings and matching data are included in the ZIP.',
+		metadata.citation
+	];
+	if (metadata.image.embeddedRaster) lines.push('Bubble points are embedded raster artwork; the SVG is not entirely vector.');
+	return lines;
+}
 
+function rasterizeExportSvg(svgBlob, width, height, snapshot) {
+	return new Promise(function(resolve, reject) {
+		var canvas = document.getElementById('downloadCanvas');
+		var context = canvas && canvas.getContext('2d');
+		if (!context) { reject(new Error('Your browser could not create a PNG canvas. Try SVG instead.')); return; }
+		canvas.width = Math.ceil(width);
+		canvas.height = Math.ceil(height);
+		var svgUrl = URL.createObjectURL(svgBlob);
+		var img = new Image();
+		img.onload = function() {
+			URL.revokeObjectURL(svgUrl);
+			try {
+				window.gwasChartData.assertCurrent(snapshot);
+				context.drawImage(img, 0, 0);
+				canvas.toBlob(function(blob) {
+					try {
+						window.gwasChartData.assertCurrent(snapshot);
+						if (!blob) throw new Error('Your browser could not encode the PNG. Try SVG instead.');
+						resolve(blob);
+					} catch (error) { reject(error); }
+				}, 'image/png');
+			} catch (error) { reject(error); }
+		};
+		img.onerror = function() {
+			URL.revokeObjectURL(svgUrl);
+			reject(new Error('The chart could not be converted to PNG. Try SVG instead.'));
+		};
+		img.src = svgUrl;
+	});
 }

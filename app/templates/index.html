@@ -6,11 +6,14 @@
     <script defer src="{{ versioned_static('js/imports/select2.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-state.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-provenance.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-chart-data.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-export-controls.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-comparison.js') }}"></script>
     <script>
         window.gwasLoadedProvenance = {{ provenance|default({})|tojson }};
         window.gwasStaticAssets = {
-            d3plusText: {{ versioned_static('js/imports/d3plus-text.full.min.js')|tojson }}
+            d3plusText: {{ versioned_static('js/imports/d3plus-text.full.min.js')|tojson }},
+            exportBundle: {{ versioned_static('js/dashboard-export.js')|tojson }}
         };
     </script>
 {% endblock %}
@@ -26,6 +29,7 @@
 
     {% include 'components/funder-toolbar.html' %}
     {% include 'components/dashboard-comparison.html' %}
+    {% include 'components/dashboard-export.html' %}
 
     <div id="dashboard-dataset-stale" class="dashboard-dataset-stale" role="alert" hidden>
         <p>The dataset changed while this view was open. Reload to load one consistent dataset before sharing or exporting.</p>
@@ -159,6 +163,7 @@
 				return !!baseDashboardData[key];
 			}) && !!ancestriesData;
 			if (baseDashboardReady) {
+				if (window.gwasChartData && !window.gwasDashboardState.isReady()) window.gwasChartData.setSelectionReady(true);
 				$('#funder-filter').prop('disabled', false);
 				$('#dataset-filter').prop('disabled', false);
 				updateSummaryFromFunder(baseDashboardData.summary);
@@ -647,11 +652,20 @@
             let query = filterSelectionQuery();
             let downloadUrl = '/download/filtered-dashboard.zip?' + query;
             let reportUrl = '/reports/filtered-dashboard?' + query;
+            if (window.gwasDashboardState) {
+                let context = JSON.stringify(window.gwasDashboardState.capture());
+                let withContext = reportUrl + '&viewState=' + encodeURIComponent(context);
+                if (new TextEncoder().encode(context).length <= 4096 && withContext.length <= 7500) reportUrl = withContext;
+            }
             download.attr('href', downloadUrl)
                 .attr('aria-disabled', 'false').removeClass('is-disabled');
             report.attr('href', reportUrl)
                 .attr('aria-disabled', 'false').removeClass('is-disabled');
         }
+
+        window.addEventListener('gwas:viewchange', function() {
+            updateSelectionActions(selectedFilterEntries('#funder-filter'), selectedFilterEntries('#dataset-filter'));
+        });
 
         function summaryPercentages(summary, metric, stage) {
             if (!summary) return null;
@@ -705,6 +719,7 @@
         }
 
         function redrawDashboardData(payload, preservedState) {
+            if (window.gwasChartData) window.gwasChartData.setSelectionReady(false);
             let switches = {
                 metric: document.getElementById('cb1').checked,
                 stage: document.getElementById('cb2').checked
@@ -747,6 +762,7 @@
             updateSummaryFromFunder(payload.summary, switches.metric, switches.stage);
             filtersTitle(switches.metric, switches.stage);
             setDescription();
+            if (window.gwasChartData) window.gwasChartData.setSelectionReady(true);
         }
 
         function renderSelectedDashboard(payload, preservedState) {
@@ -768,6 +784,7 @@
 
         function applyDashboardFilters(preservedState) {
             if (!baseDashboardReady || !window.gwasProvenance.isCurrent()) return Promise.resolve(false);
+            if (window.gwasChartData) window.gwasChartData.setSelectionReady(false);
 			let revision = ++dashboardFilterRevision;
 			let funderSlugs = selectedFilterValues('#funder-filter');
 			let cohortIds = selectedFilterValues('#dataset-filter');
@@ -963,6 +980,7 @@
         }
 
         function redrawGraph(el) {
+            if (window.gwasChartData) window.gwasChartData.setSelectionReady(false);
             let switchMetric = document.getElementById('cb1');
             let switchStage = document.getElementById('cb2');
             let viewState = captureDashboardState();
@@ -1001,6 +1019,7 @@
             }
             highlight(both);
             highlight(box);
+            if (window.gwasChartData) window.gwasChartData.setSelectionReady(true, false);
         }
 
         function filtersTitle(metric, stage) {

@@ -13,6 +13,9 @@ from pathlib import Path
 import pandas as pd
 
 import funder_pipeline
+from app.Provenance import (
+    MONITOR_CITATION, SOFTWARE_CITATION, SOURCE_EXPORT_SCOPE, published_provenance,
+)
 from app.DataLoader import FILTER_RUNTIME_FILES, PublishedDataUnavailable
 
 
@@ -1192,8 +1195,11 @@ class DashboardFilterStore:
     def download_path(self, cohort_ids=None, funder_slugs=None):
         cohort_ids = _selection_ids(cohort_ids)
         funder_slugs = _selection_ids(funder_slugs)
+        provenance = published_provenance(self.data_path)
+        dataset_id = provenance.get("datasetId") or "unversioned"
         path = self._cache_path(
-            "downloads", cohort_ids, funder_slugs, "zip"
+            os.path.join("publication-downloads-v1", dataset_id),
+            cohort_ids, funder_slugs, "zip"
         )
         if os.path.isfile(path):
             return path
@@ -1224,6 +1230,8 @@ class DashboardFilterStore:
             selection = {
                 "cohorts": cohorts,
                 "funders": funders,
+                "datasetId": provenance.get("datasetId"),
+                "scope": SOURCE_EXPORT_SCOPE,
                 "studyCount": len(selected_accessions),
                 "publicationCount": self._publication_count(
                     selected_accessions
@@ -1238,6 +1246,16 @@ class DashboardFilterStore:
                 (bubbles_path, "bubble_df.csv"),
                 (selection_path, "selection.json"),
             ]
+            for name, content in (
+                    ("provenance.json", json.dumps(provenance, indent=2) + "\n"),
+                    ("README.txt", SOURCE_EXPORT_SCOPE + "\n\n"
+                     "For exact plotted values and full view settings, use Export view on the dashboard.\n"
+                     "Source TSV/CSV values are preserved, unlike the formula-neutralised plotted CSVs. "
+                     "Import source text fields as text in spreadsheet software; do not execute formula-like values.\n"),
+                    ("CITATION.txt", MONITOR_CITATION + "\n\n" + SOFTWARE_CITATION + "\n")):
+                metadata_path = temporary / name
+                metadata_path.write_text(content, encoding="utf-8")
+                files.append((metadata_path, name))
             if funders:
                 funding_path = temporary / "funding.json"
                 selected_pmids = {
