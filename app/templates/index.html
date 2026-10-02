@@ -5,6 +5,7 @@
     <script defer src="{{ versioned_static('js/imports/d3-tip.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/imports/select2.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-state.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-comparison.js') }}"></script>
     <script>
         window.gwasStaticAssets = {
             d3plusText: {{ versioned_static('js/imports/d3plus-text.full.min.js')|tojson }}
@@ -14,11 +15,13 @@
 
 {% block page_styles %}
     <link href="{{ versioned_static('css/select2.min.css') }}" rel="stylesheet" type="text/css">
+    <link href="{{ versioned_static('css/dashboard-comparison.css') }}" rel="stylesheet" type="text/css">
 {% endblock %}
 
 {% block content %}
 
     {% include 'components/funder-toolbar.html' %}
+    {% include 'components/dashboard-comparison.html' %}
 
     <div class="dashboard row">
 

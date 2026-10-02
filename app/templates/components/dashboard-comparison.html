@@ -1,0 +1,115 @@
+<dialog id="dashboard-comparison" class="dashboard-comparison"
+        aria-labelledby="comparison-title" aria-describedby="comparison-intro">
+    <div class="dashboard-comparison__heading">
+        <div>
+            <h2 id="comparison-title">Compare funders and cohorts</h2>
+            <p id="comparison-intro">Compare two selections with the same study stage,
+                publication years and ancestry denominator definition.</p>
+        </div>
+        <button id="comparison-close" type="button"
+                class="dashboard-comparison__close" aria-label="Close comparison"
+                autofocus>&times;</button>
+    </div>
+    <form id="comparison-form" aria-busy="false">
+        <p id="comparison-selection-help" class="dashboard-comparison__help">
+            Leave a field empty to include all. Multiple choices within a field
+            match any choice; a funder and cohort selection must both match.
+            Selection A starts with your current dashboard selection.
+        </p>
+        <div class="dashboard-comparison__selections">
+            {% for side, label in [('left', 'A'), ('right', 'B')] %}
+            <fieldset class="dashboard-comparison__selection">
+                <legend>Selection {{ label }}</legend>
+                <label id="comparison-{{ side }}-funders-label"
+                       for="comparison-{{ side }}-funders">Funders</label>
+                <select id="comparison-{{ side }}-funders" multiple
+                        data-comparison-side="{{ side }}" data-comparison-facet="funders"
+                        aria-labelledby="comparison-{{ side }}-funders-label"
+                        aria-describedby="comparison-selection-help"></select>
+                <label id="comparison-{{ side }}-cohorts-label"
+                       for="comparison-{{ side }}-cohorts">Cohorts</label>
+                <select id="comparison-{{ side }}-cohorts" multiple
+                        data-comparison-side="{{ side }}" data-comparison-facet="cohorts"
+                        aria-labelledby="comparison-{{ side }}-cohorts-label"
+                        aria-describedby="comparison-selection-help"></select>
+            </fieldset>
+            {% endfor %}
+        </div>
+        <fieldset class="dashboard-comparison__shared">
+            <legend>Shared settings</legend>
+            <div class="dashboard-comparison__settings">
+                <label for="comparison-stage">Study stage
+                    <select id="comparison-stage" name="stage">
+                        <option value="initial">Discovery</option>
+                        <option value="replication">Replication</option>
+                    </select>
+                </label>
+                <label for="comparison-metric">Ancestry metric
+                    <select id="comparison-metric" name="metric">
+                        <option value="participants">Participant instances</option>
+                        <option value="studies">Distinct studies</option>
+                    </select>
+                </label>
+                <label for="comparison-from-year">Published from
+                    <input id="comparison-from-year" name="fromYear" type="number"
+                           min="1900" max="2100" step="1" placeholder="Any year"
+                           inputmode="numeric">
+                </label>
+                <label for="comparison-to-year">Published through
+                    <input id="comparison-to-year" name="toYear" type="number"
+                           min="1900" max="2100" step="1" placeholder="Any year"
+                           inputmode="numeric">
+                </label>
+            </div>
+        </fieldset>
+        <div class="dashboard-comparison__actions">
+            <button id="comparison-submit" type="submit"
+                    class="dashboard-comparison__submit">Compare selections</button>
+            <span id="comparison-status" role="status" aria-live="polite"></span>
+        </div>
+        <p id="comparison-error" class="dashboard-comparison__error"
+           role="alert" hidden></p>
+    </form>
+    <section id="comparison-results" class="dashboard-comparison__results"
+             aria-labelledby="comparison-results-title" hidden>
+        <h3 id="comparison-results-title">Comparison results</h3>
+        <p id="comparison-result-settings" class="dashboard-comparison__help"></p>
+        <div class="dashboard-comparison__labels">
+            <p><strong>A:</strong> <span id="comparison-left-label"></span></p>
+            <p><strong>B:</strong> <span id="comparison-right-label"></span></p>
+        </div>
+        <div class="dashboard-comparison__table-scroll" role="region"
+             aria-label="Selection counts and metadata coverage" tabindex="0">
+            <table class="dashboard-comparison__table">
+                <caption>Selection counts and metadata coverage</caption>
+                <thead><tr><th scope="col">Measure</th><th scope="col">A</th><th scope="col">B</th></tr></thead>
+                <tbody id="comparison-summary-rows"></tbody>
+            </table>
+        </div>
+        <p id="comparison-empty" class="dashboard-comparison__notice" hidden></p>
+        <div class="dashboard-comparison__table-scroll" role="region"
+             aria-label="Ancestry counts and proportions" tabindex="0">
+            <table class="dashboard-comparison__table dashboard-comparison__ancestries">
+                <caption>Ancestry counts and proportions — both bars use a 0–100% scale</caption>
+                <thead>
+                    <tr><th scope="col" rowspan="2">Ancestry</th><th scope="colgroup" colspan="2">A</th><th scope="colgroup" colspan="2">B</th></tr>
+                    <tr><th scope="col">Count</th><th scope="col">Share</th><th scope="col">Count</th><th scope="col">Share</th></tr>
+                </thead>
+                <tbody id="comparison-ancestry-rows"></tbody>
+            </table>
+        </div>
+        <p id="comparison-denominator" class="dashboard-comparison__help"></p>
+        <p id="comparison-methodology" class="dashboard-comparison__help"></p>
+        <aside class="dashboard-comparison__notes" aria-label="Interpreting this comparison">
+            <p id="comparison-overlap"></p>
+            <p>Full counting includes each linked study in every matching selection.
+                The two selections can overlap, so their totals must not be added.
+                Participant instances are not unique people; overlap in unique
+                people cannot be established from these data.</p>
+            <p>Coverage describes recorded metadata. Missing funding metadata does
+                not mean a study was unfunded, and missing cohort metadata does not
+                mean no cohort was used. Ancestry shares exclude records with no
+                recorded ancestry; “—” means there is no recorded denominator.</p>
+        </aside>
+    </section>
+</dialog>

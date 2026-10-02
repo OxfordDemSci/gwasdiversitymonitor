@@ -5,6 +5,44 @@ engineering. It explains what each quantity represents, how source records
 become analytical products, and which claims the resulting data can—and
 cannot—support.
 
+## Comparing funders and cohorts
+
+The dashboard's **Compare** dialog is loaded on demand. Each side can contain
+several funders and cohorts, or remain empty to include all published GWAS.
+Entities within a facet are combined by union; the funder and cohort facets
+are intersected. Each matching study accession contributes once per side,
+even when several selected entities link to it. The shared stage and optional
+inclusive publication years apply to both sides. The date is the Catalog study
+publication date; undated records are excluded only when a year limit is set.
+
+Participant ancestry shares divide participant instances with a given ancestry
+by all participant instances with recorded ancestry in that side and stage.
+Blank ancestry and `In Part Not Recorded` are excluded from this denominator
+and remain visible in coverage totals. Participant instances are not unique
+people. Distinct-study ancestry shares instead divide unique accessions for an
+ancestry by unique accessions with any recorded ancestry. A study may occur in
+several ancestry groups, so these shares can sum to more than 100%. This unit
+differs from the ancestry-record counts used by the existing dashboard charts;
+the comparison describes that distinction beside its results.
+
+The comparison reports the exact intersection of study accessions and of
+publication IDs across its two sides. It cannot estimate shared unique people.
+Full-counted entity totals must not be added together. Cohort coverage uses
+study accessions, funding-metadata coverage uses publications, and ancestry
+coverage is reported for participant instances and distinct studies. Missing
+funding metadata does not imply an absence of funding. A zero denominator is
+shown as unavailable, rather than as a measured zero percentage.
+
+`POST /api/comparison` accepts JSON with `left` and `right` objects containing
+`funders` and `cohorts` arrays, plus shared `stage` (`initial` or `replication`),
+`metric` (`participants` or `studies`), and optional integer `fromYear`/`toYear`.
+Year bounds are 1900–2100. Requests are limited to 16 KiB and 20 identifiers per
+facet per side. Unknown identifiers return 404, invalid settings 400, and
+oversized requests 413. The endpoint holds the published-data read lock,
+aggregates a narrow ancestry index without association/bubble data, and returns
+`Cache-Control: no-store`. Comparison settings are independent of the main
+dashboard's chart-specific years and traits.
+
 ## Data sources
 
 ### NHGRI–EBI GWAS Catalog

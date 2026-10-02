@@ -15,6 +15,8 @@ from app.DashboardFilters import (
     load_precomputed_facet_overview,
 )
 import os
+import json
+from app.Comparison import MAX_COMPARISON_BYTES, build_comparison, validate_comparison
 
 
 PLOT_JSON_FILES = frozenset(
@@ -283,6 +285,32 @@ def getFilteredDashboard():
         except KeyError:
             abort(404)
         return send_file(path, mimetype="application/json", conditional=True)
+
+
+@app.route("/api/comparison", methods=["POST"])
+def compare_dashboard_selections():
+    if not request.is_json:
+        return jsonify(error="Send comparison settings as JSON."), 415
+    if request.content_length is not None and request.content_length > MAX_COMPARISON_BYTES:
+        return jsonify(error="The comparison request is too large."), 413
+    body = request.stream.read(MAX_COMPARISON_BYTES + 1)
+    if len(body) > MAX_COMPARISON_BYTES:
+        return jsonify(error="The comparison request is too large."), 413
+    try:
+        settings = validate_comparison(json.loads(body))
+    except (ValueError, TypeError, UnicodeDecodeError):
+        return jsonify(error="Invalid comparison settings. Use two selections, a stage, "
+                             "a metric and optional publication years (1900–2100)."), 400
+    with DataLoader.published_data_lock() as published_path:
+        store = get_dashboard_filter_store(published_path)
+        try:
+            payload = build_comparison(store, settings)
+        except KeyError:
+            return jsonify(error="A selected funder or cohort is no longer available. "
+                                 "Clear that selection and search again."), 404
+    response = jsonify(payload)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/download/filtered-dashboard.zip")

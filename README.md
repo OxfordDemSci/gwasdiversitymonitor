@@ -34,6 +34,9 @@ selections. The Monitor also provides:
 - [Shareable dashboard views](docs/DASHBOARD_VIEWS.md) that retain selected
   filters and chart settings across refresh, bookmarks, and browser navigation.
 
+- A compact **Compare** dialog for two independent funder/cohort selections,
+  using the same stage and inclusive publication-year limits. It shows shared
+  studies/publications, metadata coverage, absolute counts, and ancestry shares.
 - Daily ingestion of the GWAS Catalog export, with validated and
   atomic publication of each generated release.
 - A reproducible static figure, source-data table, audit metadata, and a
