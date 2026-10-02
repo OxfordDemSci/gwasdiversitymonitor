@@ -13,6 +13,17 @@ PUBLICATION_MARKER_FILE = 'publication-in-progress.json'
 PUBLICATION_FALLBACK_DIRECTORY = 'previous-release'
 GENERATION_STATE_FILE = '.generation_complete.json'
 
+# The fallback must support on-demand selections/comparisons as well as plots.
+FILTER_RUNTIME_FILES = (
+    'catalog/raw/Cat_Stud.tsv',
+    'catalog/raw/Cat_Map.tsv',
+    'catalog/synthetic/Cat_Anc_wBroader.tsv',
+    'support/Country_Lookup.csv',
+    'support/cohort_cleaner.json',
+    'funders/pubmed_grants.json',
+    'funders/funder_cleaner.json',
+)
+
 TOPLOT_RUNTIME_FILES = (
     'ancestries.json', 'ancestriesOrdered.json', 'bubbleGraph.json',
     'bubble_df.csv', 'chloroMap.json', 'choro_df.csv',

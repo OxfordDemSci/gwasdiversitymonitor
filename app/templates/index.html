@@ -5,8 +5,10 @@
     <script defer src="{{ versioned_static('js/imports/d3-tip.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/imports/select2.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-state.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-provenance.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-comparison.js') }}"></script>
     <script>
+        window.gwasLoadedProvenance = {{ provenance|default({})|tojson }};
         window.gwasStaticAssets = {
             d3plusText: {{ versioned_static('js/imports/d3plus-text.full.min.js')|tojson }}
         };
@@ -16,12 +18,19 @@
 {% block page_styles %}
     <link href="{{ versioned_static('css/select2.min.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ versioned_static('css/dashboard-comparison.css') }}" rel="stylesheet" type="text/css">
+    <link href="{{ versioned_static('css/dashboard-provenance.css') }}" rel="stylesheet" type="text/css">
 {% endblock %}
 
 {% block content %}
+    {% set loaded_dataset_id = (provenance|default({})).get('datasetId') %}
 
     {% include 'components/funder-toolbar.html' %}
     {% include 'components/dashboard-comparison.html' %}
+
+    <div id="dashboard-dataset-stale" class="dashboard-dataset-stale" role="alert" hidden>
+        <p>The dataset changed while this view was open. Reload to load one consistent dataset before sharing or exporting.</p>
+        <button id="dashboard-dataset-reload" type="button">Reload and keep these settings</button>
+    </div>
 
     <div class="dashboard row">
 
@@ -86,13 +95,13 @@
 		 */
 		window.__gwasPlotBootstrap = {
 			urls: {
-				tsPlot: {{ url_for('getplotjson', filename='tsPlot.json', v=plot_versions.get('tsPlot.json'))|tojson }},
-				heatMap: {{ url_for('getplotjson', filename='heatMap.json', v=plot_versions.get('heatMap.json'))|tojson }},
-				ancestriesOrdered: {{ url_for('getplotjson', filename='ancestriesOrdered.json', v=plot_versions.get('ancestriesOrdered.json'))|tojson }},
-				chloroMap: {{ url_for('getplotjson', filename='chloroMap.json', v=plot_versions.get('chloroMap.json'))|tojson }},
-				doughnutGraph: {{ url_for('getplotjson', filename='doughnutGraph.json', v=plot_versions.get('doughnutGraph.json'))|tojson }},
-				summary: {{ url_for('getplotjson', filename='summary.json', v=plot_versions.get('summary.json'))|tojson }},
-				bubbleGraph: {{ url_for('getplotjson', filename='bubbleGraph.json', v=plot_versions.get('bubbleGraph.json'), format=bubble_browser_format)|tojson }}
+				tsPlot: {{ url_for('getplotjson', filename='tsPlot.json', v=plot_versions.get('tsPlot.json'), datasetId=loaded_dataset_id)|tojson }},
+				heatMap: {{ url_for('getplotjson', filename='heatMap.json', v=plot_versions.get('heatMap.json'), datasetId=loaded_dataset_id)|tojson }},
+				ancestriesOrdered: {{ url_for('getplotjson', filename='ancestriesOrdered.json', v=plot_versions.get('ancestriesOrdered.json'), datasetId=loaded_dataset_id)|tojson }},
+				chloroMap: {{ url_for('getplotjson', filename='chloroMap.json', v=plot_versions.get('chloroMap.json'), datasetId=loaded_dataset_id)|tojson }},
+				doughnutGraph: {{ url_for('getplotjson', filename='doughnutGraph.json', v=plot_versions.get('doughnutGraph.json'), datasetId=loaded_dataset_id)|tojson }},
+				summary: {{ url_for('getplotjson', filename='summary.json', v=plot_versions.get('summary.json'), datasetId=loaded_dataset_id)|tojson }},
+				bubbleGraph: {{ url_for('getplotjson', filename='bubbleGraph.json', v=plot_versions.get('bubbleGraph.json'), format=bubble_browser_format, datasetId=loaded_dataset_id)|tojson }}
 			},
 			requests: {}
 		};
@@ -107,6 +116,14 @@
 				bootstrap.requests[name] = window.fetch(
 					bootstrap.urls[name], {credentials: 'same-origin'}
 				).then(function(response) {
+					let expectedId = window.gwasLoadedProvenance.datasetId;
+					let responseId = response.headers.get('X-GWAS-Dataset-ID');
+					if (response.status === 409 || (response.ok && expectedId && responseId !== expectedId)) {
+						let changed = new Error('The dataset changed. Reload this view.');
+						changed.status = 409;
+						if (window.gwasProvenance) window.gwasProvenance.markStale();
+						throw changed;
+					}
 					if (!response.ok) {
 						throw new Error('HTTP ' + response.status);
 					}
@@ -158,8 +175,16 @@
 		function loadPlotJson(name, callback) {
 			let bootstrap = window.__gwasPlotBootstrap;
 			let request = bootstrap.requests[name];
+			function complete(error, data) {
+				if (error && error.status === 409) window.gwasProvenance.markStale();
+				if (!window.gwasProvenance.isCurrent()) {
+					callback(error || new Error(window.gwasProvenance.message));
+					return;
+				}
+				callback(error, data);
+			}
 			if (!request) {
-				d3.json(bootstrap.urls[name], callback);
+				d3.json(bootstrap.urls[name], complete);
 				return;
 			}
 
@@ -167,15 +192,19 @@
 				if (result.ok) {
 					if (result.response) {
 						result.response.json().then(function(data) {
-							callback(null, data);
-						}, function(error) { callback(error); });
+							complete(null, data);
+						}, function(error) { complete(error); });
 						return;
 					}
-					callback(null, result.data);
+					complete(null, result.data);
+					return;
+				}
+				if (result.error && result.error.status === 409) {
+					complete(result.error);
 					return;
 				}
 				// Retry through the established d3 callback path on fetch failure.
-				d3.json(bootstrap.urls[name], callback);
+				d3.json(bootstrap.urls[name], complete);
 			});
 		}
 
@@ -402,10 +431,12 @@
                     funders.indexOf(extraId) === -1) {
                 funders.push(extraId);
             }
-            return $.param({
+            let query = {
                 cohorts: cohorts.sort().join(','),
                 funders: funders.sort().join(',')
-            });
+            };
+            if (window.gwasProvenance.loaded.datasetId) query.datasetId = window.gwasProvenance.loaded.datasetId;
+            return $.param(query);
         }
 
         const dashboardFilterCache = new Map();
@@ -434,6 +465,9 @@
         }
 
 		function requestDashboardFilter(query) {
+			if (!window.gwasProvenance.isCurrent()) {
+				return $.Deferred().reject({status: 409}).promise();
+			}
 			let cached = cachedDashboardFilter(query);
 			if (cached) {
 				return $.Deferred().resolve(cached).promise();
@@ -446,8 +480,15 @@
 				'/json/filtered-dashboard.json?' + query
 			);
 			dashboardFilterRequests.set(query, request);
-			request.done(function(payload) {
-				cacheDashboardFilter(query, payload);
+			request.done(function(payload, status, xhr) {
+				let responseId = xhr.getResponseHeader('X-GWAS-Dataset-ID');
+				if (window.gwasProvenance.isCurrent(responseId) && (!payload.datasetId || window.gwasProvenance.isCurrent(payload.datasetId))) {
+					payload.datasetId = responseId || null;
+					cacheDashboardFilter(query, payload);
+				} else window.gwasProvenance.markStale();
+			});
+			request.fail(function(xhr) {
+				if (xhr.status === 409) window.gwasProvenance.markStale();
 			});
 			request.always(function() {
 				if (dashboardFilterRequests.get(query) === request) {
@@ -597,7 +638,7 @@
         function updateSelectionActions(funderEntries, cohortEntries) {
             let download = $('#funder-data-download');
             let report = $('#funder-report-link');
-            if (!funderEntries.length && !cohortEntries.length) {
+            if ((!funderEntries.length && !cohortEntries.length) || !window.gwasProvenance.isCurrent()) {
                 download.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 report.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 return;
@@ -709,6 +750,7 @@
         }
 
         function renderSelectedDashboard(payload, preservedState) {
+            if (!window.gwasProvenance.isCurrent(payload.datasetId)) return window.gwasProvenance.markStale();
             activeSelectionData = payload.selection;
             try {
                 let selection = payload.selection || {};
@@ -725,7 +767,7 @@
         }
 
         function applyDashboardFilters(preservedState) {
-            if (!baseDashboardReady) return Promise.resolve(false);
+            if (!baseDashboardReady || !window.gwasProvenance.isCurrent()) return Promise.resolve(false);
 			let revision = ++dashboardFilterRevision;
 			let funderSlugs = selectedFilterValues('#funder-filter');
 			let cohortIds = selectedFilterValues('#dataset-filter');
@@ -769,7 +811,7 @@
                     if (status !== 'abort') {
                         let message = xhr.responseJSON && xhr.responseJSON.error;
                         $('#funder-status').text(
-                            message || 'Could not load this selection'
+                            xhr.status === 409 ? window.gwasProvenance.message : (message || 'Could not load this selection')
                         );
                     }
                 })

@@ -281,6 +281,10 @@
             closeDropdowns();
             clearError();
             results.hidden = true;
+            if (window.gwasProvenance && !window.gwasProvenance.isCurrent()) {
+                showError(window.gwasProvenance.message);
+                return;
+            }
             try {
                 initialiseFields();
             } catch (failure) {
@@ -292,6 +296,7 @@
             }
             if (!form.reportValidity()) return;
             const payload = {
+                datasetId: window.gwasProvenance ? window.gwasProvenance.loaded.datasetId || null : null,
                 left: {funders: selected('left', 'funders'), cohorts: selected('left', 'cohorts')},
                 right: {funders: selected('right', 'funders'), cohorts: selected('right', 'cohorts')},
                 stage: stage.value,
@@ -311,10 +316,18 @@
                     signal: controller.signal,
                     credentials: 'same-origin'
                 });
+                if (response.status === 409 && window.gwasProvenance) {
+                    window.gwasProvenance.markStale();
+                    throw new Error(window.gwasProvenance.message);
+                }
                 const data = await response.json();
                 if (requestedRevision !== revision || !dialog.open) return;
                 if (!response.ok) {
                     throw new Error(typeof data.error === 'string' ? data.error : 'The comparison could not be loaded. Please try again.');
+                }
+                if (window.gwasProvenance && !window.gwasProvenance.isCurrent(data.datasetId)) {
+                    window.gwasProvenance.markStale();
+                    throw new Error(window.gwasProvenance.message);
                 }
                 render(data);
                 status.textContent = 'Comparison ready. Counts, coverage and ancestry shares are shown below.';

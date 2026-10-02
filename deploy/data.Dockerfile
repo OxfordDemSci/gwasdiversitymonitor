@@ -16,6 +16,7 @@ COPY funder_pipeline.py funder_pipeline.py
 COPY data/funders/funder_cleaner.json data/funders/funder_cleaner.json
 COPY data/support/cohort_cleaner.json data/support/cohort_cleaner.json
 COPY app/DataLoader.py app/DataLoader.py
+COPY app/Provenance.py app/Provenance.py
 COPY app/DashboardFilters.py app/DashboardFilters.py
 
 # CMD ["python3", "generate_data.py", "&&", "cron", "-f"]

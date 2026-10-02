@@ -17,6 +17,9 @@ from app.DashboardFilters import (
 import os
 import json
 from app.Comparison import MAX_COMPARISON_BYTES, build_comparison, validate_comparison
+from app.Provenance import (
+    provenance_for_release, published_provenance, valid_dataset_id,
+)
 
 
 PLOT_JSON_FILES = frozenset(
@@ -24,6 +27,43 @@ PLOT_JSON_FILES = frozenset(
     if filename.endswith(".json")
 )
 VERSIONED_CACHE_SECONDS = 31536000
+
+
+def _dataset_response(response, identifier):
+    if identifier:
+        response.headers['X-GWAS-Dataset-ID'] = identifier
+    return response
+
+
+def _bound_dataset(published_path, expected=None):
+    """Call within the publication lock, before opening any requested data."""
+    identifier = published_provenance(published_path)['datasetId']
+    if expected is None:
+        expected = request.args.get('datasetId')
+    if expected is not None and (not valid_dataset_id(expected) or expected != identifier):
+        response = jsonify(
+            error='The published dataset changed. Reload the dashboard to use the current release.',
+            code='dataset_changed', datasetId=identifier,
+        )
+        response.status_code = 409
+        response.headers['Cache-Control'] = 'no-store'
+        abort(_dataset_response(response, identifier))
+    return identifier
+
+
+@app.route('/api/provenance')
+def get_provenance():
+    with DataLoader.published_data_lock() as published_path:
+        identifier = _bound_dataset(published_path)
+        payload = provenance_for_release(published_path)
+        if request.args.get('coverage') == '1':
+            coverage = load_precomputed_facet_overview(published_path)
+            if coverage is None:
+                coverage = get_dashboard_filter_store(published_path).facet_overview()
+            payload['coverage'] = coverage
+        response = jsonify(payload)
+    response.headers['Cache-Control'] = 'no-store'
+    return _dataset_response(response, identifier)
 
 @app.context_processor
 def inject_template_scope():
@@ -62,6 +102,7 @@ def index():
             ancestries=ancestries, parentTerms=parentTerms, summary=summary,
             plot_versions=plot_versions,
             bubble_browser_format=BUBBLE_BROWSER_FORMAT,
+            provenance=provenance_for_release(published_path),
         )
 
 @app.route('/privacy-policy')
@@ -94,6 +135,7 @@ def getCSV(filename):
     zip_downloads = {"heatmap", "timeseries", "gwasdiversitymonitor_download"}
     csv_downloads = {"bubble_df", "choro_df", "doughnut_df"}
     with DataLoader.published_data_lock() as published_path:
+        _bound_dataset(published_path)
         if filename in zip_downloads:
             path = os.path.join(
                 published_path, 'todownload', filename + '.zip'
@@ -124,6 +166,7 @@ def getplotjson(filename):
     if filename not in PLOT_JSON_FILES:
         abort(404)
     with DataLoader.published_data_lock() as published_path:
+        identifier = _bound_dataset(published_path)
         path = os.path.join(published_path, "toplot", filename)
         if not os.path.isfile(path):
             abort(404)
@@ -169,7 +212,7 @@ def getplotjson(filename):
             response.headers["Content-Encoding"] = "gzip"
         if version_matches:
             response.cache_control.immutable = True
-        return response
+        return _dataset_response(response, identifier)
 
 
 @app.route("/api/traits", methods=['GET'])
@@ -279,12 +322,13 @@ def getFilteredDashboard():
     if not cohort_ids and not funder_slugs:
         abort(400)
     with DataLoader.published_data_lock() as published_path:
+        identifier = _bound_dataset(published_path)
         store = get_dashboard_filter_store(published_path)
         try:
             path = store.dashboard_path(cohort_ids, funder_slugs)
         except KeyError:
             abort(404)
-        return send_file(path, mimetype="application/json", conditional=True)
+        return _dataset_response(send_file(path, mimetype="application/json", conditional=True), identifier)
 
 
 @app.route("/api/comparison", methods=["POST"])
@@ -297,20 +341,26 @@ def compare_dashboard_selections():
     if len(body) > MAX_COMPARISON_BYTES:
         return jsonify(error="The comparison request is too large."), 413
     try:
-        settings = validate_comparison(json.loads(body))
+        requested = json.loads(body)
+        if not isinstance(requested, dict):
+            raise ValueError('Invalid comparison settings')
+        expected_dataset = requested.pop('datasetId', None)
+        settings = validate_comparison(requested)
     except (ValueError, TypeError, UnicodeDecodeError):
         return jsonify(error="Invalid comparison settings. Use two selections, a stage, "
                              "a metric and optional publication years (1900–2100)."), 400
     with DataLoader.published_data_lock() as published_path:
+        identifier = _bound_dataset(published_path, expected_dataset)
         store = get_dashboard_filter_store(published_path)
         try:
             payload = build_comparison(store, settings)
         except KeyError:
             return jsonify(error="A selected funder or cohort is no longer available. "
                                  "Clear that selection and search again."), 404
+    payload['datasetId'] = identifier
     response = jsonify(payload)
     response.headers["Cache-Control"] = "no-store"
-    return response
+    return _dataset_response(response, identifier)
 
 
 @app.route("/download/filtered-dashboard.zip")
@@ -320,6 +370,7 @@ def getFilteredDashboardDownload():
     if not cohort_ids and not funder_slugs:
         abort(400)
     with DataLoader.published_data_lock() as published_path:
+        _bound_dataset(published_path)
         store = get_dashboard_filter_store(published_path)
         try:
             path = store.download_path(cohort_ids, funder_slugs)
@@ -343,6 +394,7 @@ def getFilteredDashboardReport():
     if not cohort_ids and not funder_slugs:
         abort(400)
     with DataLoader.published_data_lock() as published_path:
+        _bound_dataset(published_path)
         store = get_dashboard_filter_store(published_path)
         try:
             dashboard = store.dashboard(cohort_ids, funder_slugs)
@@ -445,6 +497,11 @@ def getFunderReport(slug):
 
 @app.errorhandler(DataLoader.PublishedDataUnavailable)
 def published_data_unavailable(error):
+    if request.path.startswith(('/api/', '/json/')):
+        response = jsonify(error=str(error))
+        response.status_code = 503
+        response.headers['Cache-Control'] = 'no-store'
+        return response
     return Response(str(error), status=503, mimetype='text/plain')
 
 

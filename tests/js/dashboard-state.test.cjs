@@ -63,6 +63,13 @@ test('bounds and validates untrusted values without coercing IDs', () => {
     assert.equal(state.parse('?view=1&traits=' + 'x'.repeat(25000)).warnings.length, 1);
 });
 
+test('shareable views never pin an incidental dataset version', () => {
+    const url = new URL(state.url({funders: ['nih']}, 'https://example.org/?datasetId=gwas-old&utm_source=paper'));
+    assert.equal(url.searchParams.has('datasetId'), false);
+    assert.equal(url.searchParams.get('funders'), 'nih');
+    assert.equal(url.searchParams.get('utm_source'), 'paper');
+});
+
 test('restoration waits for baseline data and ready cannot start duplicate requests', async () => {
     const f = fixture('?view=1&metric=studies&funders=nih');
     const controller = state.create(f.adapter, f.browser);
@@ -133,4 +140,17 @@ test('clipboard failure exposes a manually copyable URL', async () => {
     await controller.ready();
     assert.equal(await controller.copy(), false);
     assert.match(f.messages.at(-1), /^https:\/\/example.org\/\?view=1/);
+});
+
+test('public copy API cannot share a view marked as a mixed dataset', async () => {
+    const f = fixture();
+    f.browser.gwasProvenance = {isCurrent: () => false, message: 'Reload the changed dataset.'};
+    let copied = false;
+    f.browser.navigator.clipboard = {writeText: async () => { copied = true; }};
+    f.adapter.showLink = () => { throw new Error('The manual fallback must also be blocked'); };
+    const controller = state.create(f.adapter, f.browser);
+    await controller.ready();
+    assert.equal(await controller.copy(), false);
+    assert.equal(copied, false);
+    assert.equal(f.messages.at(-1), 'Reload the changed dataset.');
 });

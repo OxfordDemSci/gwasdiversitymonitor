@@ -43,6 +43,10 @@ aggregates a narrow ancestry index without association/bubble data, and returns
 `Cache-Control: no-store`. Comparison settings are independent of the main
 dashboard's chart-specific years and traits.
 
+The optional `datasetId` field binds a comparison to the dataset loaded by the
+page. A mismatch returns 409 with `code: "dataset_changed"`; successful responses
+include the same ID in their JSON and `X-GWAS-Dataset-ID` header.
+
 ## Data sources
 
 ### NHGRI–EBI GWAS Catalog
@@ -216,6 +220,71 @@ artifact fingerprints and the inputs needed to decide whether regeneration is
 necessary. A change to `generate_data.py`,
 `funder_pipeline.py`, relevant application dependencies, normalisation maps, or
 the static support bundle invalidates the corresponding generation state.
+
+The dashboard's **Data details** panel separates three facts:
+
+- **Catalog release date** comes only from agreeing `rYYYY-MM-DD` release markers
+  in the downloaded study, ancestry, and association filenames (including the
+  validated TSV member of a ZIP). This follows the
+  [Catalog's filename convention](https://www.ebi.ac.uk/gwas/docs/file-downloads/).
+  HTTP Last-Modified, local file modification times, and download times are not
+  substituted for a release date. Missing or conflicting evidence remains
+  “Not recorded”.
+- **Last successful update check** is when all four raw downloads completed and
+  passed validation. It can advance even when the data are unchanged, or when
+  subsequent transformation fails. A successful resumed run does not imply a
+  new upstream check.
+- **Dashboard dataset version** is `gwas-` followed by a SHA-256 digest of the
+  manifest's artifact and source fingerprints, implementation fingerprints,
+  generation parameters, and static-bundle fingerprints. Canonical JSON makes
+  key order irrelevant; completion timestamps and acquisition metadata are
+  excluded. The ID is computed for legacy manifests without modifying them.
+
+The existing completion manifest now carries optional `provenance` metadata:
+`version`, `datasetId`, `fetchCompletedAt`, and at most four `sources` entries.
+Each entry records its local `path`, requested `url`, response `filename`,
+optional `archiveMember`, UTC `fetchedAt`, verified `releaseDate`, `etag`, and
+`lastModified`. Source metadata are copied from the retained raw snapshot, so
+recovery preserves the original acquisition evidence. Older manifests have
+unknown acquisition dates; `completed_at` identifies generation completion only.
+This metadata is additive to manifest schema version 3.
+
+Operational state is separate, in
+`data/.generate_data/runtime-status.json`. Atomic writes record
+`lastRunStartedAt`, `lastRunFinishedAt`, `lastRunStatus`, `lastRunOutcome`,
+`lastSuccessfulRunAt`, `lastSuccessfulFetchAt`, `lastPublicationAt`, and
+`lastPublicationDatasetId`. Outcomes remain `unchanged`, `published`, or
+`resumed`. Only the bounded exception class enters `lastErrorType`; diagnostic
+messages remain in logs. Records are updated under the generation lock, so a
+rejected overlapping invocation cannot overwrite the active run. Status-write
+failures are logged without changing the publication result or original error.
+
+An unchanged run leaves the scientific files and release ID unchanged. A resumed
+publication advances successful-run status and records the actual publication
+completion, but does not invent a fresh fetch. During recovery, page metadata
+comes from the same previous-release snapshot as the plotted data, while job
+status comes from the live control directory. Verified filter/comparison source
+dependencies are retained alongside plot files using hard links. If an older
+fallback lacks those dependencies, optional selection views return a temporary
+503 rather than mixing in newer source data.
+
+`GET /api/provenance` returns these normalized fields with `Cache-Control:
+no-store`. `?coverage=1` adds funder/cohort coverage from the existing precomputed
+or cached facet overview; it is requested only when Data details first opens.
+These percentages describe all study accessions, and missing metadata do not
+imply an absence of funding or cohorts. No facet/source scan is added to the
+initial dashboard request. Manifest metadata are bounded and cached by file
+identity and modification metadata, without hashing large data files on requests.
+
+The page freezes its served provenance in `window.gwasProvenance.loaded`;
+`capture()` returns a copy and `isCurrent()` reports whether it remains safe to
+share/export. Plot and selected-data requests carry `datasetId` and verify the
+response's `X-GWAS-Dataset-ID` before drawing or caching data. A changed dataset
+or an unbound successful response shows a reload action and blocks sharing and
+exports. Comparison requests obey the same contract. Shared view links omit
+`datasetId`: reloading selects the current published release and binds all that
+page's subsequent requests to it. This prevents parallel plot requests from
+silently combining releases during publication.
 
 The static figure additionally exports:
 

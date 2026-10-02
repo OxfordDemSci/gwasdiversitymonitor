@@ -28,7 +28,12 @@ from app.DataLoader import (
     DataLoader,
     RUNTIME_DATA_FILES,
     TOPLOT_RUNTIME_FILES,
+    FILTER_RUNTIME_FILES,
     published_data_lock,
+)
+from app.Provenance import (
+    RUNTIME_STATUS_FILE, dataset_identity, normalize_sources, runtime_status,
+    source_metadata, utc_now,
 )
 from app.DashboardFilters import (
     COHORT_CLEANER_FILE,
@@ -2112,6 +2117,7 @@ def download_cat(data_path, ebi_download):
     try:
         raw_dir = os.path.join(data_path, 'catalog', 'raw')
         os.makedirs(raw_dir, exist_ok=True)
+        sources = []
 
         http_endpoints = [
             ('studies/v1.0.3.1', 'Cat_Stud.tsv', {'STUDY ACCESSION'}),
@@ -2193,6 +2199,10 @@ def download_cat(data_path, ebi_download):
                     f'(saved as {fallback_name}; server filename: '
                     f'{server_name}{archive_detail})'
                 )
+                sources.append(source_metadata(
+                    'catalog/raw/' + fallback_name, url, r,
+                    server_name, archive_member,
+                ))
 
         # FTP: trait mappings
         requests_ftp.monkeypatch_session()
@@ -2227,6 +2237,11 @@ def download_cat(data_path, ebi_download):
             if temporary_path and os.path.exists(temporary_path):
                 os.unlink(temporary_path)
         diversity_logger.info('Download of efo-trait-mappings: Complete')
+        sources.append(source_metadata(
+            'catalog/raw/Cat_Map.tsv', ftpsite + subdom + file, r,
+            _safe_filename(r, file),
+        ))
+        return sources
 
     except Exception:
         diversity_logger.exception('Problem downloading Catalog data!')
@@ -2458,6 +2473,7 @@ def _implementation_fingerprints(repository_path):
     implementation_files = (
         'generate_data.py',
         'app/DataLoader.py',
+        'app/Provenance.py',
         'app/DashboardFilters.py',
         'funder_pipeline.py',
         'data/funders/funder_cleaner.json',
@@ -2852,8 +2868,9 @@ def _initialize_generation_workspace(repository_path, data_path,
         paths['workspace_bundle'], paths['workspace_data']
     )
 
-    download_cat(paths['workspace_data'], ebi_download)
+    sources = download_cat(paths['workspace_data'], ebi_download)
     raw_fingerprints = _validate_raw_inputs(paths['workspace_data'])
+    fetched_at = utc_now()
     _atomic_write_json(paths['raw_state'], {
         'version': GENERATION_STATE_VERSION,
         'completed_at': datetime.datetime.now(
@@ -2862,7 +2879,10 @@ def _initialize_generation_workspace(repository_path, data_path,
         'raw_fingerprints': raw_fingerprints,
         'generation_failures': 0,
         'input_static_bundle_fingerprint': input_bundle_fingerprint,
+        'fetch_completed_at': fetched_at,
+        'sources': normalize_sources(sources),
     })
+    _record_runtime_status(data_path, lastSuccessfulFetchAt=fetched_at)
     return paths, raw_fingerprints
 
 
@@ -3049,12 +3069,13 @@ def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
 
 
 def _build_completion_state(repository_path, validation,
-                            input_static_bundle_fingerprint=None):
+                            input_static_bundle_fingerprint=None,
+                            source_state=None):
     if input_static_bundle_fingerprint is None:
         input_static_bundle_fingerprint = _file_fingerprint(
             os.path.join(repository_path, 'data_static.zip')
         )
-    return {
+    state = {
         'version': GENERATION_STATE_VERSION,
         'completed_at': datetime.datetime.now(
             datetime.timezone.utc
@@ -3071,6 +3092,14 @@ def _build_completion_state(repository_path, validation,
             repository_path
         ),
     }
+    source_state = source_state or {}
+    state['provenance'] = {
+        'version': 1,
+        'datasetId': dataset_identity(state),
+        'sources': normalize_sources(source_state.get('sources')),
+        'fetchCompletedAt': source_state.get('fetch_completed_at'),
+    }
+    return state
 
 
 def _atomic_copy(source_path, target_path, expected_fingerprint=None):
@@ -3183,6 +3212,21 @@ def _verified_previous_funder_fingerprints(data_path):
         return {}
 
 
+def _verified_previous_filter_fingerprints(data_path):
+    """Preserve only named source dependencies verified by the live manifest."""
+    try:
+        state = _read_json(os.path.join(data_path, GENERATION_STATE_FILE))
+        artifacts = state.get('artifact_fingerprints', {})
+        selected = {
+            path: artifacts[path]
+            for path in (*FILTER_RUNTIME_FILES, PRECOMPUTED_FILTER_ARCHIVE)
+            if path in artifacts
+        }
+        return selected if _fingerprints_match(data_path, selected) else {}
+    except (OSError, ValueError, TypeError, AttributeError):
+        return {}
+
+
 def _create_previous_release_snapshot(repository_path, data_path, paths):
     """Snapshot the coherent runtime release before live publication."""
     if os.path.isdir(paths['fallback_data']):
@@ -3201,6 +3245,9 @@ def _create_previous_release_snapshot(repository_path, data_path, paths):
         snapshot_fingerprints = dict(runtime_fingerprints)
         snapshot_fingerprints.update(
             _verified_previous_funder_fingerprints(data_path)
+        )
+        snapshot_fingerprints.update(
+            _verified_previous_filter_fingerprints(data_path)
         )
         for relative_path in snapshot_fingerprints:
             source_path = os.path.join(data_path, relative_path)
@@ -3342,6 +3389,10 @@ def _publish_staged_release(repository_path, data_path, paths):
         _fsync_directory(os.path.dirname(paths['publication']))
 
     _cleanup_committed_publication(paths)
+    _record_runtime_status(
+        data_path, lastPublicationAt=utc_now(),
+        lastPublicationDatasetId=dataset_identity(state),
+    )
     diversity_logger.info(
         'Published the complete generated dataset; completion manifest and '
         'all artifact fingerprints passed validation.'
@@ -3395,67 +3446,102 @@ def generate_and_publish(repository_path, ebi_download,
     os.makedirs(data_path, exist_ok=True)
 
     with _generation_lock(data_path):
-        if _resume_publication_if_needed(repository_path, data_path):
-            return 'resumed'
-
-        paths = _generation_paths(data_path)
-        if _staged_state_valid(paths, repository_path):
-            diversity_logger.info(
-                'Publishing the complete staged release retained from an '
-                'interrupted generation.'
-            )
-            _publish_staged_release(repository_path, data_path, paths)
-            return 'resumed'
-
-        paths, raw_fingerprints = _prepare_generation_workspace(
-            repository_path, data_path, ebi_download
-        )
-        if _completion_state_valid(
-                data_path,
-                repository_path,
-                raw_fingerprints,
-                check_implementation=True):
-            _cleanup_committed_publication(paths)
-            diversity_logger.info(
-                'No new raw data found and the complete published artifact '
-                'manifest passed validation; wrangling is not required.'
-            )
-            return 'unchanged'
-
-        input_bundle_fingerprint = _reset_workspace_for_wrangling(
-            repository_path, paths
-        )
-        previous_data_path = data_path
-        if os.path.isfile(paths['publication']) and \
-                os.path.isdir(paths['fallback_data']):
-            previous_data_path = paths['fallback_data']
-        timeupdated = _release_timeupdated(
-            paths, raw_fingerprints, previous_data_path
+        _record_runtime_status(
+            data_path, lastRunStartedAt=utc_now(), lastRunFinishedAt=None,
+            lastRunStatus='running', lastRunOutcome=None, lastErrorType=None,
         )
         try:
-            _run_wrangling(
-                paths['workspace_data'], paths['workspace_bundle'],
-                timeupdated, previous_data_path
+            result = _generate_locked(repository_path, data_path, ebi_download)
+        except BaseException as error:
+            _record_runtime_status(
+                data_path, lastRunFinishedAt=utc_now(), lastRunStatus='failed',
+                lastErrorType=type(error).__name__,
             )
-            _run_funder_wrangling(
-                repository_path, paths['workspace_data'], previous_data_path
-            )
-            validation = validate_generated_release(
-                paths['workspace_data'], paths['workspace_bundle']
-            )
-            if validation['raw_fingerprints'] != raw_fingerprints:
-                raise RuntimeError(
-                    'Raw inputs changed while the staged release was generated'
-                )
-        except Exception:
-            _record_workspace_generation_failure(paths)
             raise
-        completion_state = _build_completion_state(
-            repository_path, validation, input_bundle_fingerprint
+        finished_at = utc_now()
+        _record_runtime_status(
+            data_path, lastRunFinishedAt=finished_at, lastRunStatus='success',
+            lastSuccessfulRunAt=finished_at, lastRunOutcome=result,
         )
-        _atomic_write_json(paths['staged_state'], completion_state)
+        return result
+
+
+def _record_runtime_status(data_path, **changes):
+    """Best-effort observability cannot change a publication's outcome."""
+    try:
+        status = runtime_status(data_path)
+        status.update(changes)
+        _atomic_write_json(os.path.join(
+            data_path, GENERATION_CONTROL_DIRECTORY, RUNTIME_STATUS_FILE
+        ), status)
+    except Exception:
+        logger = globals().get('diversity_logger') or logging.getLogger(__name__)
+        logger.warning('Could not record data-run status.', exc_info=True)
+
+
+def _generate_locked(repository_path, data_path, ebi_download):
+    if _resume_publication_if_needed(repository_path, data_path):
+        return 'resumed'
+
+    paths = _generation_paths(data_path)
+    if _staged_state_valid(paths, repository_path):
+        diversity_logger.info(
+            'Publishing the complete staged release retained from an '
+            'interrupted generation.'
+        )
         _publish_staged_release(repository_path, data_path, paths)
-        return 'published'
+        return 'resumed'
+
+    paths, raw_fingerprints = _prepare_generation_workspace(
+        repository_path, data_path, ebi_download
+    )
+    if _completion_state_valid(
+            data_path,
+            repository_path,
+            raw_fingerprints,
+            check_implementation=True):
+        _cleanup_committed_publication(paths)
+        diversity_logger.info(
+            'No new raw data found and the complete published artifact '
+            'manifest passed validation; wrangling is not required.'
+        )
+        return 'unchanged'
+
+    input_bundle_fingerprint = _reset_workspace_for_wrangling(
+        repository_path, paths
+    )
+    previous_data_path = data_path
+    if os.path.isfile(paths['publication']) and \
+            os.path.isdir(paths['fallback_data']):
+        previous_data_path = paths['fallback_data']
+    timeupdated = _release_timeupdated(
+        paths, raw_fingerprints, previous_data_path
+    )
+    try:
+        _run_wrangling(
+            paths['workspace_data'], paths['workspace_bundle'],
+            timeupdated, previous_data_path
+        )
+        _run_funder_wrangling(
+            repository_path, paths['workspace_data'], previous_data_path
+        )
+        validation = validate_generated_release(
+            paths['workspace_data'], paths['workspace_bundle']
+        )
+        if validation['raw_fingerprints'] != raw_fingerprints:
+            raise RuntimeError(
+                'Raw inputs changed while the staged release was generated'
+            )
+    except Exception:
+        _record_workspace_generation_failure(paths)
+        raise
+    completion_state = _build_completion_state(
+        repository_path, validation, input_bundle_fingerprint,
+        source_state=_read_json(paths['raw_state']),
+    )
+    _atomic_write_json(paths['staged_state'], completion_state)
+    _publish_staged_release(repository_path, data_path, paths)
+    return 'published'
 
 
 def main():

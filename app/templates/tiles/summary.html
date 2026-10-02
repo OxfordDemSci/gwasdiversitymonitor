@@ -2,7 +2,36 @@
     <h2>
         Total GWAS participants diversity
     </h2>
-    <small>Version 1.0.0. Last check for data: {{ summary.timeupdated }} {{ summary.timezone }}.</small>
+    {% set dataset_provenance = provenance|default({}) %}
+    <details id="dashboard-provenance" class="dashboard-provenance">
+        <summary>Data details · <span data-provenance="checkSummary">{% if dataset_provenance.lastSuccessfulFetchAt %}checked {{ dataset_provenance.lastSuccessfulFetchAt[:10] }}{% else %}check not recorded{% endif %}</span></summary>
+        <dl>
+            <dt>Catalog release date</dt>
+            <dd>{{ dataset_provenance.catalogReleaseDate or 'Not recorded' }}</dd>
+            <dt>Last successful update check</dt>
+            <dd data-provenance="lastSuccessfulFetchAt">{{ dataset_provenance.lastSuccessfulFetchAt or 'Not recorded' }}</dd>
+            <dt>Dashboard dataset version</dt>
+            <dd class="dashboard-provenance__id">{{ dataset_provenance.datasetId or 'Not recorded' }}</dd>
+            <dt>Dataset generated</dt>
+            <dd data-provenance="generatedAt">{{ dataset_provenance.generatedAt or 'Not recorded' }}</dd>
+            <dt>Last successful data run</dt>
+            <dd data-provenance="lastSuccessfulRunAt">{{ dataset_provenance.lastSuccessfulRunAt or 'Not recorded' }}</dd>
+        </dl>
+        <p>Times are shown in UTC. A successful update check can leave the dataset unchanged. Missing dates were not recorded and do not imply that no update occurred.</p>
+        <div class="dashboard-provenance__coverage">
+            <h3>Metadata coverage</h3>
+            <p id="provenance-coverage-status" role="status">Coverage loads when this panel opens.</p>
+            <dl id="provenance-coverage-values" hidden>
+                <dt>Studies linked to a recorded funder</dt>
+                <dd id="provenance-funder-coverage"></dd>
+                <dt>Studies linked to a recorded cohort</dt>
+                <dd id="provenance-cohort-coverage"></dd>
+            </dl>
+            <button id="provenance-coverage-retry" type="button" hidden>Retry coverage</button>
+            <p>Coverage is across all studies in this dataset. Missing metadata does not mean a study was unfunded or had no cohort.</p>
+            <p><a href="{{ url_for('additional') }}">How metadata is linked</a> · <button id="provenance-compare" class="dashboard-provenance__link" type="button">Compare coverage by selection and stage</button></p>
+        </div>
+    </details>
     <div class="row">
         {% for key, value in ancestries.items() %}
             {% include 'components/numbers.html' %}

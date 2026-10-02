@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 import funder_pipeline
+from app.DataLoader import FILTER_RUNTIME_FILES, PublishedDataUnavailable
 
 
 FILTER_SCHEMA_VERSION = 8
@@ -1524,6 +1525,13 @@ _stores_lock = threading.Lock()
 
 def get_dashboard_filter_store(data_path="data"):
     absolute_path = os.path.abspath(data_path)
+    if os.path.basename(absolute_path) == 'previous-release' and \
+            os.path.basename(os.path.dirname(absolute_path)) == '.generate_data' and \
+            any(not os.path.isfile(os.path.join(absolute_path, path)) for path in FILTER_RUNTIME_FILES):
+        raise PublishedDataUnavailable(
+            'Selection details are temporarily unavailable while the dataset is '
+            'being recovered. The previous dashboard remains available; try again shortly.'
+        )
     source_paths = (
         os.path.join(absolute_path, "catalog", "raw", "Cat_Stud.tsv"),
         os.path.join(

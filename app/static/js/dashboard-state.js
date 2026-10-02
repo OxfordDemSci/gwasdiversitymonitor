@@ -103,6 +103,8 @@
         state = normalize(state);
         var result = new URL(base);
         keys.forEach(function(key) { result.searchParams.delete(key); });
+        // Dataset binding is per page load, never a permanent shared-view setting.
+        result.searchParams.delete('datasetId');
         function set(key, value) { if (value) result.searchParams.set(key, value); }
         set('view', '1');
         if (state.metric !== 'participants') set('metric', state.metric);
@@ -194,6 +196,10 @@
             },
             settled: function() { sync(true); },
             copy: function() {
+                if (browser.gwasProvenance && !browser.gwasProvenance.isCurrent()) {
+                    announce(browser.gwasProvenance.message);
+                    return Promise.resolve(false);
+                }
                 var href = url(capture(), browser.location.href);
                 if (!ready || restoring || href.length > maxURLLength) {
                     announce(!ready || restoring ? 'Wait for the view to finish loading before sharing.' :
