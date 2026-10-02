@@ -5,12 +5,23 @@ from flask import send_file, jsonify
 from flask import abort
 from app import app
 from app import DataLoader
+from app.BrowserPlotCache import (
+    BUBBLE_BROWSER_FORMAT, prepare_bubble_browser_cache, prepare_plot_gzip,
+)
 from app.FunderData import FunderDataStore, FunderDataUnavailable
 from app.DashboardFilters import (
     DashboardSelectionUnavailable,
     get_dashboard_filter_store,
+    load_precomputed_facet_overview,
 )
 import os
+
+
+PLOT_JSON_FILES = frozenset(
+    filename for filename in DataLoader.TOPLOT_RUNTIME_FILES
+    if filename.endswith(".json")
+)
+VERSIONED_CACHE_SECONDS = 31536000
 
 @app.context_processor
 def inject_template_scope():
@@ -32,23 +43,23 @@ def index():
         dataLoader = DataLoader.DataLoader(published_path)
 
         ancestries = dataLoader.getAncestriesList()
-        ancestriesOrdered = dataLoader.getAncestriesListOrder()
         parentTerms = dataLoader.getTermsList()
-        traits = dataLoader.getTraitsList()
-
         summary = dataLoader.getSummaryStatistics()
-        bubbleGraph = dataLoader.getBubbleGraph()
-        tsPlot = dataLoader.getTSPlot()
-        chloroMap = dataLoader.getChloroMap()
-        heatMap = dataLoader.getHeatMap()
-        doughnutGraph = dataLoader.getDoughnutGraph(ancestriesOrdered)
+        plot_versions = {
+            filename: str(os.stat(
+                os.path.join(published_path, "toplot", filename)
+            ).st_mtime_ns)
+            for filename in PLOT_JSON_FILES
+            if os.path.isfile(os.path.join(
+                published_path, "toplot", filename
+            ))
+        }
 
         return render_template(
             'index.html', title='Home', switches='true',
-            ancestries=ancestries, ancestriesOrdered=ancestriesOrdered,
-            parentTerms=parentTerms, traits=traits, summary=summary,
-            bubbleGraph=bubbleGraph, tsPlot=tsPlot, chloroMap=chloroMap,
-            heatMap=heatMap, doughnutGraph=doughnutGraph
+            ancestries=ancestries, parentTerms=parentTerms, summary=summary,
+            plot_versions=plot_versions,
+            bubble_browser_format=BUBBLE_BROWSER_FORMAT,
         )
 
 @app.route('/privacy-policy')
@@ -64,8 +75,14 @@ def additional():
     with DataLoader.published_data_lock() as published_path:
         dataLoader = DataLoader.DataLoader(published_path)
         summary = dataLoader.getSummaryStatistics()
+        facet_summary = load_precomputed_facet_overview(published_path)
+        if facet_summary is None:
+            facet_summary = get_dashboard_filter_store(
+                published_path
+            ).facet_overview()
         return render_template(
             'pages/additional-information.html', summary=summary,
+            facet_summary=facet_summary,
             title='Additional Information'
         )
 
@@ -91,26 +108,66 @@ def getCSV(filename):
         path = os.path.join(published_path, 'toplot', filename + '.csv')
         if not os.path.exists(path):
             abort(404)
-
-        with open(path) as fp:
-            csv = fp.read()
-
-        return Response(
-            csv,
+        return send_file(
+            path,
             mimetype="text/csv",
-            headers={"Content-disposition":
-                     "attachment; filename="+filename+".csv"})
+            as_attachment=True,
+            download_name=filename + ".csv",
+            conditional=True,
+        )
 
 
 @app.route("/json/<filename>")
 def getplotjson(filename):
+    if filename not in PLOT_JSON_FILES:
+        abort(404)
     with DataLoader.published_data_lock() as published_path:
-        with open(os.path.join(published_path, 'toplot', filename)) as fp:
-            json = fp.read()
-
-            return Response(
-                json,
-                mimetype="application/json")
+        path = os.path.join(published_path, "toplot", filename)
+        if not os.path.isfile(path):
+            abort(404)
+        source_stat = os.stat(path)
+        current_version = str(source_stat.st_mtime_ns)
+        version_matches = request.args.get("v") == current_version
+        compressed_path = path + ".gz"
+        compressed_available = os.path.isfile(compressed_path) and \
+            os.stat(compressed_path).st_mtime_ns >= source_stat.st_mtime_ns
+        if filename == "bubbleGraph.json" and \
+                request.args.get("format") == BUBBLE_BROWSER_FORMAT:
+            try:
+                path, compressed_path = prepare_bubble_browser_cache(
+                    published_path
+                )
+                compressed_available = True
+            except (OSError, ValueError, KeyError, TypeError):
+                # Read-only deployments may not allow a disposable cache. The
+                # original representation remains fully chart-compatible.
+                app.logger.warning(
+                    "Could not prepare the compact browser plot cache",
+                    exc_info=True,
+                )
+                version_matches = False
+        if not compressed_available and request.accept_encodings["gzip"] > 0:
+            try:
+                compressed_path = prepare_plot_gzip(published_path, filename)
+                compressed_available = True
+            except OSError:
+                # Compression is an optional accelerator, not a prerequisite
+                # for serving a complete published release.
+                pass
+        use_compressed = compressed_available and \
+            request.accept_encodings["gzip"] > 0
+        response = send_file(
+            compressed_path if use_compressed else path,
+            mimetype="application/json",
+            conditional=True,
+            max_age=(VERSIONED_CACHE_SECONDS if version_matches else 0),
+        )
+        response.vary.add("Accept-Encoding")
+        if use_compressed:
+            response.headers["Content-Encoding"] = "gzip"
+        if version_matches:
+            response.cache_control.immutable = True
+        return response
 
 
 @app.route("/api/traits", methods=['GET'])

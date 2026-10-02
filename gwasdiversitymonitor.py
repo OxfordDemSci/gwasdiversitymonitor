@@ -3,6 +3,7 @@ import sys
 
 from app import app
 from app import DataLoader
+from app.BrowserPlotCache import prepare_browser_plot_caches
 
 
 def _int_from_env(name, default):
@@ -21,6 +22,14 @@ def _check_required_data():
     try:
         with DataLoader.published_data_lock() as published_path:
             if DataLoader.runtime_release_ready(published_path):
+                try:
+                    prepare_browser_plot_caches(published_path)
+                except (OSError, ValueError, KeyError, TypeError):
+                    app.logger.warning(
+                        'Could not prepare the optional browser plot cache; '
+                        'published source data remains available.',
+                        exc_info=True,
+                    )
                 return
     except (OSError, DataLoader.PublishedDataUnavailable):
         pass

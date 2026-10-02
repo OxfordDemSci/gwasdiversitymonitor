@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -7,7 +8,7 @@ import pandas as pd
 
 import generate_data
 from app.DataLoader import DataLoader
-from funder_pipeline import build_bubble_payload
+from funder_pipeline import BUBBLE_PAYLOAD_COLUMNS, build_bubble_payload
 
 
 class BubbleMetadataGenerationTests(unittest.TestCase):
@@ -133,24 +134,100 @@ class BubbleMetadataGenerationTests(unittest.TestCase):
 
     def test_filtered_payload_keeps_active_area_metadata(self):
         frame = pd.DataFrame([{
+            "ACCESSION": "GCST000001",
+            "AUTHOR": "Example A",
             "STAGE": "initial",
             "DATE": "2024-01-02",
             "N": 500,
+            "PUBMEDID": "12345678",
             "Broader": "European",
             "parentterm": "Example parent",
             "DiseaseOrTrait": "Example trait",
             "COHORT": "Example Cohort",
             "JOURNAL": "Example Journal",
             "FUNDER": "Example Funder",
+            "cssclassname": "redundant-class",
+            "trait": "redundant-trait",
+            "__class": "redundant-derived-class",
+            "__trait": "redundant-derived-trait",
+            "__Nnum": 500,
+            "__dateMS": 1704153600000,
+            "__DiseaseOrTraitClean": "redundant-clean-trait",
+            "__BroaderClass": "redundant-broader-class",
+            "__ParentTermClass": "redundant-parent-class",
         }])
 
         stage = build_bubble_payload(frame)["bubblegraph_initial"]
 
+        self.assertEqual(set(stage["columns"]), set(BUBBLE_PAYLOAD_COLUMNS))
+        self.assertFalse(stage["meta"]["includePrecomputed"])
         self.assertTrue(
-            {"DATE", "COHORT", "JOURNAL", "FUNDER"}.issubset(
-                stage["columns"]
-            )
+            {
+                "cssclassname", "trait", "__class", "__trait", "__Nnum",
+                "__dateMS", "__DiseaseOrTraitClean", "__BroaderClass",
+                "__ParentTermClass",
+            }.isdisjoint(stage["columns"])
         )
+
+        decoded = {
+            column: stage["dicts"][column][stage["codes"][column][0]]
+            for column in stage["columns"]
+        }
+        self.assertEqual(decoded["ACCESSION"], "GCST000001")
+        self.assertEqual(decoded["STAGE"], "initial")
+        self.assertEqual(decoded["FUNDER"], "Example Funder")
+        self.assertEqual(stage["meta"]["maxN"], 500)
+        self.assertEqual(stage["meta"]["minDate"], "2024-01-02")
+
+    def test_main_json_converter_uses_compact_bubble_payload(self):
+        bubble_rows = {
+            "bubblegraph_initial": [{
+                "ACCESSION": "GCST000001",
+                "AUTHOR": "Example A",
+                "Broader": "European",
+                "COHORT": "Example Cohort",
+                "DATE": "2024-01-02",
+                "DiseaseOrTrait": "Example trait",
+                "FUNDER": "Example Funder",
+                "JOURNAL": "Example Journal",
+                "N": "500",
+                "PUBMEDID": "12345678",
+                "STAGE": "initial",
+                "parentterm": "Example parent",
+                "cssclassname": "redundant-class",
+                "trait": "redundant-trait",
+            }],
+            "bubblegraph_replication": [],
+        }
+
+        with tempfile.TemporaryDirectory() as directory:
+            loader = mock.Mock()
+            loader.getAncestriesList.return_value = {}
+            loader.getAncestriesListOrder.return_value = {}
+            loader.getTermsList.return_value = {}
+            loader.getTraitsList.return_value = {}
+            loader.getBubbleGraph.return_value = bubble_rows
+            loader.getTSPlot.return_value = {}
+            loader.getChloroMap.return_value = {}
+            loader.getHeatMap.return_value = {}
+            loader.getDoughnutGraph.return_value = {}
+            loader.getSummaryStatistics.return_value = {}
+
+            with mock.patch.object(generate_data, "DataLoader", return_value=loader), \
+                    mock.patch.object(
+                        generate_data, "diversity_logger", mock.Mock(),
+                        create=True,
+                    ):
+                generate_data.json_converter(directory)
+
+            with open(Path(directory) / "toplot" / "bubbleGraph.json") as fp:
+                payload = json.load(fp)
+
+        stage = payload["bubblegraph_initial"]
+        self.assertEqual(set(stage["columns"]), set(BUBBLE_PAYLOAD_COLUMNS))
+        self.assertNotIn("cssclassname", stage["columns"])
+        self.assertNotIn("trait", stage["columns"])
+        self.assertFalse(stage["meta"]["includePrecomputed"])
 
 
 if __name__ == "__main__":

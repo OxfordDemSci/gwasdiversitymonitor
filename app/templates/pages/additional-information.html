@@ -10,6 +10,7 @@
                     Here we present a range of summary statistics related to the data which powers the dashboard (and some which doesn't), updated when the
                     <a href="https://www.ebi.ac.uk/gwas/" target="_blank">Catalog</a>
                     is updated. Note that these summary statistics and the figures themselves only use raw (wrangled) data from the Catalog. Currently:
+                </p>
                     <ul>
                         <li>There are a total of {{ summary.number_studies }} studies in the Catalog.</li>
 
@@ -38,23 +39,38 @@
                         <li>The total number of different journals publishing GWAS is presently: {{ summary.unique_journals }}.</li>
 
                         <li>The most frequently studied (Non-European) disease or trait is presently: {{ summary.noneuro_trait }}.</li>
+
+                        {% if facet_summary.most_common_funder %}
+                        <li>The most commonly seen funder is presently <strong>{{ facet_summary.most_common_funder.name }}</strong>, acknowledged by {{ "{:,}".format(facet_summary.most_common_funder.publicationCount) }} publications covering {{ "{:,}".format(facet_summary.most_common_funder.studyCount) }} unique GWAS study accessions.</li>
+                        {% endif %}
+
+                        {% if facet_summary.most_common_cohort %}
+                        <li>The most commonly seen cohort is presently <strong>{{ facet_summary.most_common_cohort.name }}</strong>, appearing in {{ "{:,}".format(facet_summary.most_common_cohort.studyCount) }} unique GWAS study accessions across {{ "{:,}".format(facet_summary.most_common_cohort.publicationCount) }} publications.</li>
+                        {% endif %}
+
+                        <li>The funder and cohort filters currently index {{ "{:,}".format(facet_summary.funder_count) }} canonical funders and {{ "{:,}".format(facet_summary.cohort_count) }} named cohorts.</li>
+
+                        <li>Of {{ "{:,}".format(facet_summary.study_count) }} GWAS study accessions, {{ "{:,}".format(facet_summary.funder_linked_study_count) }} ({{ facet_summary.funder_linked_study_percentage }}%) are linked to at least one named funder and {{ "{:,}".format(facet_summary.cohort_linked_study_count) }} ({{ facet_summary.cohort_linked_study_percentage }}%) name at least one cohort.</li>
                     </ul>
-                </p>
             </div>
             <div class="content">
                 <h2>
                     Funding, Contact and Acknowledgements
                 </h2>
-                <p>This work is currently maintained and hosted by the <a href="http://www.demographicscience.ox.ac.uk/" target="_blank">Leverhulme Centre for Demographic Science</a>, where an earlier prototype was generously supported by the European Research Council (grants 615603 and 835079) and The British Academy. This dashboard has been redesigned in consulation with <a href="https://www.global-initiative.com/" target="_blank">Global Initiative</a>, with special thanks there to Quentin Brunier, Alex Malowany, Jamie May, Lea Misseri, Gareth Nixon, Veatriki Ntova and Chris Sinclair. In addition, we are grateful for comments on the source code and dashboard more generally from Ian Knowles, Yi Liu, Molly Przeworski, Ben Domingue, Sam Trejo and Oxford's <a href="https://www.sociogenome.org/" target="_blank">SOCIOGENOME</a> group. We look forward to updating the GWAS Diversity Monitor with your suggestions via email (contact@gwasdiversitymonitor.com), <a href="https://twitter.com/oxforddemsci" target="_blank">Twitter</a> (@OxfordDemSci or @melindacmills) or <a href="https://github.com/oxforddemsci/gwasdiversitymonitor" target="_blank">GitHub</a>.
+                <p>This work is currently maintained and hosted by the <a href="http://www.demographicscience.ox.ac.uk/" target="_blank">Leverhulme Centre for Demographic Science</a>, which is supported by the Leverhulme Trust and Nuffield College. We are also grateful to an ESRC Impact Acceleration Account award which helped fund the "by funder" analysis. Earlier versions of the manuscript were also partly funded by the European Research Council (grants 615603 and 835079), and The British Academy. This dashboard has been redesigned in consultation with <a href="https://www.global-initiative.com/" target="_blank">Global Initiative</a>, with special thanks there to Quentin Brunier, Alex Malowany, Jamie May, Lea Misseri, Gareth Nixon, Veatriki Ntova and Chris Sinclair. In addition, we are grateful for comments on the source code and dashboard more generally from Ian Knowles, Yi Liu, Molly Przeworski, Ben Domingue and Sam Trejo. The dashboard is currently primarily maintained by Charles Rahal, Mingyue Liu, and Daniel Valdenegro. We look forward to updating the GWAS Diversity Monitor with your suggestions via email (<a href="mailto:contact@gwasdiversitymonitor.com">contact@gwasdiversitymonitor.com</a>) or <a href="https://github.com/oxforddemsci/gwasdiversitymonitor" target="_blank">GitHub</a>.
                 </p>
             </div>
         </div>
         <div class="col-xs-12 col-md-6">
             <div class="content">
                 <h2>About</h2>
-                <p> This interactive dashboard monitors the diversity of participants across all published Genome Wide Association Studies (GWAS), the primary technique used for genetic discovery. The objective of a GWAS is to identify statistical associations between a set of genetic variants across different individuals (Single Nucleotide Polymorphisms, or 'SNPs') with specific traits of interest. This monitor is an extension of our earlier project, <a href="https://www.nature.com/articles/s42003-018-0261-x" target="_blank">'The Scientometrics of Genome Wide Association Studies'</a> published in <i>Communications Biology</i> in January 2019. As there, we leverage the magnificent dataset curated by the <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a> (subject to their licensing information which can be found <a href="https://www.ebi.ac.uk/about/terms-of-use/" target="_blank">here</a> ). The dashboard itself is a combination of Python (Flask) and JavaScript (D3), designed to be used in modern web browsers for presentation. An earlier prototype appears <a href="https://github.com/crahal/GWASDiversityMonitor" target="_blank">here</a>, with the full code base available for replication on <a href="https://github.com/oxforddemsci/gwasdiversitymonitor" target="_blank">GitHub</a>. We are actively encouraging community-based suggestions and contributions. The backend code checks daily for updates to the  <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a>, writing to logs and refreshing the dataset which powers the dashboard as appropriate.
+                <p>This interactive dashboard monitors the diversity of participants across all published Genome Wide Association Studies (GWAS), the primary technique used for genetic discovery. The objective of a GWAS is to identify statistical associations between a set of genetic variants across different individuals (Single Nucleotide Polymorphisms, or 'SNPs') with specific traits of interest. This monitor is an extension of our earlier project, <a href="https://www.nature.com/articles/s42003-018-0261-x" target="_blank">'The Scientometrics of Genome Wide Association Studies'</a> published in <i>Communications Biology</i> in January 2019. As there, we leverage the magnificent dataset curated by the <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a> (subject to their licensing information which can be found <a href="https://www.ebi.ac.uk/about/terms-of-use/" target="_blank">here</a>). The dashboard itself is a combination of Python (Flask) and JavaScript (D3), designed to be used in modern web browsers for presentation. An earlier prototype appears <a href="https://github.com/crahal/GWASDiversityMonitor" target="_blank">here</a>, with the full code base available for replication on <a href="https://github.com/oxforddemsci/gwasdiversitymonitor" target="_blank">GitHub</a>. We are actively encouraging community-based suggestions and contributions. The backend code checks daily for updates to the  <a href="https://www.ebi.ac.uk/gwas/" target="_blank">NHGRI-EBI Catalog</a>, writing to logs and refreshing the dataset which powers the dashboard as appropriate.</p>
 
-                The dashboard is under perpetual development and review, but is currently comprised of two global widgets: METRIC (which toggles whether we are evaluating by number of studies or by number of participants), and STAGE (which determines whether we are considering the discovery or replication phase of research). Local widgets also toggle the 'EFO Parent Term', the 'Broader' ancestry category, and 'Year' (related to year of study). Due to the relatively small size of the dataset, not all widgets apply to each figure, and we describe our design choices below:
+                <p>The dashboard's "by funder" and "by cohort" filters let users focus every chart on one or more funding organisations, named cohorts or both. Funder links come from canonicalised PubMed GrantList agencies, while cohort links come from the GWAS Catalog's cohort field after reviewed aliases are harmonised. Multiple choices within the same filter are combined as a union; using both filters retains only study accessions that match a selected funder and a selected cohort.</p>
+
+                <p>These filters use full rather than fractional counting: a publication or study accession linked to several funders or cohorts receives one complete credit in every relevant view, so entity totals overlap and should not be added together. Filter selections update the summary, charts and available years together. They also carry through to the downloadable data and detailed report, while the METRIC and STAGE controls continue to determine whether charts show studies or participants and discovery or replication records.</p>
+
+                <p>The dashboard is under perpetual development and review, but is currently comprised of two global widgets: METRIC (which toggles whether we are evaluating by number of studies or by number of participants), and STAGE (which determines whether we are considering the discovery or replication phase of research). Local widgets also toggle the 'EFO Parent Term', the 'Broader' ancestry category, and 'Year' (related to year of study). Due to the relatively small size of the dataset, not all widgets apply to each figure, and we describe our design choices below:</p>
                   <ul>
                     <li>
                       <strong>Summary Breakdown: Total GWAS participants diversity.</strong> Shown in the upper left panel, this displays summary statistics without any filtering (over time, ancestry, traits, or otherwise).
@@ -75,7 +91,6 @@
                     <strong>Doughnut Chart.</strong> This figure displays the percent of 'Broader Ancestry' by 'Parent Term' across both the global widgets. A 'Show'/'Hide' toggle reveals an inset graph of the breakdown of associations discovered across all EFO Parent terms at the discovery stage alone.
                     </li>
                   </ul>
-                </p>
             </div>
         </div>
     </div>

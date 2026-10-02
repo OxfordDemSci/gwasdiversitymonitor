@@ -16,21 +16,87 @@ function __dcDecodeStage(stagePayload, stageName) {
     var meta = stagePayload.meta || {};
     var n = meta.rowCount || 0;
     var out = new Array(n);
+    var columnDicts = new Array(columns.length);
+    var columnCodes = new Array(columns.length);
+    var nIndex = columns.indexOf("__Nnum");
+    var dateIndex = columns.indexOf("__dateMS");
+    var fallbackDateIndex = columns.indexOf("DATE");
+
+    if (nIndex === -1) nIndex = columns.indexOf("N");
+    if (dateIndex === -1) dateIndex = fallbackDateIndex;
+
+    for (var columnIndex = 0; columnIndex < columns.length; columnIndex++) {
+        var columnName = columns[columnIndex];
+        var columnDictionary = dicts[columnName] || [];
+
+        // The compact payload stores numbers and dates as dictionary values.
+        // Convert each unique value once instead of converting it for every row.
+        if (columnName === "N" || columnName === "__Nnum") {
+            columnDictionary = columnDictionary.map(function(value) {
+                return value === undefined || value === null || value === "" ? value : +value;
+            });
+        }
+
+        columnDicts[columnIndex] = columnDictionary;
+        columnCodes[columnIndex] = codes[columnName] || [];
+    }
+
+    var numericValues = nIndex === -1 ? null : columnDicts[nIndex];
+    var numericCodes = nIndex === -1 ? null : columnCodes[nIndex];
+    var dateCodes = dateIndex === -1 ? null : columnCodes[dateIndex];
+    var dateValues = dateIndex === -1 ? null : columnDicts[dateIndex].map(function(value) {
+        if (value === undefined || value === null || value === "") return undefined;
+        return columns[dateIndex] === "__dateMS" ? +value : +new Date(value);
+    });
+    var fallbackDateCodes = null;
+    var fallbackDateValues = null;
+
+    if (dateIndex !== fallbackDateIndex && fallbackDateIndex !== -1) {
+        fallbackDateCodes = columnCodes[fallbackDateIndex];
+        fallbackDateValues = columnDicts[fallbackDateIndex].map(function(value) {
+            return value === undefined || value === null || value === "" ? undefined : +new Date(value);
+        });
+    }
+
+    // Compact payloads omit CSS classes. Rebuild them from the small dictionaries
+    // once per ancestry/parent pair rather than joining strings for every bubble.
+    var broaderIndex = columns.indexOf("Broader");
+    var parentTermIndex = columns.indexOf("parentterm");
+    var deriveClasses = columns.indexOf("__class") === -1 && broaderIndex !== -1 && parentTermIndex !== -1;
+    var broaderClasses = deriveClasses ? columnDicts[broaderIndex].map(__dcBroaderClass) : null;
+    var parentClasses = deriveClasses ? columnDicts[parentTermIndex].map(__dcParentTermClass) : null;
+    var combinedClasses = [];
 
     for (var i = 0; i < n; i++) {
         var obj = {};
         for (var j = 0; j < columns.length; j++) {
             var c = columns[j];
-            obj[c] = (dicts[c] || [])[(codes[c] || [])[i]];
+            obj[c] = columnDicts[j][columnCodes[j][i]];
         }
 
-        if (obj.N !== undefined && obj.N !== null && obj.N !== "") obj.N = +obj.N;
-        obj.__Nnum = +(obj.__Nnum !== undefined ? obj.__Nnum : obj.N) || 0;
+        obj.__Nnum = numericValues ? (numericValues[numericCodes[i]] || 0) : 0;
 
-        if (obj.__dateMS !== undefined && obj.__dateMS !== null && obj.__dateMS !== "") {
-            obj.__dateMS = +obj.__dateMS;
-        } else if (obj.DATE) {
-            obj.__dateMS = +new Date(obj.DATE);
+        if (dateValues) {
+            var dateValue = dateValues[dateCodes[i]];
+            if (dateValue === undefined && fallbackDateValues) {
+                dateValue = fallbackDateValues[fallbackDateCodes[i]];
+            }
+            if (dateValue !== undefined) obj.__dateMS = dateValue;
+        }
+
+        if (deriveClasses) {
+            var broaderCode = columnCodes[broaderIndex][i];
+            var parentCode = columnCodes[parentTermIndex][i];
+            var classCode = broaderCode * parentClasses.length + parentCode;
+            var className = combinedClasses[classCode];
+
+            if (className === undefined) {
+                className = (broaderClasses[broaderCode] || "") + " " + (parentClasses[parentCode] || "");
+                combinedClasses[classCode] = className;
+            }
+
+            obj.__class = className;
+            obj.__BroaderClass = broaderClasses[broaderCode] || "";
         }
 
         out[i] = obj;
@@ -45,6 +111,9 @@ function __dcDecodeStage(stagePayload, stageName) {
     };
 
     stagePayload.__decoded_rows = out;
+    // All future reads return the decoded-row cache, so the largest remaining
+    // part of the encoded representation can be released after first use.
+    stagePayload.codes = null;
 
     window.__dictComboDebug.format = "dict_columnar_v2";
     window.__dictComboDebug.includePrecomputed = !!meta.includePrecomputed;
@@ -67,16 +136,39 @@ function __dcNormaliseClassValue(v) {
     return String(v || "").trim().replace(/\s+/g, "-").replace(/\//g, "-").replace(/,/g, "").toLowerCase();
 }
 
+var __dcBroaderClassCache = Object.create(null);
+
 function __dcBroaderClass(v) {
-    return __dcNormaliseClassValue(v);
+    var key = String(v || "");
+    var cached = __dcBroaderClassCache[key];
+
+    if (cached === undefined) {
+        cached = __dcNormaliseClassValue(v);
+        __dcBroaderClassCache[key] = cached;
+    }
+
+    return cached;
 }
 
 function __dcParentTermClass(v) {
     return String(v || "").replace(/, /g, ',').replace(/ /g, '-').replace(/,/g, ' ').toLowerCase();
 }
 
+var __dcClassCache = Object.create(null);
+
 function __dcClass(d) {
-    return d.__class || (__dcBroaderClass(d.Broader) + " " + __dcParentTermClass(d.parentterm));
+    if (d.__class) return d.__class;
+
+    var key = String(d.Broader || "") + "\u0000" + String(d.parentterm || "");
+    var className = __dcClassCache[key];
+
+    if (className === undefined) {
+        className = __dcBroaderClass(d.Broader) + " " + __dcParentTermClass(d.parentterm);
+        __dcClassCache[key] = className;
+    }
+
+    d.__class = className;
+    return className;
 }
 
 function __dcTrait(d) {
@@ -123,13 +215,11 @@ function __dcBubbleCsvValue(row, column) {
 function __dcDownloadBubbleCsv() {
     var state = window.__bubbleCanvasState;
     var points = state && state.points ? state.points : [];
-    var selectedTraits = state && state.selectedTraits ? state.selectedTraits : [];
-    var exportPoints = selectedTraits.length ? points.filter(function (p) { return p.traitOk; }) : points;
     var columns = ["", "Broader", "N", "PUBMEDID", "AUTHOR", "parentterm", "STAGE", "DATE", "ACCESSION", "DiseaseOrTrait", "COHORT", "JOURNAL", "FUNDER", "cssclassname", "trait"];
     var lines = [columns.map(__dcCsvEscape).join(",")];
 
-    for (var i = 0; i < exportPoints.length; i++) {
-        var p = exportPoints[i];
+    for (var i = 0; i < points.length; i++) {
+        var p = points[i];
         var row = p.d;
 
         lines.push(columns.map(function (column) {
@@ -457,7 +547,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         colourProbe: colourProbe,
         points: [],
         grid: new Map(),
-        cellSize: Math.max(56, maxRadius * 2),
+        cellSize: Math.max(24, maxRadius),
         selectedIndex: null,
         drawCount: 0,
         visibleCount: 0,
@@ -524,17 +614,13 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         arr.push(p);
     }
 
-    var colourCache = {};
+    var colourCache = Object.create(null);
 
-    function getColour(className, flags) {
-        var fullClass = className || "";
-        if (flags && flags.disabled) fullClass += " disabled";
-        if (flags && flags.opaque) fullClass += " opaque";
-        if (flags && flags.selected) fullClass += " selected";
+    function getColour(ancestryClass) {
+        ancestryClass = ancestryClass || "";
+        if (colourCache[ancestryClass]) return colourCache[ancestryClass];
 
-        if (colourCache[fullClass]) return colourCache[fullClass];
-
-        colourProbe.setAttribute("class", fullClass);
+        colourProbe.setAttribute("class", ancestryClass);
         var cs = window.getComputedStyle(colourProbe);
 
         var fill = cs.fill;
@@ -552,7 +638,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         if (!isFinite(opacity)) opacity = 1;
 
         var result = { fill: fill, stroke: stroke, opacity: opacity };
-        colourCache[fullClass] = result;
+        colourCache[ancestryClass] = result;
         return result;
     }
 
@@ -605,6 +691,12 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     }
 
     function computeFilteredMax(parentFilter, ancestryFilters, selectedTraits) {
+        if ((!parentFilter || parentFilter === "all") &&
+            (!ancestryFilters || ancestryFilters.length === 0) &&
+            (!selectedTraits || selectedTraits.length === 0)) {
+            return max;
+        }
+
         var m = 0;
 
         for (var i = 0; i < data.length; i++) {
@@ -645,17 +737,17 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     }
 
     function drawOnePoint(p, flags) {
-        var colour = getColour(p.className, flags || {});
+        var colour = getColour(p.ancestryClass);
         var alpha = colour.opacity;
 
         if (flags && flags.disabled) alpha = Math.min(alpha, 0.16);
+        if (flags && flags.opaque) alpha = 1;
         if (flags && flags.selected) alpha = 1;
 
-        ctx.save();
         ctx.globalAlpha = alpha;
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2, false);
-        ctx.fillStyle = colour.fill;
+        ctx.fillStyle = flags && flags.disabled ? "rgba(128, 128, 128, 0.4)" : colour.fill;
         ctx.fill();
 
         if (flags && flags.selected) {
@@ -663,8 +755,6 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
             ctx.strokeStyle = "#111";
             ctx.stroke();
         }
-
-        ctx.restore();
     }
 
     function rebuildPointsAndDraw() {
@@ -685,6 +775,8 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         ctx.clearRect(0, 0, canvasW, canvasH);
         state.points = [];
         state.grid = new Map();
+        var pointFlags = { opaque: selectedTraits.length > 0 };
+        ctx.save();
 
         for (var i = 0; i < data.length; i++) {
             var d = data[i];
@@ -694,7 +786,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
             if (!rowMatchesTrait(d, selectedTraits)) continue;
 
             var n = __dcN(d);
-            var x = xScale(new Date(__dcDateValue(d))) + state.pad;
+            var x = xScale(__dcDateValue(d)) + state.pad;
             var y = yScale(n) + state.pad;
             var r = sizeScale(n);
 
@@ -707,12 +799,12 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
                 y: y,
                 r: r,
                 className: __dcClass(d),
-                traitOk: true
+                ancestryClass: d.__BroaderClass || __dcBroaderClass(d.Broader)
             };
 
             state.points.push(p);
             addToGrid(p);
-            drawOnePoint(p, { opaque: selectedTraits.length > 0 });
+            drawOnePoint(p, pointFlags);
         }
 
         if (state.selectedIndex !== null) {
@@ -723,6 +815,8 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
                 }
             }
         }
+
+        ctx.restore();
 
         state.visibleCount = state.points.length;
         state.drawCount += 1;
@@ -736,7 +830,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         var cy = Math.floor(y / cs);
 
         var best = null;
-        var bestDist = Infinity;
+        var bestDistSquared = Infinity;
 
         for (var dx = -1; dx <= 1; dx++) {
             for (var dy = -1; dy <= 1; dy++) {
@@ -748,11 +842,12 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
 
                     var ddx = x - p.x;
                     var ddy = y - p.y;
-                    var dist = Math.sqrt(ddx * ddx + ddy * ddy);
+                    var distSquared = ddx * ddx + ddy * ddy;
+                    var hitRadius = p.r + 3;
 
-                    if (dist <= p.r + 3 && dist < bestDist) {
+                    if (distSquared <= hitRadius * hitRadius && distSquared < bestDistSquared) {
                         best = p;
-                        bestDist = dist;
+                        bestDistSquared = distSquared;
                     }
                 }
             }

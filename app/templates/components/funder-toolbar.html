@@ -1,21 +1,33 @@
-<section class="funder-toolbar" aria-labelledby="dashboard-filter-title"
-         aria-describedby="dashboard-filter-description" aria-busy="false">
-    <header class="funder-toolbar__intro">
-        <span class="funder-toolbar__eyebrow">Dashboard filters</span>
-        <h2 id="dashboard-filter-title">Explore GWAS by funder and cohort</h2>
-        <p id="dashboard-filter-description">
-            Select one or more funding organisations or research cohorts.
-            Every chart below updates together.
-        </p>
-    </header>
-
+<section class="funder-toolbar"
+         aria-label="Filter dashboard by funder and cohort"
+         aria-busy="false">
     <div class="funder-toolbar__controls">
         <div class="funder-toolbar__field">
             <div class="funder-toolbar__field-heading">
-                <label id="funder-filter-label" for="funder-filter">
-                    Funder
-                </label>
-                <span id="funder-filter-help">
+                <div class="funder-toolbar__field-label">
+                    <label id="funder-filter-label" for="funder-filter">
+                        Funder
+                    </label>
+                    <span class="funder-toolbar__info">
+                        <button type="button"
+                                class="funder-toolbar__info-button"
+                                aria-label="About full counting by funder"
+                                aria-describedby="funder-counting-tooltip">i</button>
+                        <span id="funder-counting-tooltip" role="tooltip"
+                              class="funder-toolbar__tooltip">
+                            Full counting gives each linked funder one complete
+                            publication credit. For example, if a publication
+                            lists three funders in PubMed's GrantList, it counts
+                            once for each funder—not one third each as fractional
+                            counting would. Every GWAS Catalog study accession
+                            from that publication is included in each linked
+                            funder's filtered view, so funder totals overlap and
+                            must not be added together.
+                        </span>
+                    </span>
+                </div>
+                <span id="funder-filter-help"
+                      class="funder-toolbar__field-help">
                     Search funding organisations
                 </span>
             </div>
@@ -26,10 +38,32 @@
 
         <div class="funder-toolbar__field">
             <div class="funder-toolbar__field-heading">
-                <label id="dataset-filter-label" for="dataset-filter">
-                    Cohort
-                </label>
-                <span id="dataset-filter-help">
+                <div class="funder-toolbar__field-label">
+                    <label id="dataset-filter-label" for="dataset-filter">
+                        Cohort
+                    </label>
+                    <span class="funder-toolbar__info">
+                        <button type="button"
+                                class="funder-toolbar__info-button"
+                                aria-label="About full counting by cohort"
+                                aria-describedby="cohort-counting-tooltip">i</button>
+                        <span id="cohort-counting-tooltip" role="tooltip"
+                              class="funder-toolbar__tooltip">
+                            Full counting gives each named cohort one complete
+                            credit for every GWAS Catalog study accession linked
+                            to it. If an accession names three cohorts, that
+                            accession—and its full recorded participant and
+                            ancestry profile—appears in each cohort's filtered
+                            view, rather than contributing one third to each
+                            under fractional counting. Cohort totals therefore
+                            overlap and are not additive; they describe published
+                            GWAS linked to a cohort, not the cohort's overall
+                            demographics.
+                        </span>
+                    </span>
+                </div>
+                <span id="dataset-filter-help"
+                      class="funder-toolbar__field-help">
                     Search study cohorts and datasets
                 </span>
             </div>

@@ -90,7 +90,8 @@ before use rather than treated as an unattended, idempotent installer.
 ### Rebuild funder products from the existing PubMed cache
 
 When Catalog data are already current and only funder-generation logic or
-normalisation has changed:
+normalisation has changed, and the PubMed cache is already at the version
+required by the checked-out code:
 
 ```bash
 docker compose build data
@@ -101,6 +102,11 @@ docker compose restart flask
 
 This avoids refetching PubMed records while rebuilding validated funder
 artifacts.
+
+Do not use `--skip-fetch` for the first generation after upgrading a legacy
+version 1 PubMed cache. Run the normal `generate_data.py` workflow once so it
+can revalidate ambiguous empty records and write the complete version 2 cache;
+subsequent funder-only rebuilds can safely use `--skip-fetch`.
 
 ## Health and integrity checks
 

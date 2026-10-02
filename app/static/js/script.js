@@ -90,7 +90,49 @@ function setDescription() {
 
 // Download image
 
+var d3plusTextPromise;
+
+function loadD3plusText() {
+	if (window.d3plus && window.d3plus.TextBox) {
+		return Promise.resolve();
+	}
+
+	if (!d3plusTextPromise) {
+		d3plusTextPromise = new Promise(function(resolve, reject) {
+			var source = window.gwasStaticAssets && window.gwasStaticAssets.d3plusText;
+			if (!source) {
+				reject(new Error('The chart-export text library is not configured.'));
+				return;
+			}
+
+			var script = document.createElement('script');
+			script.src = source;
+			script.onload = function() {
+				if (window.d3plus && window.d3plus.TextBox) {
+					resolve();
+				} else {
+					reject(new Error('The chart-export text library did not initialise.'));
+				}
+			};
+			script.onerror = function() {
+				reject(new Error('The chart-export text library could not be loaded.'));
+			};
+			document.head.appendChild(script);
+		});
+	}
+
+	return d3plusTextPromise;
+}
+
 function downloadImage(selector, svg_selector, png) {
+	return loadD3plusText().then(function() {
+		renderDownloadImage(selector, svg_selector, png);
+	}).catch(function(error) {
+		console.error('Chart export failed', error);
+	});
+}
+
+function renderDownloadImage(selector, svg_selector, png) {
 	let graph = $(selector);
 	let svg = graph.find(`#${svg_selector}`);
 	var sourceSvg = svg[0];

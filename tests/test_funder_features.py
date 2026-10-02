@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import pandas as pd
+import requests
 
 from app import app as flask_app
 from app.FunderData import FunderDataStore, FunderDataUnavailable
@@ -19,12 +20,15 @@ from app.DashboardFilters import (
     build_cohort_normalization_audit,
     canonical_cohort_name,
     load_cohort_cleaner,
+    load_precomputed_facet_overview,
     normalize_cohort_name,
     split_cohorts,
     validate_precomputed_filter_archive,
 )
 from funder_pipeline import (
     ARTIFACT_VERSION,
+    CACHE_VERSION,
+    FUNDER_NORMALIZATION_AUDIT_VERSION,
     _promote_funder_artifacts,
     attach_funding_metadata,
     build_country_map,
@@ -36,6 +40,7 @@ from funder_pipeline import (
     build_study_parent_map,
     build_summary,
     canonical_agency,
+    collect_pubmed_grants,
     funding_names_by_publication,
     normalize_funding_records,
     parse_pubmed_grants,
@@ -73,17 +78,172 @@ class DataImagePackagingTests(unittest.TestCase):
 
 
 class PubMedFundingTests(unittest.TestCase):
-    def test_parser_preserves_requested_publications_and_deduplicates_grants(self):
+    @staticmethod
+    def _response(status, content=b"", headers=None):
+        response = requests.Response()
+        response.status_code = status
+        response._content = content
+        response.encoding = "utf-8"
+        response.headers.update(headers or {})
+        return response
+
+    @staticmethod
+    def _write_catalog(directory, pmids):
+        raw = Path(directory) / "catalog" / "raw"
+        raw.mkdir(parents=True)
+        pd.DataFrame({"PUBMEDID": pmids}).to_csv(
+            raw / "Cat_Stud.tsv", sep="\t", index=False
+        )
+        return Path(directory) / "pubmed_grants.json"
+
+    def test_parser_distinguishes_no_grants_from_an_omitted_publication(self):
         xml = b"""<PubmedArticleSet><PubmedArticle><MedlineCitation>
           <PMID>123</PMID><Article><GrantList>
             <Grant><GrantID>R01</GrantID><Agency>NHLBI NIH HHS</Agency></Grant>
             <Grant><GrantID>R01</GrantID><Agency>NHLBI NIH HHS</Agency></Grant>
-          </GrantList></Article></MedlineCitation></PubmedArticle></PubmedArticleSet>"""
+          </GrantList></Article></MedlineCitation></PubmedArticle>
+          <PubmedArticle><MedlineCitation><PMID>456</PMID><Article />
+          </MedlineCitation></PubmedArticle></PubmedArticleSet>"""
 
-        records = parse_pubmed_grants(xml, ["123", "456"])
+        records = parse_pubmed_grants(xml, ["123", "456", "789"])
 
         self.assertEqual(len(records["123"]["grants"]), 1)
         self.assertEqual(records["456"], {"grants": []})
+        self.assertNotIn("789", records)
+
+    def test_parser_rejects_a_successful_ncbi_error_payload(self):
+        with self.assertRaisesRegex(
+                ValueError, "PubMed API returned an error"):
+            parse_pubmed_grants(
+                b"<eFetchResult><ERROR>Invalid uid 123</ERROR></eFetchResult>",
+                ["123"],
+            )
+
+    def test_collector_honours_retry_after_for_rate_limits(self):
+        xml = (
+            b"<PubmedArticleSet><PubmedArticle><MedlineCitation>"
+            b"<PMID>123</PMID><Article /></MedlineCitation>"
+            b"</PubmedArticle></PubmedArticleSet>"
+        )
+        session = mock.Mock()
+        session.post.side_effect = [
+            self._response(429, b"rate limited", {"Retry-After": "3"}),
+            self._response(200, xml),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = self._write_catalog(directory, ["123"])
+            with mock.patch("funder_pipeline.time.sleep") as sleep:
+                cache = collect_pubmed_grants(
+                    directory, cache_path, request_delay=0,
+                    max_retries=2, session=session,
+                )
+
+            persisted = json.loads(cache_path.read_text())
+
+        self.assertEqual(session.post.call_count, 2)
+        sleep.assert_called_once_with(3.0)
+        self.assertEqual(cache["version"], CACHE_VERSION)
+        self.assertEqual(cache["retrievedPublicationCount"], 1)
+        self.assertEqual(cache["unfundedPublicationCount"], 1)
+        self.assertEqual(persisted, cache)
+
+    def test_collector_retries_transient_server_errors(self):
+        xml = (
+            b"<PubmedArticleSet><PubmedArticle><MedlineCitation>"
+            b"<PMID>123</PMID><Article /></MedlineCitation>"
+            b"</PubmedArticle></PubmedArticleSet>"
+        )
+        session = mock.Mock()
+        session.post.side_effect = [
+            self._response(503, b"unavailable"),
+            self._response(200, xml),
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = self._write_catalog(directory, ["123"])
+            with mock.patch("funder_pipeline.time.sleep") as sleep:
+                collect_pubmed_grants(
+                    directory, cache_path, request_delay=0,
+                    max_retries=2, session=session,
+                )
+
+        self.assertEqual(session.post.call_count, 2)
+        sleep.assert_called_once_with(1)
+
+    def test_collector_fails_permanent_client_errors_without_retrying(self):
+        session = mock.Mock()
+        session.post.return_value = self._response(400, b"invalid request")
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = self._write_catalog(directory, ["123"])
+            with mock.patch("funder_pipeline.time.sleep") as sleep, \
+                    self.assertRaisesRegex(
+                        RuntimeError, "HTTP 400.*batch beginning 123"
+                    ):
+                collect_pubmed_grants(
+                    directory, cache_path, request_delay=0,
+                    max_retries=4, session=session,
+                )
+
+            self.assertFalse(cache_path.exists())
+
+        session.post.assert_called_once()
+        sleep.assert_not_called()
+
+    def test_collector_never_caches_an_incomplete_success_response(self):
+        partial = (
+            b"<PubmedArticleSet><PubmedArticle><MedlineCitation>"
+            b"<PMID>123</PMID><Article /></MedlineCitation>"
+            b"</PubmedArticle></PubmedArticleSet>"
+        )
+        session = mock.Mock()
+        session.post.side_effect = [
+            self._response(200, partial), self._response(200, partial)
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = self._write_catalog(directory, ["123", "456"])
+            with mock.patch("funder_pipeline.time.sleep") as sleep, \
+                    self.assertRaisesRegex(
+                        RuntimeError, "response omitted requested PMIDs: 456"
+                    ):
+                collect_pubmed_grants(
+                    directory, cache_path, request_delay=0,
+                    max_retries=2, session=session,
+                )
+
+            self.assertFalse(cache_path.exists())
+
+        self.assertEqual(session.post.call_count, 2)
+        sleep.assert_called_once_with(1)
+
+    def test_collector_revalidates_ambiguous_empty_legacy_records(self):
+        legacy = {
+            "version": 1,
+            "records": {
+                "123": {"grants": [{"agency": "Agency A"}]},
+                "456": {"grants": []},
+            },
+        }
+        xml = (
+            b"<PubmedArticleSet><PubmedArticle><MedlineCitation>"
+            b"<PMID>456</PMID><Article /></MedlineCitation>"
+            b"</PubmedArticle></PubmedArticleSet>"
+        )
+        session = mock.Mock()
+        session.post.return_value = self._response(200, xml)
+        with tempfile.TemporaryDirectory() as directory:
+            cache_path = self._write_catalog(directory, ["123", "456"])
+            cache_path.write_text(json.dumps(legacy))
+
+            cache = collect_pubmed_grants(
+                directory, cache_path, request_delay=0, session=session
+            )
+
+        requested = session.post.call_args.kwargs["data"]["id"]
+        self.assertEqual(requested, "456")
+        self.assertEqual(cache["version"], CACHE_VERSION)
+        self.assertEqual(set(cache["records"]), {"123", "456"})
+        self.assertEqual(cache["records"]["456"], {"grants": []})
+        self.assertEqual(cache["fundedPublicationCount"], 1)
+        self.assertEqual(cache["unfundedPublicationCount"], 1)
 
     def test_normalizer_handles_alias_cycles_and_groups_small_funders(self):
         cleaner = {"Agency A": "A", "A": "Agency A"}
@@ -157,20 +317,57 @@ class PubMedFundingTests(unittest.TestCase):
             ),
             "NIH (Other)",
         )
+        repository_root = Path(__file__).resolve().parents[1]
+        cleaner = load_funder_cleaner(
+            repository_root / "data" / "funders" / "funder_cleaner.json"
+        )
+        self.assertEqual(
+            canonical_agency(
+                "Office of Extramural Research, National Institutes of "
+                "Health",
+                cleaner,
+            ),
+            "OER NIH HHS",
+        )
 
     def test_funder_normalization_audit_lists_applied_merges(self):
         cache = {"records": {
             "1": {"grants": [{"agency": "Wellcome Trust"}]},
             "2": {"grants": [{"agency": "Wellcome Trust (WT)"}]},
+            "3": {"grants": [{"agency": "Ambiguous source"}]},
+            "4": {"grants": [{"grantId": "R01"}]},
+            "5": {"grants": []},
         }}
         audit = build_funder_normalization_audit(
-            cache, {"Wellcome Trust (WT)": "Wellcome Trust"}
+            cache, {
+                "Wellcome Trust (WT)": "Wellcome Trust",
+                "Ambiguous source": "Unclear",
+            }
         )
 
+        self.assertEqual(
+            audit["version"], FUNDER_NORMALIZATION_AUDIT_VERSION
+        )
         self.assertEqual(audit["canonicalNameCount"], 1)
+        self.assertEqual(audit["publicationCount"], 5)
+        self.assertEqual(audit["publicationsWithGrantListCount"], 4)
+        self.assertEqual(audit["publicationsWithoutGrantListCount"], 1)
+        self.assertEqual(audit["publicationsWithMappedAgencyCount"], 2)
+        self.assertEqual(audit["grantRecordCount"], 4)
+        self.assertEqual(audit["grantRecordsWithoutAgencyCount"], 1)
         self.assertEqual(
             audit["mergedGroups"][0]["sourceNames"],
             ["Wellcome Trust", "Wellcome Trust (WT)"],
+        )
+        self.assertEqual(
+            {
+                entry["source"]: entry["reason"]
+                for entry in audit["excludedAgencySources"]
+            },
+            {
+                "Ambiguous source": "excluded by reviewed normalization rule",
+                "(missing agency)": "missing agency in PubMed GrantList",
+            },
         )
 
     def test_doughnut_grouping_preserves_recorded_share_denominators(self):
@@ -643,6 +840,20 @@ class DatasetFilterTests(unittest.TestCase):
                 "options/cohorts-by-funder/initial/wellcome.json",
                 "options/cohorts-by-funder/replication/wellcome.json",
             ]
+            facet_overview = {
+                "most_common_funder": {
+                    "name": "Wellcome", "studyCount": 3,
+                    "publicationCount": 1,
+                },
+                "most_common_cohort": None,
+                "funder_count": 1,
+                "cohort_count": 0,
+                "study_count": 3,
+                "funder_linked_study_count": 3,
+                "cohort_linked_study_count": 0,
+                "funder_linked_study_percentage": 100.0,
+                "cohort_linked_study_percentage": 0.0,
+            }
             with zipfile.ZipFile(archive_path, "w") as archive:
                 archive.writestr(member, json.dumps(payload))
                 for option_member in option_members:
@@ -667,6 +878,7 @@ class DatasetFilterTests(unittest.TestCase):
                     "cohortCount": 0,
                     "selectorFunderCount": 1,
                     "selectorCohortCount": 0,
+                    "facetOverview": facet_overview,
                     "optionMembers": option_members,
                     "conditionalOptionMembers": conditional_members,
                     "members": [
@@ -684,9 +896,11 @@ class DatasetFilterTests(unittest.TestCase):
                     "cohorts", "initial", ("wellcome",)
                 )
             manifest = validate_precomputed_filter_archive(directory)
+            loaded_overview = load_precomputed_facet_overview(directory)
 
         self.assertEqual(loaded, payload)
         self.assertEqual(manifest["funderCount"], 1)
+        self.assertEqual(loaded_overview, facet_overview)
         self.assertEqual(loaded_options[0]["name"], "Wellcome")
         self.assertEqual(loaded_conditional[0]["name"], "UKB")
         self.assertIsNone(
@@ -694,6 +908,29 @@ class DatasetFilterTests(unittest.TestCase):
                 ("ukb",), ("wellcome",)
             )
         )
+
+    def test_legacy_precomputed_archive_remains_usable_without_overview(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive_path = Path(directory) / PRECOMPUTED_FILTER_ARCHIVE
+            archive_path.parent.mkdir(parents=True)
+            payload = {
+                "version": 7,
+                "selection": {"studyCount": 3},
+            }
+            with zipfile.ZipFile(archive_path, "w") as archive:
+                archive.writestr("funders/wellcome.json", json.dumps(payload))
+                archive.writestr(PRECOMPUTED_FILTER_MANIFEST, json.dumps({
+                    "version": 7,
+                    "members": ["funders/wellcome.json"],
+                }))
+
+            store = DashboardFilterStore(directory)
+
+            self.assertEqual(
+                store._load_precomputed_dashboard((), ("wellcome",)),
+                payload,
+            )
+            self.assertIsNone(load_precomputed_facet_overview(directory))
 
     def test_warm_loads_sources_and_filter_indexes(self):
         store = DashboardFilterStore("/tmp/not-used")
@@ -709,6 +946,88 @@ class DatasetFilterTests(unittest.TestCase):
         sources.assert_called_once_with()
         cohorts.assert_called_once_with()
         funders.assert_called_once_with()
+
+    def test_facet_overview_reports_top_entities_and_accession_coverage(self):
+        store = self._store()
+        store._funder_entries["another"]["studyCount"] = 4
+
+        overview = store._build_facet_overview()
+
+        self.assertEqual(overview["most_common_funder"]["name"], "Wellcome")
+        self.assertEqual(
+            overview["most_common_funder"]["publicationCount"], 3
+        )
+        self.assertEqual(overview["most_common_cohort"]["name"], "Large")
+        self.assertEqual(overview["funder_count"], 2)
+        self.assertEqual(overview["cohort_count"], 2)
+        self.assertEqual(overview["study_count"], 4)
+        self.assertEqual(overview["funder_linked_study_count"], 4)
+        self.assertEqual(overview["cohort_linked_study_count"], 4)
+        self.assertEqual(overview["funder_linked_study_percentage"], 100.0)
+        self.assertEqual(overview["cohort_linked_study_percentage"], 100.0)
+
+    def test_facet_overview_handles_empty_indexes(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        store._all_accessions = frozenset()
+        store._dataset_entries = []
+        store._dataset_accessions = {}
+        store._dataset_by_id = {}
+        store._funder_entries = {}
+        store._funder_pmids = {}
+        store._funder_accessions = {}
+
+        overview = store._build_facet_overview()
+
+        self.assertIsNone(overview["most_common_funder"])
+        self.assertIsNone(overview["most_common_cohort"])
+        self.assertEqual(overview["funder_count"], 0)
+        self.assertEqual(overview["cohort_count"], 0)
+        self.assertEqual(overview["study_count"], 0)
+        self.assertEqual(overview["funder_linked_study_percentage"], 0.0)
+        self.assertEqual(overview["cohort_linked_study_percentage"], 0.0)
+
+    def test_facet_overview_cache_avoids_index_loading_in_another_worker(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store()
+            store._cache_root = directory
+            overview = store.facet_overview()
+            other_worker = self._store()
+            other_worker._cache_root = directory
+            with mock.patch.object(
+                other_worker, "_build_facet_overview",
+                side_effect=AssertionError("Unexpected source scans"),
+            ):
+                self.assertEqual(other_worker.facet_overview(), overview)
+
+    def test_invalid_overview_cache_is_recomputed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store()
+            store._cache_root = directory
+            cache_path = Path(directory) / "facet-overview.json"
+            for invalid in ("{", '{"funder_count": -1}'):
+                cache_path.write_text(invalid)
+                overview = store.facet_overview()
+                self.assertEqual(overview["funder_count"], 2)
+                self.assertEqual(json.loads(cache_path.read_text()), overview)
+
+    def test_overview_works_when_optional_cache_is_read_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = self._store()
+            store._cache_root = directory
+            with mock.patch.object(
+                store, "_atomic_json", side_effect=PermissionError,
+            ):
+                self.assertEqual(store.facet_overview()["funder_count"], 2)
+
+    def test_overview_cache_key_changes_with_input_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "catalog" / "raw" / "Cat_Stud.tsv"
+            source.parent.mkdir(parents=True)
+            source.write_text("first release")
+            before = DashboardFilterStore(directory)._cache_root
+            source.write_text("updated release with new studies")
+            after = DashboardFilterStore(directory)._cache_root
+            self.assertNotEqual(before, after)
 
     def test_baseline_options_use_the_precomputed_archive(self):
         store = DashboardFilterStore("/tmp/not-used")
@@ -1002,17 +1321,25 @@ class FunderArtifactTests(unittest.TestCase):
         funders = root / "funders"
         (funders / "dashboards").mkdir(parents=True)
         (funders / "downloads").mkdir()
-        (funders / "funder_cleaner.json").write_text(
-            '{"Alias": "Canonical"}'
+        raw = root / "catalog" / "raw"
+        raw.mkdir(parents=True)
+        pd.DataFrame({"PUBMEDID": ["123"]}).to_csv(
+            raw / "Cat_Stud.tsv", sep="\t", index=False
         )
-        (funders / "pubmed_grants.json").write_text(json.dumps({
-            "version": 1, "records": {"123": {"grants": []}}
-        }))
-        (funders / "normalization-audit.json").write_text(json.dumps({
-            "version": 1,
-            "mergedGroups": [],
-            "sourceNamesWithoutExplicitAlias": [],
-        }))
+        cleaner = {"Alias": "Canonical"}
+        (funders / "funder_cleaner.json").write_text(json.dumps(cleaner))
+        cache = {
+            "version": CACHE_VERSION,
+            "records": {"123": {"grants": []}},
+            "publicationCount": 1,
+            "retrievedPublicationCount": 1,
+            "fundedPublicationCount": 0,
+            "unfundedPublicationCount": 1,
+            "grantCount": 0,
+        }
+        (funders / "pubmed_grants.json").write_text(json.dumps(cache))
+        audit = build_funder_normalization_audit(cache, cleaner)
+        (funders / "normalization-audit.json").write_text(json.dumps(audit))
         (funders / "index.json").write_text(json.dumps({
             "version": ARTIFACT_VERSION,
             "funders": [{
@@ -1118,6 +1445,34 @@ class FunderArtifactTests(unittest.TestCase):
             self.assertIn("funders/pubmed_grants.json", files)
             self.assertIn("funders/dashboards/safe.json", files)
             self.assertIn("funders/downloads/safe.zip", files)
+
+    def test_release_validator_rejects_missing_pubmed_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_release(root)
+            cache_path = root / "funders" / "pubmed_grants.json"
+            cache = json.loads(cache_path.read_text())
+            cache["records"] = {}
+            cache["retrievedPublicationCount"] = 0
+            cache["unfundedPublicationCount"] = 0
+            cache_path.write_text(json.dumps(cache))
+
+            with self.assertRaisesRegex(
+                    ValueError, "missing Catalog PMIDs: 123"):
+                validate_funder_artifacts(str(root))
+
+    def test_release_validator_rejects_stale_normalization_audit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_release(root)
+            audit_path = root / "funders" / "normalization-audit.json"
+            audit = json.loads(audit_path.read_text())
+            audit["publicationsWithMappedAgencyCount"] = 1
+            audit_path.write_text(json.dumps(audit))
+
+            with self.assertRaisesRegex(
+                    ValueError, "normalization audit differs"):
+                validate_funder_artifacts(str(root))
 
     def test_release_validator_rejects_legacy_nine_key_report_schema(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1370,6 +1725,85 @@ class FunderRouteTests(unittest.TestCase):
             b'<th scope="row">Genome-wide genotyping array</th>',
             response.data,
         )
+
+    def test_additional_information_renders_precomputed_facet_statistics(self):
+        facet_overview = {
+            "most_common_funder": {
+                "name": "Example Research Council",
+                "studyCount": 1234,
+                "publicationCount": 321,
+            },
+            "most_common_cohort": {
+                "name": "Example Cohort",
+                "studyCount": 987,
+                "publicationCount": 123,
+            },
+            "funder_count": 44,
+            "cohort_count": 555,
+            "study_count": 2000,
+            "funder_linked_study_count": 1500,
+            "cohort_linked_study_count": 1750,
+            "funder_linked_study_percentage": 75.0,
+            "cohort_linked_study_percentage": 87.5,
+        }
+        with mock.patch(
+                "app.routes.load_precomputed_facet_overview",
+                return_value=facet_overview) as load_overview, mock.patch(
+                    "app.routes.get_dashboard_filter_store") as live_store:
+            response = self.client.get("/additional-information")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Example Research Council", response.data)
+        self.assertIn(
+            b"321 publications covering 1,234 unique GWAS study accessions",
+            response.data,
+        )
+        self.assertIn(b"Example Cohort", response.data)
+        self.assertIn(b"44 canonical funders and 555 named cohorts", response.data)
+        self.assertIn(b"1,500 (75.0%)", response.data)
+        self.assertIn(b"1,750 (87.5%)", response.data)
+        self.assertIn(b"Multiple choices within the same filter", response.data)
+        self.assertIn(b"full rather than fractional counting", response.data)
+        self.assertIn(b"ESRC Impact Acceleration Account", response.data)
+        self.assertIn(
+            b"Charles Rahal, Mingyue Liu, and Daniel Valdenegro",
+            response.data,
+        )
+        self.assertNotIn(b"here</a> ).", response.data)
+        load_overview.assert_called_once()
+        live_store.assert_not_called()
+
+    def test_additional_information_falls_back_for_legacy_archive(self):
+        store = mock.Mock()
+        store.facet_overview.return_value = {
+            "most_common_funder": None,
+            "most_common_cohort": None,
+            "funder_count": 0,
+            "cohort_count": 0,
+            "study_count": 0,
+            "funder_linked_study_count": 0,
+            "cohort_linked_study_count": 0,
+            "funder_linked_study_percentage": 0.0,
+            "cohort_linked_study_percentage": 0.0,
+        }
+        with mock.patch(
+                "app.routes.load_precomputed_facet_overview",
+                return_value=None), mock.patch(
+                    "app.routes.get_dashboard_filter_store",
+                    return_value=store):
+            response = self.client.get("/additional-information")
+
+        self.assertEqual(response.status_code, 200)
+        store.facet_overview.assert_called_once_with()
+
+    def test_wsgi_does_not_eagerly_warm_dashboard_filters(self):
+        source = (
+            Path(__file__).resolve().parents[1] / "deploy" / "wsgi.py"
+        ).read_text()
+
+        self.assertIn("_check_required_data()", source)
+        self.assertNotIn("get_dashboard_filter_store", source)
+        self.assertNotIn(".warm()", source)
 
     def test_unknown_funder_is_not_exposed(self):
         store = mock.Mock()

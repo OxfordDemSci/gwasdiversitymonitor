@@ -1,5 +1,20 @@
 {% extends "base.html" %}
 
+{% block page_dependencies %}
+    <script defer src="{{ versioned_static('js/imports/d3.v4.min.js') }}"></script>
+    <script defer src="{{ versioned_static('js/imports/d3-tip.min.js') }}"></script>
+    <script defer src="{{ versioned_static('js/imports/select2.min.js') }}"></script>
+    <script>
+        window.gwasStaticAssets = {
+            d3plusText: {{ versioned_static('js/imports/d3plus-text.full.min.js')|tojson }}
+        };
+    </script>
+{% endblock %}
+
+{% block page_styles %}
+    <link href="{{ versioned_static('css/select2.min.css') }}" rel="stylesheet" type="text/css">
+{% endblock %}
+
 {% block content %}
 
     {% include 'components/funder-toolbar.html' %}
@@ -53,12 +68,54 @@
     <div id="downloadShell" style="display: none;"></div>
     <canvas id="downloadCanvas" style="display: none;"></canvas>
 
-    <script src="{{ versioned_static('js/graphs/time-series.js') }}"></script>
-    <script src="{{ versioned_static('js/graphs/world-map.js') }}"></script>
-    <script src="{{ versioned_static('js/graphs/bubble-graph.js') }}"></script>
-    <script src="{{ versioned_static('js/graphs/heat-map.js') }}"></script>
-    <script src="{{ versioned_static('js/graphs/doughnut-graph.js') }}"></script>
+    <script defer src="{{ versioned_static('js/graphs/time-series.js') }}"></script>
+    <script defer src="{{ versioned_static('js/graphs/world-map.js') }}"></script>
+    <script defer src="{{ versioned_static('js/graphs/bubble-graph.js') }}"></script>
+    <script defer src="{{ versioned_static('js/graphs/heat-map.js') }}"></script>
+    <script defer src="{{ versioned_static('js/graphs/doughnut-graph.js') }}"></script>
     <script type="text/javascript">
+		/*
+		 * Start every plot's download while deferred chart scripts are loading.
+		 * Parse the large bubble response only after the first paint. Store settled
+		 * results rather than rejected promises so a
+		 * transient early failure can safely fall back to d3.json later.
+		 */
+		window.__gwasPlotBootstrap = {
+			urls: {
+				tsPlot: {{ url_for('getplotjson', filename='tsPlot.json', v=plot_versions.get('tsPlot.json'))|tojson }},
+				heatMap: {{ url_for('getplotjson', filename='heatMap.json', v=plot_versions.get('heatMap.json'))|tojson }},
+				ancestriesOrdered: {{ url_for('getplotjson', filename='ancestriesOrdered.json', v=plot_versions.get('ancestriesOrdered.json'))|tojson }},
+				chloroMap: {{ url_for('getplotjson', filename='chloroMap.json', v=plot_versions.get('chloroMap.json'))|tojson }},
+				doughnutGraph: {{ url_for('getplotjson', filename='doughnutGraph.json', v=plot_versions.get('doughnutGraph.json'))|tojson }},
+				summary: {{ url_for('getplotjson', filename='summary.json', v=plot_versions.get('summary.json'))|tojson }},
+				bubbleGraph: {{ url_for('getplotjson', filename='bubbleGraph.json', v=plot_versions.get('bubbleGraph.json'), format=bubble_browser_format)|tojson }}
+			},
+			requests: {}
+		};
+
+		(function startPlotRequests(bootstrap) {
+			if (!window.fetch) return;
+			let earlyPlotNames = [
+				'tsPlot', 'heatMap', 'ancestriesOrdered',
+				'chloroMap', 'doughnutGraph', 'summary', 'bubbleGraph'
+			];
+			earlyPlotNames.forEach(function(name) {
+				bootstrap.requests[name] = window.fetch(
+					bootstrap.urls[name], {credentials: 'same-origin'}
+				).then(function(response) {
+					if (!response.ok) {
+						throw new Error('HTTP ' + response.status);
+					}
+					return name === 'bubbleGraph' ? response : response.json();
+				}).then(function(data) {
+					return name === 'bubbleGraph'
+						? {ok: true, response: data} : {ok: true, data: data};
+				}, function(error) {
+					return {ok: false, error: error};
+				});
+			});
+		})(window.__gwasPlotBootstrap);
+
 		let timeseriesData;
 		let heatData;
 		let ancestriesData;
@@ -71,7 +128,6 @@
 			let dashboardFilterRequest = null;
 			let dashboardFilterRevision = 0;
 			let baseDashboardReady = false;
-			let filterOptionsPrefetched = false;
 
 		function markBaseDashboardReady() {
 			let required = [
@@ -85,48 +141,108 @@
 				$('#funder-filter').prop('disabled', false);
 				$('#dataset-filter').prop('disabled', false);
 				updateSummaryFromFunder(baseDashboardData.summary);
-				if (!filterOptionsPrefetched) {
-					filterOptionsPrefetched = true;
-					prefetchInitialFilterOptions();
-				}
 			}
 		}
 
-        $(document).ready(function() {
+		function drawBaseHeatMapWhenReady() {
+			if (!heatData || !ancestriesData) return;
+			drawHeatMap(heatData, false, false, ancestriesData);
+			markBaseDashboardReady();
+		}
+
+		function loadPlotJson(name, callback) {
+			let bootstrap = window.__gwasPlotBootstrap;
+			let request = bootstrap.requests[name];
+			if (!request) {
+				d3.json(bootstrap.urls[name], callback);
+				return;
+			}
+
+			request.then(function(result) {
+				if (result.ok) {
+					if (result.response) {
+						result.response.json().then(function(data) {
+							callback(null, data);
+						}, function(error) { callback(error); });
+						return;
+					}
+					callback(null, result.data);
+					return;
+				}
+				// Retry through the established d3 callback path on fetch failure.
+				d3.json(bootstrap.urls[name], callback);
+			});
+		}
+
+		function scheduleAfterFirstPaint(callback) {
+			let callbackStarted = false;
+			let paintFallback;
+			function runCallback() {
+				if (callbackStarted) return;
+				callbackStarted = true;
+				if (paintFallback) window.clearTimeout(paintFallback);
+				callback();
+			}
+
+			// Two animation frames place the work after the browser has had an
+			// opportunity to paint. Hidden tabs may not receive animation frames,
+			// so the bounded fallback preserves eventual dashboard readiness.
+			paintFallback = window.setTimeout(runCallback, 250);
+			if (window.requestAnimationFrame) {
+				window.requestAnimationFrame(function() {
+					window.requestAnimationFrame(runCallback);
+				});
+			} else {
+				window.setTimeout(runCallback, 0);
+			}
+		}
+
+		function loadBubbleGraphAfterFirstPaint() {
+			scheduleAfterFirstPaint(function() {
+				loadPlotJson('bubbleGraph', function(error, data) {
+					if (error) return;
+					bubbleData = data;
+					baseDashboardData.bubbleGraph = data;
+					drawBubbleGraph(
+						'#bubbleGraph', bubbleData,
+						document.getElementById('cb2').checked
+					);
+					markBaseDashboardReady();
+				});
+			});
+		}
+
+        document.addEventListener('DOMContentLoaded', function() {
 			setDescription();
 			initFunderFilter();
 			initDatasetFilter();
-			if (!filterOptionsPrefetched) {
-				filterOptionsPrefetched = true;
-				prefetchInitialFilterOptions();
-			}
 
-			d3.json("{{ url_for('getplotjson', filename='tsPlot.json') }}", (error, data) => {
+			loadPlotJson('tsPlot', (error, data) => {
 				if (error) return;
 				timeseriesData = data;
 				baseDashboardData.tsPlot = data;
 				drawTimeSeries(timeseriesData, '#timeSeries');
 				markBaseDashboardReady();
 			});
-			d3.json("{{ url_for('getplotjson', filename='heatMap.json') }}", (error, data) => {
+			loadPlotJson('heatMap', (error, data) => {
 				if (error) return;
 				heatData = data;
 				baseDashboardData.heatMap = data;
-				d3.json("{{ url_for('getplotjson', filename='ancestriesOrdered.json') }}", (error, adata) => {
-					if (error) return;
-					ancestriesData = adata;
-					drawHeatMap(heatData, false, false, ancestriesData);
-					markBaseDashboardReady();
-				})
+				drawBaseHeatMapWhenReady();
 			});
-			d3.json("{{ url_for('getplotjson', filename='chloroMap.json') }}", (error, data) => {
+			loadPlotJson('ancestriesOrdered', (error, data) => {
+				if (error) return;
+				ancestriesData = data;
+				drawBaseHeatMapWhenReady();
+			});
+			loadPlotJson('chloroMap', (error, data) => {
 				if (error) return;
 				mapData = data;
 				baseDashboardData.chloroMap = data;
 				drawWorldMapChart(mapData, false, false);
 				markBaseDashboardReady();
 			});
-			d3.json("{{ url_for('getplotjson', filename='doughnutGraph.json') }}", (error, data) => {
+			loadPlotJson('doughnutGraph', (error, data) => {
 				if (error) return;
 				doughnutData = data;
 				baseDashboardData.doughnutGraph = data;
@@ -134,19 +250,13 @@
 				markBaseDashboardReady();
 			});
 
-			d3.json("{{ url_for('getplotjson', filename='bubbleGraph.json') }}", (error, data) => {
-				if (error) return;
-				bubbleData = data;
-				baseDashboardData.bubbleGraph = data;
-				drawBubbleGraph("#bubbleGraph", bubbleData);
-				markBaseDashboardReady();
-        });
-
-			d3.json("{{ url_for('getplotjson', filename='summary.json') }}", (error, data) => {
+			loadPlotJson('summary', (error, data) => {
 				if (error) return;
 				baseDashboardData.summary = data;
 				markBaseDashboardReady();
 			});
+
+			loadBubbleGraphAfterFirstPaint();
         });
 
         function captureDashboardState() {
@@ -338,43 +448,6 @@
 				if (active) failure(xhr, status, error);
 			});
 			return { abort: function() { active = false; } };
-		}
-
-		function prefetchFilterOptions(url, data) {
-			let key = filterOptionCacheKey(url, data);
-			if (filterOptionCache.has(key) || filterOptionRequests.has(key)) {
-				return;
-			}
-			requestFilterOptions({
-				url: url, data: data, dataType: 'json'
-			}, key);
-		}
-
-		function prefetchInitialFilterOptions() {
-			['initial', 'replication'].forEach(function(stage) {
-				prefetchFilterOptions('/api/funders', {
-					search: '', cohorts: '', stage: stage, page: 1
-				});
-				prefetchFilterOptions('/api/cohorts', {
-					search: '', funders: '', stage: stage, page: 1
-				});
-			});
-		}
-
-		function prefetchComplementaryFilterOptions() {
-			let stage = activeStageName();
-			let cohorts = selectedFilterValues('#dataset-filter');
-			let funders = selectedFilterValues('#funder-filter');
-			if (funders.length === 1 && cohorts.length === 0) {
-				prefetchFilterOptions('/api/cohorts', {
-					search: '', funders: funders[0], stage: stage, page: 1
-				});
-			}
-			if (cohorts.length === 1 && funders.length === 0) {
-				prefetchFilterOptions('/api/funders', {
-					search: '', cohorts: cohorts[0], stage: stage, page: 1
-				});
-			}
 		}
 
         function formattedCount(value, singular, plural) {
@@ -663,7 +736,6 @@
 				'select2:select select2:unselect select2:clear',
 				function() {
 					syncFilterInputState(select);
-					prefetchComplementaryFilterOptions();
 					applyDashboardFilters();
 				}
 			);
@@ -719,7 +791,6 @@
 				'select2:select select2:unselect select2:clear',
 				function() {
 					syncFilterInputState(select);
-					prefetchComplementaryFilterOptions();
 					applyDashboardFilters();
 				}
 			);
@@ -771,8 +842,12 @@
                 var box = $('.only-metric');
             } else {
                 var box = $('.only-stage');
-                drawBubbleGraph("#bubbleGraph", bubbleData, switchStage.checked, true);
-				prefetchComplementaryFilterOptions();
+				if (bubbleData) {
+					drawBubbleGraph(
+						"#bubbleGraph", bubbleData,
+						switchStage.checked, true
+					);
+				}
             }
             highlight(both);
             highlight(box);

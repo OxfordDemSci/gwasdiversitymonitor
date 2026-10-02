@@ -19,11 +19,13 @@
 {% block body_class %}body-{{ browser }} report-page{% endblock %}
 {% block site_header %}{% endblock %}
 {% block site_footer %}{% endblock %}
+{% block core_dependencies %}{% endblock %}
+{% block core_scripts %}{% endblock %}
 
 {% block content %}
 <main class="funder-report">
 <div class="funder-report__print-masthead" aria-hidden="true">
-    <img src="{{ url_for('static', filename='images/logo_white_rect.png') }}" alt="">
+    <img src="{{ versioned_static('images/logo_white_rect.png') }}" alt="">
     <span>GWAS diversity evidence report</span>
 </div>
 <table class="funder-report__print-layout" role="presentation">
@@ -33,7 +35,7 @@
     <header class="funder-report__header">
         <div class="funder-report__identity">
             <a class="funder-report__brand" href="{{ url_for('index') }}" aria-label="GWAS Diversity Monitor home">
-                <img src="{{ url_for('static', filename='images/logo_white_rect.png') }}" alt="GWAS Diversity Monitor">
+                <img src="{{ versioned_static('images/logo_white_rect.png') }}" alt="GWAS Diversity Monitor">
             </a>
             <span>Research reports</span>
         </div>

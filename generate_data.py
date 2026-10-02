@@ -14,6 +14,7 @@ import os
 import csv
 import contextlib
 import fcntl
+import gzip
 import hashlib
 import shutil
 import sys
@@ -99,6 +100,10 @@ TOPLOT_JSON_FILES = tuple(
     if file_name.endswith('.json')
 )
 
+TOPLOT_PRECOMPRESSED_JSON_FILES = tuple(
+    f'{file_name}.gz' for file_name in TOPLOT_JSON_FILES
+)
+
 DOWNLOAD_OUTPUT_FILES = (
     'todownload/gwasdiversitymonitor_download.zip',
     'todownload/heatmap.zip',
@@ -116,6 +121,10 @@ PUBLISHED_DATA_FILES = (
     + SUMMARY_OUTPUT_FILES
     + UNMAPPED_OUTPUT_FILES
     + tuple(f'toplot/{file_name}' for file_name in TOPLOT_OUTPUT_FILES)
+    + tuple(
+        f'toplot/{file_name}'
+        for file_name in TOPLOT_PRECOMPRESSED_JSON_FILES
+    )
     + DOWNLOAD_OUTPUT_FILES
     + FILTER_CONFIGURATION_FILES
     + FILTER_AUDIT_OUTPUT_FILES
@@ -204,102 +213,21 @@ def json_converter(data_path):
     plot_path = os.path.join(data_path, 'toplot')
     os.makedirs(plot_path, exist_ok=True)
 
-    def broader_class(value):
-        return str(value or "").replace(" ", "-").replace("/", "-").replace(" ", "-").replace(" ", "-").lower()
-
-    def parentterm_class(value):
-        return str(value or "").replace(", ", ",").replace(" ", "-").replace(",", " ").lower()
-
-    def disease_clean(value):
-        return str(value or "").replace(">", "more than").replace("<", "less than")
-
-    def trait_clean(value):
-        return str(value or "").replace(" ", "-").replace(">", "more than").replace("<", "less than").replace("(", "").replace(")", "").lower()
-
-    def date_ms(value):
-        try:
-            return int(pd.to_datetime(value).timestamp() * 1000)
-        except Exception:
-            return None
-
     def rows_from_stage(stage_obj):
         if isinstance(stage_obj, list):
             return stage_obj
         return [stage_obj[key] for key in stage_obj.keys()]
 
-    def enrich_bubble_row(row):
-        enriched = dict(row)
-
-        try:
-            nnum = float(enriched.get("N", 0))
-        except Exception:
-            nnum = 0
-
-        enriched["__Nnum"] = nnum
-        enriched["__dateMS"] = date_ms(enriched.get("DATE"))
-        enriched["__class"] = broader_class(enriched.get("Broader")) + " " + parentterm_class(enriched.get("parentterm"))
-        enriched["__trait"] = trait_clean(enriched.get("DiseaseOrTrait"))
-        enriched["__DiseaseOrTraitClean"] = disease_clean(enriched.get("DiseaseOrTrait"))
-        enriched["__BroaderClass"] = broader_class(enriched.get("Broader"))
-        enriched["__ParentTermClass"] = parentterm_class(enriched.get("parentterm"))
-
-        return enriched
-
-    def encode_bubble_stage(rows, columns):
-        dicts = {}
-        codes = {}
-
-        for column in columns:
-            values = []
-            value_to_code = {}
-            column_codes = []
-
-            for row in rows:
-                value = row.get(column)
-                if isinstance(value, float) and math.isnan(value):
-                    value = None
-
-                key = json.dumps(value, ensure_ascii=False, sort_keys=True)
-
-                if key not in value_to_code:
-                    value_to_code[key] = len(values)
-                    values.append(value)
-
-                column_codes.append(value_to_code[key])
-
-            dicts[column] = values
-            codes[column] = column_codes
-
-        ns = [float(row.get("__Nnum") or 0) for row in rows]
-        dms = [row.get("__dateMS") for row in rows if row.get("__dateMS") is not None]
-
-        meta = {
-            "rowCount": len(rows),
-            "maxN": max(ns) if ns else 0,
-            "minDateMS": min(dms) if dms else None,
-            "maxDateMS": max(dms) if dms else None,
-            "minDate": datetime.datetime.utcfromtimestamp(min(dms) / 1000).strftime("%Y-%m-%d") if dms else None,
-            "maxDate": datetime.datetime.utcfromtimestamp(max(dms) / 1000).strftime("%Y-%m-%d") if dms else None,
-            "includePrecomputed": True,
-        }
-
-        return {
-            "columns": columns,
-            "dicts": dicts,
-            "codes": codes,
-            "meta": meta,
-        }
-
     def encode_bubble_graph(data):
-        initial_rows = [enrich_bubble_row(row) for row in rows_from_stage(data["bubblegraph_initial"])]
-        replication_rows = [enrich_bubble_row(row) for row in rows_from_stage(data["bubblegraph_replication"])]
-        columns = sorted(set().union(*(row.keys() for row in initial_rows + replication_rows)))
-
-        return {
-            "__format": "dict_columnar_v2",
-            "bubblegraph_initial": encode_bubble_stage(initial_rows, columns),
-            "bubblegraph_replication": encode_bubble_stage(replication_rows, columns),
-        }
+        rows = (
+            rows_from_stage(data["bubblegraph_initial"])
+            + rows_from_stage(data["bubblegraph_replication"])
+        )
+        frame = pd.DataFrame(
+            rows,
+            columns=funder_pipeline.BUBBLE_PAYLOAD_COLUMNS,
+        )
+        return funder_pipeline.build_bubble_payload(frame)
 
     # filename -> function (do NOT call here)
     tasks = [
@@ -319,13 +247,15 @@ def json_converter(data_path):
         try:
             diversity_logger.info(f'json_converter: building {filename}')
             data = func()  # evaluate lazily here
+            output_path = os.path.join(plot_path, filename)
             if filename == 'bubbleGraph.json':
                 data = encode_bubble_graph(data)
-                with open(os.path.join(plot_path, filename), 'w') as fp:
+                with open(output_path, 'w') as fp:
                     json.dump(data, fp, ensure_ascii=False, separators=(',', ':'))
             else:
-                with open(os.path.join(plot_path, filename), 'w') as fp:
+                with open(output_path, 'w') as fp:
                     json.dump(data, fp)
+            _write_precompressed_json(output_path)
         except Exception as e:
             diversity_logger.exception(f'json_converter: failed {filename}: {e}')
             raise
@@ -2467,6 +2397,43 @@ def _atomic_write_json(path, payload):
             os.unlink(temporary_path)
 
 
+def _write_precompressed_json(path, compresslevel=6):
+    """Atomically write a deterministic gzip companion for a JSON file.
+
+    The source is streamed rather than loaded again, which keeps peak memory
+    bounded for the large bubble payload.  A zero gzip timestamp and an empty
+    embedded filename make identical JSON bytes produce identical companion
+    bytes across runs.
+    """
+    path = os.path.abspath(path)
+    if not path.endswith('.json'):
+        raise ValueError('Precompressed plot payloads must be JSON files')
+    directory = os.path.dirname(path)
+    compressed_path = path + '.gz'
+    descriptor, temporary_path = tempfile.mkstemp(
+        prefix='.generate_data.', suffix='.json.gz', dir=directory
+    )
+    try:
+        with os.fdopen(descriptor, 'wb') as target_file, \
+                open(path, 'rb') as source_file:
+            with gzip.GzipFile(
+                    filename='', mode='wb', compresslevel=compresslevel,
+                    fileobj=target_file, mtime=0) as compressed_file:
+                shutil.copyfileobj(
+                    source_file, compressed_file, 1024 * 1024
+                )
+            target_file.flush()
+            os.fsync(target_file.fileno())
+        shutil.copymode(path, temporary_path)
+        os.replace(temporary_path, compressed_path)
+        _fsync_directory(directory)
+        temporary_path = None
+    finally:
+        if temporary_path and os.path.exists(temporary_path):
+            os.unlink(temporary_path)
+    return compressed_path
+
+
 def _read_json(path):
     with open(path, encoding='utf-8') as input_file:
         return json.load(input_file)
@@ -2535,6 +2502,19 @@ def _zip_member_matches_file(archive, member_name, file_path):
             if archived_block != source_block:
                 return False
             if not archived_block:
+                return True
+
+
+def _gzip_matches_file(compressed_path, source_path):
+    """Return whether a gzip stream expands byte-for-byte to its source."""
+    with gzip.open(compressed_path, 'rb') as compressed_file, \
+            open(source_path, 'rb') as source_file:
+        while True:
+            compressed_block = compressed_file.read(1024 * 1024)
+            source_block = source_file.read(1024 * 1024)
+            if compressed_block != source_block:
+                return False
+            if not compressed_block:
                 return True
 
 
@@ -2618,9 +2598,16 @@ def validate_generated_release(data_path, static_bundle_path):
         f'toplot/{name}' for name in TOPLOT_JSON_FILES
     )
     for relative_path in json_paths:
-        value = _read_json(os.path.join(data_path, relative_path))
+        source_path = os.path.join(data_path, relative_path)
+        value = _read_json(source_path)
         if not isinstance(value, (dict, list)) or not value:
             raise ValueError(f'{relative_path}: generated JSON is empty')
+        if relative_path.startswith('toplot/'):
+            compressed_path = source_path + '.gz'
+            if not _gzip_matches_file(compressed_path, source_path):
+                raise ValueError(
+                    f'{relative_path}.gz does not match generated JSON'
+                )
 
     summary_path = os.path.join(data_path, 'summary', 'summary.json')
     plot_summary_path = os.path.join(data_path, 'toplot', 'summary.json')

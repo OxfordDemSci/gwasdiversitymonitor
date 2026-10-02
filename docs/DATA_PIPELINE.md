@@ -31,6 +31,20 @@ API and caches them in `data/funders/pubmed_grants.json`. The version-controlled
 `data/funders/funder_cleaner.json` map resolves known aliases to canonical
 funder names.
 
+The collector only publishes a cache batch when PubMed returns every requested
+PMID. This distinguishes an article that was returned without a GrantList from
+an article omitted by an incomplete response. Rate-limit and transient server
+responses are retried with bounded backoff (respecting `Retry-After`), while
+permanent client errors fail immediately with the HTTP status and affected
+batch. Cache validation requires one valid returned record for every PMID in
+the current Catalog snapshot.
+
+`data/funders/normalization-audit.json` reports retrieval and mapping coverage,
+including publications with and without GrantLists, grant records without an
+agency, reviewed exclusions, alias merges, and source names that do not yet
+have an explicit alias. Unaliased non-empty agencies remain available under
+their cleaned source name rather than being silently discarded.
+
 The generated funder dashboard applies the pipeline's minimum-publication
 threshold (50 by default) to individually exposed funder reports. Smaller
 funders may be grouped for those generated products. Analyses should state the

@@ -54,6 +54,10 @@
       @include align-items(center);
     }
 
+    .right {
+      gap: 8px;
+    }
+
     &,
     .left,
     .right {
@@ -68,6 +72,100 @@
   }
 
 }
+
+.header-cite-action {
+  min-height: 42px;
+  padding: 8px 7px;
+  border: 2px solid $white;
+  border-radius: 3px;
+  background: $white;
+  box-shadow: 0 3px 10px rgba($dark-purple, .22);
+  color: $dark-purple;
+  flex: 0 0 auto;
+  font-size: $regular-size;
+  font-weight: bold;
+  line-height: 20px;
+  white-space: nowrap;
+  @include flexbox;
+  @include align-items(center);
+  @include justify-content(center);
+  @include transition-all(.2s);
+
+  &:before,
+  &:after {
+    color: $european;
+    font-family: Georgia, serif;
+    font-size: 27px;
+    font-weight: bold;
+    line-height: 16px;
+  }
+
+  &:before {
+    margin-right: 4px;
+    content: '\201C';
+  }
+
+  &:after {
+    margin-left: 4px;
+    content: '\201D';
+  }
+
+  &:hover {
+    border-color: $african-am-caribbean;
+    background: $african-am-caribbean;
+    box-shadow: 0 4px 12px rgba($dark-purple, .3);
+    color: $dark-purple;
+    @include transform(translateY(-1px));
+  }
+
+  &:focus {
+    border-color: $african-am-caribbean;
+    box-shadow: 0 0 0 3px rgba($white, .48);
+    outline: 0;
+  }
+}
+
+@media screen and (max-width: $tablet-breakpoint - 1px) {
+  .header-cite-action {
+    width: 56px;
+    min-height: 40px;
+    padding: 7px 2px;
+
+    &:before,
+    &:after {
+      font-size: 20px;
+    }
+
+    &:before {
+      margin-right: 1px;
+    }
+
+    &:after {
+      margin-left: 1px;
+    }
+
+    &__label {
+      font-size: 0;
+
+      &:after {
+        content: 'Cite';
+        font-size: $small-size;
+        line-height: 18px;
+      }
+    }
+  }
+}
+
+@media screen and (max-width: 640px) {
+  .logo-gwas-type {
+    display: none;
+  }
+
+  #header .container .right {
+    width: calc(100% - 55px);
+  }
+}
+
 @media screen and (max-width: $mobile-breakpoint) {
   #header {
 
@@ -75,7 +173,7 @@
       .container {
 
         .right {
-          width: 70%;
+          width: calc(100% - 55px);
         }
 
         .logo-gwas-type {
@@ -140,12 +238,26 @@
     .container {
 
       .right {
+        width: 78%;
         @include flexbox;
       }
 
       .download,
       .add-info {
         display: block;
+      }
+
+      @media screen and (max-width: $medium-breakpoint - 1px) {
+        .add-info {
+          min-width: 62px;
+          padding: 10px 8px;
+          font-size: 0;
+
+          &:after {
+            content: 'About';
+            font-size: $small-size;
+          }
+        }
       }
 
       .download {
@@ -189,7 +301,11 @@
     .container {
 
       .right {
-        width: 45%;
+        width: 72%;
+      }
+
+      .add-info {
+        display: block;
       }
     }
   }
@@ -218,82 +334,144 @@
 
 .funder-toolbar {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  @include align-items(flex-end);
+  gap: 12px;
   max-width: 1120px;
-  margin: 12px auto 30px;
-  padding: 24px 28px 20px;
-  border: 1px solid rgba($primary, .18);
-  border-top: 4px solid $light-primary;
-  border-radius: 4px;
-  background: $white;
-  box-shadow: 0 5px 18px rgba($dark-purple, .1);
-
-  &__intro {
-    max-width: 760px;
-    margin: 0 auto 22px;
-    text-align: center;
-
-    h2 {
-      margin: 7px 0 6px;
-      color: $dark-purple;
-      font-size: 28px;
-      line-height: 34px;
-    }
-
-    p {
-      color: $gwas-content-black;
-      font-size: $regular-size;
-      line-height: 22px;
-    }
-  }
-
-  &__eyebrow {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 14px;
-    background: rgba($light-primary, .12);
-    color: $primary;
-    font-size: 12px;
-    font-weight: bold;
-    letter-spacing: 1px;
-    line-height: 16px;
-    text-transform: uppercase;
-  }
+  margin: 4px auto 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba($primary, .16);
+  border-radius: 3px;
+  background: rgba($light-primary, .025);
+  box-shadow: inset 0 2px 0 rgba($light-primary, .55),
+              0 1px 5px rgba($dark-purple, .04);
 
   &__controls {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
-    max-width: 960px;
-    margin: 0 auto;
+    gap: 12px;
+    min-width: 0;
   }
 
   &__field {
+    position: relative;
     min-width: 0;
-    padding: 16px 18px 18px;
-    border: 1px solid rgba($light-primary, .28);
-    border-radius: 4px;
-    background: rgba($light-primary, .045);
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    @include align-items(center);
+    gap: 8px;
 
     &-heading {
-      margin-bottom: 10px;
+      margin: 0;
       @include flexbox;
-      @include align-items(baseline);
-      @include justify-content(space-between);
-      gap: 12px;
+      @include align-items(center);
+      @include justify-content(flex-start);
+      gap: 5px;
 
       label {
         color: $dark-purple;
-        font-size: $medium-size;
+        font-size: 15px;
         font-weight: bold;
-        line-height: 22px;
+        line-height: 18px;
       }
 
-      span {
+      > span {
         color: $gwas-content-black;
-        font-size: $small-size;
-        line-height: 18px;
+        font-size: 12px;
+        line-height: 16px;
         text-align: right;
       }
+    }
+
+    &-label {
+      min-width: 0;
+      @include flexbox;
+      @include align-items(center);
+      gap: 5px;
+    }
+
+    &-help {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      margin: -1px !important;
+      padding: 0 !important;
+      border: 0 !important;
+      clip: rect(0, 0, 0, 0) !important;
+      overflow: hidden !important;
+      white-space: nowrap !important;
+    }
+
+    .funder-toolbar__info {
+      display: inline-flex;
+      flex: 0 0 auto;
+      text-align: left;
+
+      &:hover,
+      &:focus-within {
+        .funder-toolbar__tooltip {
+          opacity: 1;
+          pointer-events: auto;
+          visibility: visible;
+          @include transform(translateY(0));
+        }
+      }
+    }
+
+    .funder-toolbar__info-button {
+      width: 24px;
+      height: 24px;
+      padding: 0;
+      border: 1px solid $light-primary;
+      border-radius: 50%;
+      background: $white;
+      color: $primary;
+      cursor: help;
+      font-family: Georgia, serif;
+      font-size: 14px;
+      font-weight: bold;
+      line-height: 20px;
+      text-align: center;
+      @include transition-all(.2s);
+
+      &:hover,
+      &:focus {
+        border-color: $primary;
+        background: $primary;
+        box-shadow: 0 0 0 3px rgba($light-primary, .18);
+        color: $white;
+        outline: 0;
+      }
+    }
+
+    .funder-toolbar__tooltip {
+      position: absolute;
+      z-index: 20;
+      top: calc(100% + 6px);
+      right: auto;
+      left: 0;
+      width: min(360px, calc(100vw - 32px));
+      padding: 12px 14px;
+      border: 1px solid rgba($primary, .24);
+      border-left: 4px solid $other-mixed;
+      border-radius: 3px;
+      background: $white;
+      box-shadow: 0 6px 18px rgba($dark-purple, .18);
+      color: $gwas-content-black;
+      font-size: $small-size;
+      line-height: 19px;
+      opacity: 0;
+      pointer-events: none;
+      text-align: left;
+      visibility: hidden;
+      @include transform(translateY(-4px));
+      @include transition-all(.18s);
+    }
+
+    &:last-child .funder-toolbar__tooltip {
+      right: 0;
+      left: auto;
     }
 
     .select2-container {
@@ -302,9 +480,9 @@
     }
 
     .select2-container--default .select2-selection--multiple {
-      max-height: 96px;
-      min-height: 46px;
-      border: 2px solid rgba($primary, .35);
+      max-height: 72px;
+      min-height: 36px;
+      border: 1px solid rgba($primary, .35);
       border-radius: 3px;
       background: $white;
       overflow-y: auto;
@@ -312,8 +490,8 @@
 
     .select2-container--default .select2-selection--multiple
     .select2-selection__rendered {
-      min-height: 42px;
-      padding: 4px 36px 4px 8px;
+      min-height: 34px;
+      padding: 1px 30px 1px 7px;
       @include flexbox;
       @include align-items(center);
       flex-wrap: wrap;
@@ -368,12 +546,12 @@
 
       .select2-search__field {
         width: 100% !important;
-        height: 34px;
+        height: 28px;
         margin: 0;
-        padding: 4px 2px;
+        padding: 1px 2px;
         color: $gwas-content-black;
-        font-size: $regular-size;
-        line-height: 26px;
+        font-size: 14px;
+        line-height: 24px;
 
         &::placeholder {
           color: $gwas-content-black;
@@ -406,27 +584,24 @@
   }
 
   &__footer {
-    max-width: 960px;
-    margin: 16px auto 0;
-    padding-top: 14px;
-    border-top: 1px solid $light-grey;
+    margin: 0;
     @include flexbox;
     @include align-items(center);
-    gap: 16px;
+    gap: 10px;
   }
 
   &__status {
     min-width: 0;
-    flex: 1;
     color: $gwas-content-black;
-    font-size: $regular-size;
-    line-height: 20px;
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
 
     &:before {
       display: inline-block;
-      width: 8px;
-      height: 8px;
-      margin-right: 8px;
+      width: 5px;
+      height: 5px;
+      margin-right: 6px;
       border-radius: 50%;
       background: $other-mixed;
       content: '';
@@ -435,15 +610,14 @@
   }
 
   &__actions {
-    margin-left: auto;
     @include flexbox;
     @include align-items(center);
-    gap: 8px;
+    gap: 5px;
   }
 
   &__action {
-    min-height: 38px;
-    padding: 8px 14px;
+    min-height: 34px;
+    padding: 5px 9px;
     border: 1px solid $primary;
     border-radius: 3px;
     background: $white;
@@ -452,8 +626,9 @@
     @include flexbox;
     @include align-items(center);
     @include justify-content(center);
+    font-size: $small-size;
     font-weight: bold;
-    line-height: 20px;
+    line-height: 18px;
     text-align: center;
     transition: background .2s ease, color .2s ease, opacity .2s ease;
 
@@ -515,29 +690,33 @@
   max-width: 520px;
 }
 
+@media screen and (max-width: $medium-breakpoint) {
+  .funder-toolbar {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+
+    &__footer {
+      @include justify-content(space-between);
+    }
+  }
+}
+
 @media screen and (max-width: $tablet-breakpoint) {
   .funder-toolbar {
-    margin-top: 8px;
-    padding: 22px 20px 18px;
+    margin-top: 6px;
+    padding: 9px 10px 10px;
 
     &__controls {
-      grid-template-columns: minmax(0, 620px);
-      @include justify-content(center);
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
     }
 
     &__footer {
-      @include align-items(stretch);
-      @include flex-direction(column);
-      gap: 12px;
-    }
-
-    &__status {
-      text-align: center;
+      gap: 8px;
     }
 
     &__actions {
-      margin-left: 0;
-      @include justify-content(center);
+      margin-left: auto;
     }
   }
 }
@@ -943,30 +1122,28 @@
 
 @media screen and (max-width: $mobile-breakpoint) {
   .funder-toolbar {
-    margin-bottom: 22px;
-    padding: 18px 12px 14px;
-
-    &__intro {
-      margin-bottom: 18px;
-
-      h2 {
-        font-size: 24px;
-        line-height: 29px;
-      }
-    }
+    margin-bottom: 14px;
+    padding: 8px;
 
     &__field {
-      padding: 14px 12px 16px;
-
       &-heading {
         @include align-items(flex-start);
-        @include flex-direction(column);
-        gap: 2px;
+        gap: 6px;
 
         span {
           text-align: left;
         }
       }
+    }
+
+    &__footer {
+      @include align-items(stretch);
+      @include flex-direction(column);
+      gap: 7px;
+    }
+
+    &__status {
+      text-align: center;
     }
 
     &__actions {

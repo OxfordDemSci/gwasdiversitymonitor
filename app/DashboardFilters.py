@@ -15,7 +15,8 @@ import pandas as pd
 import funder_pipeline
 
 
-FILTER_SCHEMA_VERSION = 7
+FILTER_SCHEMA_VERSION = 8
+COMPATIBLE_PRECOMPUTED_FILTER_SCHEMA_VERSIONS = frozenset({7, 8})
 PRECOMPUTED_FILTER_ARCHIVE = os.path.join(
     "filter-cache", "individual-dashboards.zip"
 )
@@ -32,9 +33,65 @@ COHORT_NORMALIZATION_AUDIT_FILE = os.path.join(
 )
 BUBBLE_PAYLOAD_ROW_LIMIT = 5000
 
+_FACET_OVERVIEW_COUNT_KEYS = (
+    "funder_count",
+    "cohort_count",
+    "study_count",
+    "funder_linked_study_count",
+    "cohort_linked_study_count",
+)
+_FACET_OVERVIEW_PERCENTAGE_KEYS = (
+    "funder_linked_study_percentage",
+    "cohort_linked_study_percentage",
+)
+
 
 class DashboardSelectionUnavailable(RuntimeError):
     pass
+
+
+def _valid_facet_overview(overview):
+    if not isinstance(overview, dict):
+        return False
+    for key in _FACET_OVERVIEW_COUNT_KEYS:
+        if type(overview.get(key)) is not int or overview[key] < 0:
+            return False
+    for key in _FACET_OVERVIEW_PERCENTAGE_KEYS:
+        value = overview.get(key)
+        if isinstance(value, bool) or not isinstance(value, (int, float)) \
+                or not 0 <= value <= 100:
+            return False
+    for key in ("most_common_funder", "most_common_cohort"):
+        entry = overview.get(key)
+        if entry is None:
+            continue
+        if not isinstance(entry, dict) \
+                or not isinstance(entry.get("name"), str) \
+                or not entry["name"].strip() \
+                or type(entry.get("studyCount")) is not int \
+                or type(entry.get("publicationCount")) is not int \
+                or entry["studyCount"] < 0 \
+                or entry["publicationCount"] < 0:
+            return False
+    return True
+
+
+def load_precomputed_facet_overview(data_path="data"):
+    """Load the small additional-information summary without source scans."""
+    path = os.path.join(
+        os.path.abspath(data_path), PRECOMPUTED_FILTER_ARCHIVE
+    )
+    try:
+        with zipfile.ZipFile(path) as archive:
+            manifest = json.loads(archive.read(PRECOMPUTED_FILTER_MANIFEST))
+        overview = manifest.get("facetOverview")
+        if manifest.get("version") != FILTER_SCHEMA_VERSION \
+                or not _valid_facet_overview(overview):
+            return None
+        return overview
+    except (KeyError, OSError, TypeError, ValueError,
+            zipfile.BadZipFile, json.JSONDecodeError):
+        return None
 
 
 def split_cohorts(value):
@@ -215,7 +272,8 @@ class DashboardFilterStore:
         try:
             with zipfile.ZipFile(self._precomputed_archive) as archive:
                 payload = json.loads(archive.read(member))
-            if payload.get("version") != FILTER_SCHEMA_VERSION:
+            if payload.get("version") not in \
+                    COMPATIBLE_PRECOMPUTED_FILTER_SCHEMA_VERSIONS:
                 return None
             return payload
         except (KeyError, OSError, TypeError, ValueError,
@@ -236,7 +294,8 @@ class DashboardFilterStore:
         try:
             with zipfile.ZipFile(self._precomputed_archive) as archive:
                 payload = json.loads(archive.read(member))
-            if payload.get("version") != FILTER_SCHEMA_VERSION \
+            if payload.get("version") not in \
+                    COMPATIBLE_PRECOMPUTED_FILTER_SCHEMA_VERSIONS \
                     or not isinstance(payload.get("entries"), list):
                 return None
             entries = tuple(payload["entries"])
@@ -280,7 +339,8 @@ class DashboardFilterStore:
         try:
             with zipfile.ZipFile(self._precomputed_archive) as archive:
                 payload = json.loads(archive.read(member))
-            if payload.get("version") != FILTER_SCHEMA_VERSION \
+            if payload.get("version") not in \
+                    COMPATIBLE_PRECOMPUTED_FILTER_SCHEMA_VERSIONS \
                     or not isinstance(payload.get("entries"), list):
                 return None
             entries = tuple(payload["entries"])
@@ -537,6 +597,80 @@ class DashboardFilterStore:
         self._ensure_sources()
         self._ensure_dataset_index()
         self._ensure_funder_index()
+
+    def facet_overview(self):
+        """Return current headline statistics for funder/cohort filters."""
+        # Legacy releases may not have a precomputed filter archive. Reuse the
+        # small overview across workers without loading every facet index just
+        # to render the additional-information page. _cache_root is versioned
+        # by all relevant data sources and the filter/report schemas.
+        with self._lock:
+            path = os.path.join(self._cache_root, "facet-overview.json")
+            try:
+                with open(path, encoding="utf-8") as cached_file:
+                    cached = json.load(cached_file)
+                if _valid_facet_overview(cached):
+                    return cached
+            except (OSError, ValueError, TypeError):
+                pass
+
+            overview = self._build_facet_overview()
+            try:
+                self._atomic_json(path, overview)
+            except OSError:
+                # A read-only cache must not make the information page fail.
+                pass
+            return overview
+
+    def _build_facet_overview(self):
+        self._ensure_facet_indexes()
+        self._ensure_dataset_index()
+        self._ensure_funder_index()
+
+        funder_entries = sorted(
+            self._funder_entries.values(),
+            key=lambda entry: (
+                -entry.get("publicationCount", 0),
+                -entry.get("studyCount", 0),
+                entry.get("name", "").casefold(),
+                entry.get("name", ""),
+            ),
+        )
+        cohort_entries = sorted(
+            self._dataset_entries, key=self._entry_sort_key
+        )
+        funder_accessions = self._funder_union(
+            tuple(self._funder_entries)
+        ) if self._funder_entries else frozenset()
+        cohort_accessions = frozenset().union(
+            *self._dataset_accessions.values()
+        ) if self._dataset_accessions else frozenset()
+        total_studies = len(self._all_accessions)
+
+        def percentage(value):
+            if not total_studies:
+                return 0.0
+            return round(value * 100 / total_studies, 2)
+
+        return {
+            "most_common_funder": (
+                funder_entries[0].copy() if funder_entries else None
+            ),
+            "most_common_cohort": (
+                cohort_entries[0].copy() if cohort_entries else None
+            ),
+            "funder_count": len(funder_entries),
+            "cohort_count": len(cohort_entries),
+            "study_count": total_studies,
+            "funder_linked_study_count": len(funder_accessions),
+            "cohort_linked_study_count": len(cohort_accessions),
+            "funder_linked_study_percentage": percentage(
+                len(funder_accessions)
+            ),
+            "cohort_linked_study_percentage": percentage(
+                len(cohort_accessions)
+            ),
+        }
 
     def _select_accessions(self, source_number, accessions):
         self._ensure_sources()
@@ -1195,6 +1329,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
     )
     store = DashboardFilterStore(data_path, use_precomputed=False)
     store.warm()
+    facet_overview = store.facet_overview()
     build_cohort_normalization_audit(data_path, store._facet_studies)
 
     selections = [
@@ -1288,6 +1423,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                 ),
                 "selectorFunderCount": len(store._funder_entries),
                 "selectorCohortCount": len(store._dataset_entries),
+                "facetOverview": facet_overview,
                 "optionMembers": option_members,
                 "conditionalOptionMembers": conditional_option_members,
                 "members": members,
@@ -1318,6 +1454,10 @@ def validate_precomputed_filter_archive(data_path="data", path=None):
                 or not isinstance(option_members, list) \
                 or not isinstance(conditional_option_members, list):
             raise ValueError("The precomputed filter manifest is invalid")
+        if not _valid_facet_overview(manifest.get("facetOverview")):
+            raise ValueError(
+                "The precomputed filter facet overview is invalid"
+            )
         expected_option_members = set(
             PRECOMPUTED_FILTER_OPTION_MEMBERS.values()
         )

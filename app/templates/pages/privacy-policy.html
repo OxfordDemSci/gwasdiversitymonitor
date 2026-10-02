@@ -55,14 +55,16 @@
 </div>
 
 <script type="text/javascript">
-    var pathArray = window.location.href.split('#');
-    var section = pathArray[1];
+    document.addEventListener('DOMContentLoaded', function() {
+        var pathArray = window.location.href.split('#');
+        var section = pathArray[1];
 
-    if(section) {
-        $('html,body').animate({
-            scrollTop: $('#' + section).offset().top - 80},
-        'slow');
-    }
+        if(section) {
+            $('html,body').animate({
+                scrollTop: $('#' + section).offset().top - 80},
+            'slow');
+        }
+    });
 </script>
 
 {% endblock %}

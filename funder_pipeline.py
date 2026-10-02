@@ -15,6 +15,7 @@ import time
 import unicodedata
 import zipfile
 from collections import Counter, defaultdict
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from xml.etree import ElementTree
 
@@ -26,18 +27,34 @@ LOGGER = logging.getLogger("diversity_logger")
 
 
 NCBI_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 ARTIFACT_VERSION = 2
 REPORT_SCHEMA_VERSION = 3
 DEFAULT_MIN_STUDIES = 50
 DEFAULT_BATCH_SIZE = 100
+BUBBLE_PAYLOAD_COLUMNS = (
+    "ACCESSION",
+    "AUTHOR",
+    "Broader",
+    "COHORT",
+    "DATE",
+    "DiseaseOrTrait",
+    "FUNDER",
+    "JOURNAL",
+    "N",
+    "PUBMEDID",
+    "STAGE",
+    "parentterm",
+)
+PUBMED_RETRYABLE_STATUS_CODES = frozenset({408, 425, 429})
+PUBMED_MAX_RETRY_DELAY = 120
 FUNDER_DOWNLOAD_MEMBERS = {
     "studies.tsv", "ancestry.tsv", "bubble_df.csv", "funding.csv"
 }
 FUNDER_DIRECTORY = "funders"
 FUNDER_CLEANER_FILE = "funder_cleaner.json"
 FUNDER_NORMALIZATION_AUDIT_FILE = "normalization-audit.json"
-FUNDER_NORMALIZATION_AUDIT_VERSION = 1
+FUNDER_NORMALIZATION_AUDIT_VERSION = 2
 NIH_COMPONENT_ALIASES = (
     ("NHLBI", "NHLBI NIH HHS"),
     ("NHGRI", "NHGRI NIH HHS"),
@@ -222,19 +239,57 @@ def read_publication_ids(data_path):
     return sorted({pmid for pmid in values.map(normalize_pmid) if pmid}, key=int)
 
 
+class PubMedResponseError(ValueError):
+    """Raised when PubMed returns parseable but unusable response data."""
+
+
 def parse_pubmed_grants(xml_content, requested_ids):
-    records = {pmid: {"grants": []} for pmid in requested_ids}
+    """Parse records actually returned by PubMed.
+
+    A returned article without a GrantList is represented by an empty list.
+    A requested PMID absent from the response is deliberately not represented,
+    allowing the collector to retry rather than cache an ambiguous empty row.
+    """
+    requested = {
+        pmid for pmid in map(normalize_pmid, requested_ids) if pmid
+    }
     root = ElementTree.fromstring(xml_content)
-    for article in root.findall(".//PubmedArticle"):
+
+    error_nodes = []
+    if root.tag.rsplit("}", 1)[-1].casefold() == "error":
+        error_nodes.append(root)
+    error_nodes.extend(root.findall(".//ERROR"))
+    error_nodes.extend(root.findall(".//Error"))
+    errors = [
+        re.sub(r"\s+", " ", "".join(node.itertext())).strip()
+        for node in error_nodes
+        if "".join(node.itertext()).strip()
+    ]
+    if errors:
+        raise PubMedResponseError(
+            "PubMed API returned an error: " + "; ".join(errors[:3])
+        )
+
+    records = {}
+    articles = list(root.findall(".//PubmedArticle"))
+    articles.extend(root.findall(".//PubmedBookArticle"))
+    for article in articles:
         pmid_node = article.find("./MedlineCitation/PMID")
+        if pmid_node is None:
+            pmid_node = article.find("./BookDocument/PMID")
         if pmid_node is None:
             continue
         pmid = normalize_pmid(pmid_node.text)
-        if not pmid:
+        if not pmid or pmid not in requested:
             continue
-        grants = []
-        seen = set()
-        for grant in article.findall("./MedlineCitation/Article/GrantList/Grant"):
+        record = records.setdefault(pmid, {"grants": []})
+        seen = {
+            tuple(item.get(key, "") for key in (
+                "agency", "acronym", "country", "grantId"
+            ))
+            for item in record["grants"]
+        }
+        for grant in article.findall(".//GrantList/Grant"):
             item = {
                 "agency": (grant.findtext("Agency") or "").strip(),
                 "acronym": (grant.findtext("Acronym") or "").strip(),
@@ -243,20 +298,197 @@ def parse_pubmed_grants(xml_content, requested_ids):
             }
             signature = tuple(item.values())
             if signature not in seen and any(item.values()):
-                grants.append(item)
+                record["grants"].append(item)
                 seen.add(signature)
-        records[pmid] = {"grants": grants}
     return records
+
+
+def _valid_pubmed_record(record):
+    return isinstance(record, dict) \
+        and isinstance(record.get("grants"), list) \
+        and all(isinstance(grant, dict) for grant in record["grants"])
+
+
+def _load_pubmed_cache_for_collection(path):
+    raw = _load_json(path, {})
+    raw_records = raw.get("records", {}) if isinstance(raw, dict) else {}
+    if not isinstance(raw_records, dict):
+        raw_records = {}
+
+    version = raw.get("version") if isinstance(raw, dict) else None
+    records = {}
+    unverified_empty_count = 0
+    for raw_pmid, record in raw_records.items():
+        pmid = normalize_pmid(raw_pmid)
+        if not pmid or not _valid_pubmed_record(record):
+            continue
+        if version == 1 and not record["grants"]:
+            # Version 1 could not distinguish a returned no-grant article from
+            # a PMID omitted by a partial response, so revalidate empty rows.
+            unverified_empty_count += 1
+            continue
+        if version in (1, CACHE_VERSION):
+            records[pmid] = record
+
+    if version == 1:
+        LOGGER.warning(
+            "Migrating PubMed funding cache to version %d; revalidating "
+            "%d ambiguous empty records",
+            CACHE_VERSION,
+            unverified_empty_count,
+        )
+    elif version != CACHE_VERSION and version is not None:
+        LOGGER.warning(
+            "Ignoring unsupported PubMed funding cache version %r", version
+        )
+
+    cache = {"version": CACHE_VERSION, "records": records}
+    changed = version != CACHE_VERSION or records != raw_records
+    if version == CACHE_VERSION:
+        for key, value in raw.items():
+            if key not in ("version", "records"):
+                cache[key] = value
+    return cache, changed
+
+
+def _pubmed_cache_metadata(cache, publication_ids):
+    records = cache["records"]
+    current = [records[pmid] for pmid in publication_ids if pmid in records]
+    funded = sum(bool(record["grants"]) for record in current)
+    return {
+        "publicationCount": len(publication_ids),
+        "retrievedPublicationCount": len(current),
+        "fundedPublicationCount": funded,
+        "unfundedPublicationCount": len(current) - funded,
+        "grantCount": sum(len(record["grants"]) for record in current),
+    }
+
+
+def _set_pubmed_cache_metadata(cache, publication_ids):
+    metadata = _pubmed_cache_metadata(cache, publication_ids)
+    changed = any(cache.get(key) != value for key, value in metadata.items())
+    cache.update(metadata)
+    return changed
+
+
+def validate_pubmed_cache(cache, publication_ids):
+    """Require a valid returned record for every current Catalog PMID."""
+    if not isinstance(cache, dict) or cache.get("version") != CACHE_VERSION:
+        raise ValueError("The PubMed funding cache has an invalid version")
+    records = cache.get("records")
+    if not isinstance(records, dict):
+        raise ValueError("The PubMed funding cache records are invalid")
+    invalid_keys = [
+        str(pmid) for pmid in records
+        if not isinstance(pmid, str) or normalize_pmid(pmid) != pmid
+    ]
+    if invalid_keys:
+        raise ValueError(
+            "The PubMed funding cache has invalid PMID keys: "
+            + ", ".join(invalid_keys[:10])
+        )
+
+    expected = {
+        pmid for pmid in map(normalize_pmid, publication_ids) if pmid
+    }
+    missing = sorted(expected - set(records), key=int)
+    if missing:
+        raise ValueError(
+            "The PubMed funding cache is missing Catalog PMIDs: "
+            + ", ".join(missing[:10])
+        )
+    unexpected = sorted(set(records) - expected, key=int)
+    if unexpected:
+        raise ValueError(
+            "The PubMed funding cache contains obsolete PMIDs: "
+            + ", ".join(unexpected[:10])
+        )
+    invalid = [
+        pmid for pmid in expected if not _valid_pubmed_record(records[pmid])
+    ]
+    if invalid:
+        raise ValueError(
+            "The PubMed funding cache has invalid records for PMIDs: "
+            + ", ".join(sorted(invalid, key=int)[:10])
+        )
+
+    metadata = _pubmed_cache_metadata(cache, sorted(expected, key=int))
+    mismatched = [
+        key for key, value in metadata.items() if cache.get(key) != value
+    ]
+    if mismatched:
+        raise ValueError(
+            "The PubMed funding cache has inconsistent retrieval metadata: "
+            + ", ".join(mismatched)
+        )
+    return cache
+
+
+def _response_excerpt(response, limit=200):
+    text = getattr(response, "text", "") or ""
+    text = re.sub(r"\s+", " ", str(text)).strip()
+    if len(text) > limit:
+        return text[:limit] + "..."
+    return text
+
+
+def _retry_after_seconds(response):
+    value = getattr(response, "headers", {}).get("Retry-After")
+    if value is None:
+        return None
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        try:
+            retry_at = parsedate_to_datetime(value)
+            if retry_at.tzinfo is None:
+                retry_at = retry_at.replace(tzinfo=datetime.timezone.utc)
+            now = datetime.datetime.now(datetime.timezone.utc)
+            return max(0.0, (retry_at - now).total_seconds())
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+
+def _retryable_pubmed_status(status_code):
+    return status_code in PUBMED_RETRYABLE_STATUS_CODES \
+        or 500 <= status_code <= 599
+
+
+def _pubmed_http_error(response, batch):
+    status = int(getattr(response, "status_code", 0))
+    detail = _response_excerpt(response)
+    message = (
+        f"PubMed funding request received HTTP {status} for batch "
+        f"beginning {batch[0]}"
+    )
+    if detail:
+        message += f": {detail}"
+    return RuntimeError(message)
 
 
 def collect_pubmed_grants(
         data_path, output_path, email=None, batch_size=DEFAULT_BATCH_SIZE,
         request_delay=0.36, max_retries=4, session=None):
+    if batch_size < 1:
+        raise ValueError("PubMed batch_size must be at least 1")
+    if max_retries < 1:
+        raise ValueError("PubMed max_retries must be at least 1")
+    if request_delay < 0:
+        raise ValueError("PubMed request_delay cannot be negative")
+
     publication_ids = read_publication_ids(data_path)
-    cache = _load_json(output_path, {"version": CACHE_VERSION, "records": {}})
-    if cache.get("version") != CACHE_VERSION:
-        cache = {"version": CACHE_VERSION, "records": {}}
-    records = cache.setdefault("records", {})
+    cache, cache_changed = _load_pubmed_cache_for_collection(output_path)
+    records = cache["records"]
+    active_publications = set(publication_ids)
+    obsolete = set(records) - active_publications
+    if obsolete:
+        for pmid in obsolete:
+            records.pop(pmid)
+        cache_changed = True
+        LOGGER.info(
+            "Removed %d obsolete publications from the PubMed funding cache",
+            len(obsolete),
+        )
     missing = [pmid for pmid in publication_ids if pmid not in records]
     session = session or requests.Session()
 
@@ -264,6 +496,7 @@ def collect_pubmed_grants(
         batch = missing[offset:offset + batch_size]
         last_error = None
         for attempt in range(max_retries):
+            response = None
             try:
                 request_data = {
                         "db": "pubmed",
@@ -278,30 +511,79 @@ def collect_pubmed_grants(
                     data=request_data,
                     timeout=90,
                 )
-                response.raise_for_status()
-                records.update(parse_pubmed_grants(response.content, batch))
-                cache["updatedAt"] = datetime.datetime.now(
-                    datetime.timezone.utc
-                ).isoformat()
-                cache["publicationCount"] = len(publication_ids)
-                _atomic_json(output_path, cache)
-                LOGGER.info(
-                    "Collected PubMed funding data: %d/%d",
-                    min(offset + len(batch), len(missing)),
-                    len(missing),
-                )
-                last_error = None
-                break
-            except (requests.RequestException, ElementTree.ParseError) as error:
+            except requests.RequestException as error:
                 last_error = error
-                if attempt + 1 < max_retries:
-                    time.sleep(min(2 ** attempt, 8))
+            else:
+                status = int(getattr(response, "status_code", 0))
+                if not 200 <= status <= 299:
+                    last_error = _pubmed_http_error(response, batch)
+                    if not _retryable_pubmed_status(status):
+                        raise last_error
+                else:
+                    try:
+                        parsed = parse_pubmed_grants(
+                            response.content, batch
+                        )
+                        absent = [pmid for pmid in batch if pmid not in parsed]
+                        if absent:
+                            raise PubMedResponseError(
+                                "PubMed response omitted requested PMIDs: "
+                                + ", ".join(absent[:10])
+                            )
+                    except (ElementTree.ParseError,
+                            PubMedResponseError) as error:
+                        last_error = error
+                    else:
+                        records.update(parsed)
+                        cache_changed = True
+                        _set_pubmed_cache_metadata(cache, publication_ids)
+                        cache["updatedAt"] = datetime.datetime.now(
+                            datetime.timezone.utc
+                        ).isoformat()
+                        _atomic_json(output_path, cache)
+                        cache_changed = False
+                        LOGGER.info(
+                            "Collected PubMed funding data: %d/%d",
+                            min(offset + len(batch), len(missing)),
+                            len(missing),
+                        )
+                        last_error = None
+                        break
+
+            if attempt + 1 < max_retries:
+                retry_after = (
+                    _retry_after_seconds(response)
+                    if response is not None else None
+                )
+                delay = retry_after \
+                    if retry_after is not None else min(2 ** attempt, 8)
+                delay = min(delay, PUBMED_MAX_RETRY_DELAY)
+                LOGGER.warning(
+                    "PubMed funding request attempt %d/%d for batch "
+                    "beginning %s failed (%s); retrying in %.1f seconds",
+                    attempt + 1,
+                    max_retries,
+                    batch[0],
+                    last_error,
+                    delay,
+                )
+                time.sleep(delay)
         if last_error is not None:
             raise RuntimeError(
-                f"PubMed funding request failed for batch beginning {batch[0]}"
+                "PubMed funding request failed after "
+                f"{max_retries} attempts for batch beginning {batch[0]}: "
+                f"{last_error}"
             ) from last_error
-        time.sleep(request_delay)
+        if request_delay and offset + len(batch) < len(missing):
+            time.sleep(request_delay)
 
+    if _set_pubmed_cache_metadata(cache, publication_ids) or cache_changed:
+        cache["updatedAt"] = datetime.datetime.now(
+            datetime.timezone.utc
+        ).isoformat()
+        _atomic_json(output_path, cache)
+
+    validate_pubmed_cache(cache, publication_ids)
     return cache
 
 
@@ -377,18 +659,39 @@ def build_funder_normalization_audit(cache, cleaner):
     source_publications = defaultdict(set)
     canonical_publications = defaultdict(set)
     source_to_canonical = {}
+    excluded_publications = defaultdict(set)
+    excluded_grants = Counter()
+    publication_ids = set()
+    publications_with_grants = set()
+    publications_with_mapped_agency = set()
+    grant_record_count = 0
+    grant_records_without_agency = 0
     for pmid, record in cache.get("records", {}).items():
         pmid = normalize_pmid(pmid)
-        for grant in record.get("grants", []):
+        if not pmid or not _valid_pubmed_record(record):
+            continue
+        publication_ids.add(pmid)
+        grants = record["grants"]
+        if grants:
+            publications_with_grants.add(pmid)
+        for grant in grants:
+            grant_record_count += 1
             source = _clean_agency_text(grant.get("agency"))
             if not source:
+                grant_records_without_agency += 1
+                label = "(missing agency)"
+                excluded_publications[label].add(pmid)
+                excluded_grants[label] += 1
                 continue
             canonical = canonical_agency(source, cleaner)
             if not canonical or canonical == "Unclear":
+                excluded_publications[source].add(pmid)
+                excluded_grants[source] += 1
                 continue
             source_publications[source].add(pmid)
             canonical_publications[canonical].add(pmid)
             source_to_canonical[source] = canonical
+            publications_with_mapped_agency.add(pmid)
 
     grouped_sources = defaultdict(list)
     for source, canonical in source_to_canonical.items():
@@ -422,6 +725,24 @@ def build_funder_normalization_audit(cache, cleaner):
             -entry["publicationCount"], entry["source"].casefold()
         )
     )
+    excluded = [
+        {
+            "source": source,
+            "reason": (
+                "missing agency in PubMed GrantList"
+                if source == "(missing agency)"
+                else "excluded by reviewed normalization rule"
+            ),
+            "publicationCount": len(publications),
+            "grantRecordCount": excluded_grants[source],
+        }
+        for source, publications in excluded_publications.items()
+    ]
+    excluded.sort(
+        key=lambda entry: (
+            -entry["publicationCount"], entry["source"].casefold()
+        )
+    )
     return {
         "version": FUNDER_NORMALIZATION_AUDIT_VERSION,
         "generatedAt": datetime.datetime.now(
@@ -433,8 +754,19 @@ def build_funder_normalization_audit(cache, cleaner):
         ),
         "sourceNameCount": len(source_publications),
         "canonicalNameCount": len(canonical_publications),
+        "publicationCount": len(publication_ids),
+        "publicationsWithGrantListCount": len(publications_with_grants),
+        "publicationsWithoutGrantListCount": (
+            len(publication_ids - publications_with_grants)
+        ),
+        "publicationsWithMappedAgencyCount": len(
+            publications_with_mapped_agency
+        ),
+        "grantRecordCount": grant_record_count,
+        "grantRecordsWithoutAgencyCount": grant_records_without_agency,
         "mergedGroups": merged_groups,
         "sourceNamesWithoutExplicitAlias": unaliased,
+        "excludedAgencySources": excluded,
     }
 
 
@@ -533,47 +865,25 @@ def _json_value(value):
     return value
 
 
-def _broader_class(value):
-    return str(value or "").replace(" ", "-").replace("/", "-").lower()
-
-
-def _parent_class(value):
-    return str(value or "").replace(", ", ",").replace(" ", "-").replace(",", " ").lower()
-
-
-def _trait_class(value):
-    return (str(value or "").replace(" ", "-")
-            .replace(">", "more than").replace("<", "less than")
-            .replace("(", "").replace(")", "").lower())
-
-
 def _encode_bubble_stage(frame):
     frame = frame.copy()
-    parsed_dates = pd.to_datetime(frame["DATE"], errors="coerce", utc=True)
+    parsed_dates = pd.to_datetime(
+        frame.get("DATE", pd.Series(index=frame.index, dtype=object)),
+        errors="coerce",
+        utc=True,
+    )
     date_milliseconds = [
         None if pd.isna(value) else int(value.timestamp() * 1000)
         for value in parsed_dates
     ]
-    rows = []
-    for source, date_milliseconds_value in zip(
-            frame.to_dict(orient="records"), date_milliseconds):
-        row = {key: _json_value(value) for key, value in source.items()}
-        n_value = float(row.get("N") or 0)
-        row["__Nnum"] = n_value
-        row["__dateMS"] = date_milliseconds_value
-        row["__class"] = (
-            _broader_class(row.get("Broader")) + " "
-            + _parent_class(row.get("parentterm"))
-        )
-        row["__trait"] = _trait_class(row.get("DiseaseOrTrait"))
-        row["__DiseaseOrTraitClean"] = str(
-            row.get("DiseaseOrTrait") or ""
-        ).replace(">", "more than").replace("<", "less than")
-        row["__BroaderClass"] = _broader_class(row.get("Broader"))
-        row["__ParentTermClass"] = _parent_class(row.get("parentterm"))
-        rows.append(row)
-
-    columns = sorted({column for row in rows for column in row})
+    columns = [
+        column for column in BUBBLE_PAYLOAD_COLUMNS
+        if column in frame.columns
+    ]
+    rows = [
+        {column: _json_value(source.get(column)) for column in columns}
+        for source in frame.to_dict(orient="records")
+    ]
     dictionaries = {}
     codes = {}
     for column in columns:
@@ -590,8 +900,11 @@ def _encode_bubble_stage(frame):
         dictionaries[column] = values
         codes[column] = column_codes
 
-    dates = [row["__dateMS"] for row in rows if row["__dateMS"] is not None]
-    numbers = [row["__Nnum"] for row in rows]
+    dates = [value for value in date_milliseconds if value is not None]
+    numbers = pd.to_numeric(
+        frame.get("N", pd.Series(index=frame.index, dtype=float)),
+        errors="coerce",
+    ).fillna(0).astype(float).tolist()
     return {
         "columns": columns,
         "dicts": dictionaries,
@@ -607,7 +920,7 @@ def _encode_bubble_stage(frame):
             "maxDate": datetime.datetime.fromtimestamp(
                 max(dates) / 1000, datetime.timezone.utc
             ).strftime("%Y-%m-%d") if dates else None,
-            "includePrecomputed": True,
+            "includePrecomputed": False,
         },
     }
 
@@ -1928,18 +2241,43 @@ def validate_funder_artifacts(data_path):
     audit = _load_json(funder_normalization_audit_path(data_path), None)
     if not isinstance(audit, dict) \
             or audit.get("version") != FUNDER_NORMALIZATION_AUDIT_VERSION \
+            or not isinstance(audit.get("generatedAt"), str) \
+            or not audit["generatedAt"].strip() \
             or not isinstance(audit.get("mergedGroups"), list) \
             or not isinstance(
                 audit.get("sourceNamesWithoutExplicitAlias"), list
+            ) \
+            or not isinstance(audit.get("excludedAgencySources"), list) \
+            or any(
+                not isinstance(audit.get(key), int)
+                for key in (
+                    "publicationCount",
+                    "publicationsWithGrantListCount",
+                    "publicationsWithoutGrantListCount",
+                    "publicationsWithMappedAgencyCount",
+                    "grantRecordCount",
+                    "grantRecordsWithoutAgencyCount",
+                )
             ):
         raise ValueError("The funder normalization audit is invalid")
 
     cache = _load_json(
         os.path.join(data_path, "funders", "pubmed_grants.json"), None
     )
-    if not isinstance(cache, dict) or cache.get("version") != CACHE_VERSION \
-            or not isinstance(cache.get("records"), dict):
-        raise ValueError("The PubMed funding cache is invalid")
+    publication_ids = read_publication_ids(data_path)
+    validate_pubmed_cache(cache, publication_ids)
+    expected_audit = build_funder_normalization_audit(cache, cleaner)
+    comparable_audit = {
+        key: value for key, value in audit.items() if key != "generatedAt"
+    }
+    comparable_expected = {
+        key: value for key, value in expected_audit.items()
+        if key != "generatedAt"
+    }
+    if comparable_audit != comparable_expected:
+        raise ValueError(
+            "The funder normalization audit differs from the PubMed cache"
+        )
 
     index = _load_json(
         os.path.join(data_path, "funders", "index.json"), None
@@ -2032,6 +2370,7 @@ def main():
         cache = _load_json(cache_path, None)
         if not cache:
             raise RuntimeError("No cached PubMed funding data are available")
+        validate_pubmed_cache(cache, read_publication_ids(data_path))
     else:
         cache = collect_pubmed_grants(
             data_path, cache_path, email=args.email
