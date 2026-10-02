@@ -439,7 +439,14 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
                 d3.event.type !== "dblclick" &&
                 !d3.event.button;
         })
-        .on("zoom", zoomed);
+        .on("zoom", zoomed)
+        .on("end.dashboardState", function() {
+            // D3 consumes drag events before they reach document listeners.
+            // Programmatic transforms during restore have no source event.
+            if (d3.event.sourceEvent && window.gwasDashboardState) {
+                window.gwasDashboardState.changed();
+            }
+        });
 
     window.wmZoomIn = function() {
         svg.transition().duration(200).call(zoom.scaleBy, 1.5);

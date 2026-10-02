@@ -3252,6 +3252,9 @@ button, .btn {
     -moz-align-items: center;
     align-items: center;
     gap: 5px; }
+  .funder-toolbar .dashboard-share-status:empty { display: none; }
+  .funder-toolbar .dashboard-share-status { display: block; font-size: 12px; margin-top: 5px; }
+  .funder-toolbar #dashboard-share-fallback input { width: 100%; margin-top: 4px; }
   .funder-toolbar__action {
     min-height: 34px;
     padding: 5px 9px;

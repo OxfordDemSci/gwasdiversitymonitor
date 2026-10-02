@@ -31,6 +31,9 @@ at the University of Oxford.
 Explore these questions interactively or reproduce them from downloadable
 selections. The Monitor also provides:
 
+- [Shareable dashboard views](docs/DASHBOARD_VIEWS.md) that retain selected
+  filters and chart settings across refresh, bookmarks, and browser navigation.
+
 - Daily ingestion of the GWAS Catalog export, with validated and
   atomic publication of each generated release.
 - A reproducible static figure, source-data table, audit metadata, and a

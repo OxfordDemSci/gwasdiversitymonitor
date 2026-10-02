@@ -4,6 +4,7 @@
     <script defer src="{{ versioned_static('js/imports/d3.v4.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/imports/d3-tip.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/imports/select2.min.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-state.js') }}"></script>
     <script>
         window.gwasStaticAssets = {
             d3plusText: {{ versioned_static('js/imports/d3plus-text.full.min.js')|tojson }}
@@ -141,6 +142,7 @@
 				$('#funder-filter').prop('disabled', false);
 				$('#dataset-filter').prop('disabled', false);
 				updateSummaryFromFunder(baseDashboardData.summary);
+				if (window.gwasDashboardState) window.gwasDashboardState.ready();
 			}
 		}
 
@@ -216,6 +218,7 @@
 			setDescription();
 			initFunderFilter();
 			initDatasetFilter();
+			initDashboardState();
 
 			loadPlotJson('tsPlot', (error, data) => {
 				if (error) return;
@@ -263,6 +266,11 @@
             let mapNode = d3.select('#worldMap .svg-container').node();
             let mapZoom = mapNode ? d3.zoomTransform(mapNode) : d3.zoomIdentity;
             return {
+                version: 1,
+                metric: document.getElementById('cb1').checked ? 'studies' : 'participants',
+                stage: document.getElementById('cb2').checked ? 'replication' : 'discovery',
+                funders: selectedFilterValues('#funder-filter'),
+                cohorts: selectedFilterValues('#dataset-filter'),
                 heatMap: { year: $('.heat-map-change-year span').text() },
                 worldMap: {
                     year: $('.world-map-change-year span').text(),
@@ -270,9 +278,98 @@
                 },
                 doughnut: {
                     year: $('.doughnut-graph-change-year span').text(),
-                    parentTerm: $('#doughnutGraph .filter select[name="parentTerms"]').val()
+                    parentTerm: $('#doughnutGraph .filter select[name="parentTerms"]').val(),
+                    associations: document.getElementById('cbAssociation').checked
+                },
+                timeSeries: {
+                    ancestry: $('#ancestries-filter').val(),
+                    notRecorded: document.getElementById('record-filter').checked
+                },
+                bubble: {
+                    parentTerm: $('#bubbleGraph select[name="parentTerms"]').val(),
+                    traits: $('#bubbleGraph select[name="trait"] option:selected').map(function() {
+                        return this.value && this.value !== 'empty'
+                            ? {id: this.value, text: this.textContent} : null;
+                    }).get(),
+                    ancestries: $('#bubbleGraph .ancestry-filter .option.active').map(function() {
+                        return $(this).attr('dataFilter');
+                    }).get().filter(function(value) { return value !== 'all'; })
                 }
             };
+        }
+
+        function setDashboardSelect(selector, value, fallback) {
+            let select = $(selector);
+            let exists = select.find('option').toArray().some(function(option) {
+                return option.value === value;
+            });
+            select.val(exists ? value : fallback);
+        }
+
+        function setDashboardFacet(selector, ids, entries) {
+            let select = $(selector);
+            ids.forEach(function(id) {
+                let entry = (entries || []).find(function(item) {
+                    return item.id === id || item.slug === id;
+                });
+                let option = select.find('option').toArray().find(function(item) {
+                    return item.value === id;
+                });
+                let label = entry ? (entry.name || entry.text || id) : (option ? option.textContent : id);
+                if (!option) select.append(new Option(label, id, true, true));
+                // Select2 caches option labels, so replace renamed placeholders
+                // instead of changing text beneath an already cached option.
+                else if (option.textContent !== label) $(option).replaceWith(new Option(label, id, true, true));
+            });
+            select.val(ids).trigger('change.select2');
+            syncFilterInputState(select);
+        }
+
+        function restoreDashboardState(state) {
+            document.getElementById('cb1').checked = state.metric === 'studies';
+            document.getElementById('cb2').checked = state.stage === 'replication';
+            document.getElementById('cbAssociation').checked = state.doughnut.associations;
+            document.getElementById('record-filter').checked = state.timeSeries.notRecorded;
+            setDashboardFacet('#funder-filter', state.funders);
+            setDashboardFacet('#dataset-filter', state.cohorts);
+            setDashboardSelect('#ancestries-filter', state.timeSeries.ancestry, 'all-ancestries');
+            setDashboardSelect('#doughnutGraph select[name="parentTerms"]', state.doughnut.parentTerm, 'all');
+            setDashboardSelect('#bubbleGraph select[name="parentTerms"]', state.bubble.parentTerm, 'all');
+            state.doughnut.parentTerm = $('#doughnutGraph select[name="parentTerms"]').val();
+            let traits = $('#bubbleGraph select[name="trait"]');
+            traits.empty();
+            state.bubble.traits.forEach(function(trait) {
+                traits.append(new Option(trait.text, trait.id, true, true));
+            });
+            traits.trigger('change.select2');
+            $('#bubbleGraph .ancestry-filter .option').each(function() {
+                $(this).toggleClass('active', state.bubble.ancestries.indexOf($(this).attr('dataFilter')) !== -1);
+            });
+            return applyDashboardFilters(state);
+        }
+
+        function initDashboardState() {
+            window.gwasDashboardState = GwasDashboardState.create({
+                capture: captureDashboardState,
+                restore: restoreDashboardState,
+                announce: function(message) { $('#dashboard-share-status').text(message); },
+                showLink: function(href) {
+                    $('#dashboard-share-fallback').prop('hidden', false);
+                    $('#dashboard-share-url').val(href).trigger('focus').trigger('select');
+                    $('#dashboard-share-status').text('Copy the selected link.');
+                }
+            });
+            $('#dashboard-copy-link').on('click', function() { window.gwasDashboardState.copy(); });
+            $(document).on('change.dashboardState', '.gwas-switch, .gwas-filter', function() {
+                window.gwasDashboardState.changed();
+            }).on('select2:select.dashboardState select2:unselect.dashboardState select2:clear.dashboardState',
+                '#funder-filter, #dataset-filter', function() { window.gwasDashboardState.changed(); }
+            ).on('click.dashboardState',
+                '.heat-map-change-year button, .world-map-change-year button, .doughnut-graph-change-year button, #bubbleGraph .ancestry-filter .option',
+                function() { window.gwasDashboardState.changed(); }
+            ).on('click.dashboardState wheel.dashboardState mouseup.dashboardState touchend.dashboardState',
+                '#worldMap', function() { window.gwasDashboardState.changed(250); }
+            );
         }
 
         function selectedFilterValues(selector) {
@@ -563,12 +660,12 @@
             });
         }
 
-        function redrawDashboardData(payload) {
+        function redrawDashboardData(payload, preservedState) {
             let switches = {
                 metric: document.getElementById('cb1').checked,
                 stage: document.getElementById('cb2').checked
             };
-            let state = captureDashboardState();
+            let state = preservedState || captureDashboardState();
 
 			if (!payload.bubbleGraph && payload.selection &&
 					payload.selection.accessions) {
@@ -601,16 +698,20 @@
             drawTimeSeries(timeseriesData, '#timeSeries', switches.metric, switches.stage);
             drawHeatMap(heatData, switches.metric, switches.stage, ancestriesData, state.heatMap);
             drawDoughnutGraph('#doughnutGraph', doughnutData, switches.metric, switches.stage, state.doughnut);
+            if (preservedState) document.getElementById('cbAssociation').onchange();
             drawBubbleGraph('#bubbleGraph', bubbleData, switches.stage, true);
             updateSummaryFromFunder(payload.summary, switches.metric, switches.stage);
             filtersTitle(switches.metric, switches.stage);
             setDescription();
         }
 
-        function renderSelectedDashboard(payload) {
+        function renderSelectedDashboard(payload, preservedState) {
             activeSelectionData = payload.selection;
             try {
-                redrawDashboardData(payload);
+                let selection = payload.selection || {};
+                setDashboardFacet('#funder-filter', selectedFilterValues('#funder-filter'), selection.funders);
+                setDashboardFacet('#dataset-filter', selectedFilterValues('#dataset-filter'), selection.cohorts);
+                redrawDashboardData(payload, preservedState);
                 updateSelectionStatus(payload.selection);
                 return true;
             } catch (error) {
@@ -620,8 +721,8 @@
             }
         }
 
-        function applyDashboardFilters() {
-            if (!baseDashboardReady) return;
+        function applyDashboardFilters(preservedState) {
+            if (!baseDashboardReady) return Promise.resolve(false);
 			let revision = ++dashboardFilterRevision;
 			let funderSlugs = selectedFilterValues('#funder-filter');
 			let cohortIds = selectedFilterValues('#dataset-filter');
@@ -634,8 +735,8 @@
 				setFilterLoading(false);
 				activeSelectionData = null;
 				updateSelectionStatus(null);
-				redrawDashboardData(baseDashboardData);
-				return;
+				redrawDashboardData(baseDashboardData, preservedState);
+				return Promise.resolve(true);
 			}
 
 			let labels = selectedCohorts.concat(selectedFunders).map(
@@ -647,18 +748,20 @@
 			let cachedPayload = cachedDashboardFilter(selectionQuery);
 			if (cachedPayload) {
 				dashboardFilterRequest = null;
-				renderSelectedDashboard(cachedPayload);
+				let rendered = renderSelectedDashboard(cachedPayload, preservedState);
 				setFilterLoading(false);
-				return;
+				return Promise.resolve(rendered);
 			}
 			let request = requestDashboardFilter(selectionQuery);
             dashboardFilterRequest = request;
+            return new Promise(function(resolve) {
             request
                 .done(function(payload) {
-                    if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
-					renderSelectedDashboard(payload);
+                    if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) { resolve(false); return; }
+					resolve(renderSelectedDashboard(payload, preservedState));
                 })
                 .fail(function(xhr, status) {
+                    resolve(false);
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
                     if (status !== 'abort') {
                         let message = xhr.responseJSON && xhr.responseJSON.error;
@@ -671,7 +774,9 @@
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
                     setFilterLoading(false);
                     dashboardFilterRequest = null;
+                    if (!preservedState && window.gwasDashboardState) window.gwasDashboardState.settled();
                 });
+            });
         }
 
         function setFilterLoading(isLoading) {

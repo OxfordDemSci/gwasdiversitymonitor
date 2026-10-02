@@ -333,6 +333,9 @@
 }
 
 .funder-toolbar {
+  .dashboard-share-status:empty { display: none; }
+  .dashboard-share-status { display: block; font-size: 12px; margin-top: 5px; }
+  #dashboard-share-fallback input { width: 100%; margin-top: 4px; }
   position: relative;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
