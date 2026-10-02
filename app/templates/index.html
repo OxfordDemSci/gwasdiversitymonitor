@@ -557,6 +557,8 @@
 			updateSelectionActions(selectedFunders, selectedCohorts);
 
 			if (!funderSlugs.length && !cohortIds.length) {
+				dashboardFilterRequest = null;
+				setFilterLoading(false);
 				activeSelectionData = null;
 				updateSelectionStatus(null);
 				redrawDashboardData(baseDashboardData);
@@ -567,12 +569,13 @@
 				function(entry) { return entry.text; }
 			);
 			$('#funder-status').text('Loading ' + labels.join(' / ') + '...');
-			$('.funder-toolbar').addClass('is-loading');
+			setFilterLoading(true);
 			let selectionQuery = filterSelectionQuery();
 			let cachedPayload = cachedDashboardFilter(selectionQuery);
 			if (cachedPayload) {
+				dashboardFilterRequest = null;
 				renderSelectedDashboard(cachedPayload);
-				$('.funder-toolbar').removeClass('is-loading');
+				setFilterLoading(false);
 				return;
 			}
 			let request = requestDashboardFilter(selectionQuery);
@@ -593,9 +596,15 @@
                 })
                 .always(function() {
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
-                    $('.funder-toolbar').removeClass('is-loading');
+                    setFilterLoading(false);
                     dashboardFilterRequest = null;
                 });
+        }
+
+        function setFilterLoading(isLoading) {
+            $('.funder-toolbar')
+                .toggleClass('is-loading', isLoading)
+                .attr('aria-busy', isLoading ? 'true' : 'false');
         }
 
         function syncFilterInputState(select) {
@@ -606,11 +615,18 @@
             );
         }
 
+        function labelFilterInput(select, labelId, helpId) {
+            select.next('.select2-container')
+                .find('.select2-selection, .select2-search__field')
+                .attr('aria-labelledby', labelId)
+                .attr('aria-describedby', helpId);
+        }
+
         function initFunderFilter() {
             let select = $('#funder-filter');
 			select.select2({
 				width: '100%',
-				placeholder: 'All Funders',
+				placeholder: 'Search or select funders',
 				allowClear: true,
 				closeOnSelect: true,
 				dropdownAutoWidth: true,
@@ -652,6 +668,9 @@
 				}
 			);
 			syncFilterInputState(select);
+			labelFilterInput(
+				select, 'funder-filter-label', 'funder-filter-help'
+			);
 			select.on('select2:open', function() {
 				$('#dataset-filter').select2('close');
 				$('.select2-container--open .select2-dropdown')
@@ -663,7 +682,7 @@
             let select = $('#dataset-filter');
 			select.select2({
 				width: '100%',
-				placeholder: 'All Cohorts',
+				placeholder: 'Search or select cohorts',
 				allowClear: true,
 				closeOnSelect: true,
 				dropdownAutoWidth: true,
@@ -705,6 +724,9 @@
 				}
 			);
 			syncFilterInputState(select);
+			labelFilterInput(
+				select, 'dataset-filter-label', 'dataset-filter-help'
+			);
 			select.on('select2:open', function() {
 				$('#funder-filter').select2('close');
 				$('.select2-container--open .select2-dropdown')

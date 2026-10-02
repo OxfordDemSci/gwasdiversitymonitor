@@ -1,26 +1,61 @@
-<section class="funder-toolbar" aria-label="Dashboard filters">
-    <div class="funder-toolbar__field">
-        <label for="funder-filter">Funder</label>
-        <select id="funder-filter" aria-label="Filter dashboard by funder"
-                multiple disabled></select>
+<section class="funder-toolbar" aria-labelledby="dashboard-filter-title"
+         aria-describedby="dashboard-filter-description" aria-busy="false">
+    <header class="funder-toolbar__intro">
+        <span class="funder-toolbar__eyebrow">Dashboard filters</span>
+        <h2 id="dashboard-filter-title">Explore GWAS by funder and cohort</h2>
+        <p id="dashboard-filter-description">
+            Select one or more funding organisations or research cohorts.
+            Every chart below updates together.
+        </p>
+    </header>
+
+    <div class="funder-toolbar__controls">
+        <div class="funder-toolbar__field">
+            <div class="funder-toolbar__field-heading">
+                <label id="funder-filter-label" for="funder-filter">
+                    Funder
+                </label>
+                <span id="funder-filter-help">
+                    Search funding organisations
+                </span>
+            </div>
+            <select id="funder-filter" aria-labelledby="funder-filter-label"
+                    aria-describedby="funder-filter-help" multiple
+                    disabled></select>
+        </div>
+
+        <div class="funder-toolbar__field">
+            <div class="funder-toolbar__field-heading">
+                <label id="dataset-filter-label" for="dataset-filter">
+                    Cohort
+                </label>
+                <span id="dataset-filter-help">
+                    Search study cohorts and datasets
+                </span>
+            </div>
+            <select id="dataset-filter" aria-labelledby="dataset-filter-label"
+                    aria-describedby="dataset-filter-help" multiple
+                    disabled></select>
+        </div>
     </div>
-    <div class="funder-toolbar__field">
-        <label for="dataset-filter">Cohort</label>
-        <select id="dataset-filter" aria-label="Filter dashboard by cohort"
-                multiple disabled></select>
-    </div>
-    <span id="funder-status" class="funder-toolbar__status" aria-live="polite">
-        All published GWAS
-    </span>
-    <div class="funder-toolbar__actions">
-        <a id="funder-data-download" class="funder-toolbar__action is-disabled"
-           aria-disabled="true" title="Download selected data">
-            <i class="icon-download-data" aria-hidden="true"></i>
-            <span>Data</span>
-        </a>
-        <a id="funder-report-link" class="funder-toolbar__action is-disabled"
-           aria-disabled="true" title="Open selection report">
-            <span>Report</span>
-        </a>
+
+    <div class="funder-toolbar__footer">
+        <span id="funder-status" class="funder-toolbar__status"
+              role="status" aria-live="polite">
+            All published GWAS
+        </span>
+        <div class="funder-toolbar__actions" aria-label="Selection actions">
+            <a id="funder-data-download"
+               class="funder-toolbar__action funder-toolbar__action--primary is-disabled"
+               aria-disabled="true" title="Download selected data">
+                <i class="icon-download-data" aria-hidden="true"></i>
+                <span>Download data</span>
+            </a>
+            <a id="funder-report-link"
+               class="funder-toolbar__action is-disabled"
+               aria-disabled="true" title="Open selection report">
+                <span>View report</span>
+            </a>
+        </div>
     </div>
 </section>
