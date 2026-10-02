@@ -59,6 +59,18 @@ class DashboardFilterToolbarTests(unittest.TestCase):
         self.assertIn('<span>Download data</span>', html)
         self.assertIn('<span>View report</span>', html)
 
+    def test_filter_controls_default_to_all_funders_and_all_cohorts(self):
+        html = self.render_dashboard()
+
+        self.assertIn("placeholder: 'All Funders'", html)
+        self.assertIn("placeholder: 'All Cohorts'", html)
+
+        # "All" is the label for an empty filter, not a synthetic selection.
+        for filter_id in ('funder-filter', 'dataset-filter'):
+            select_start = html.index(f'<select id="{filter_id}"')
+            select_end = html.index('</select>', select_start)
+            self.assertNotIn('<option', html[select_start:select_end])
+
 
 if __name__ == '__main__':
     unittest.main()
