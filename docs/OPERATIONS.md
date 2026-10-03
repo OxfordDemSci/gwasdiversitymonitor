@@ -107,10 +107,13 @@ docker compose restart flask
 This avoids refetching PubMed records while rebuilding validated funder
 artifacts.
 
-Do not use `--skip-fetch` for the first generation after upgrading a legacy
-version 1 PubMed cache. Run the normal `generate_data.py` workflow once so it
-can revalidate ambiguous empty records and write the complete version 2 cache;
+Do not use `--skip-fetch` for the first generation after upgrading an older
+PubMed cache. Run the normal `generate_data.py` workflow once so it can migrate
+version 2's confirmed records, revalidate version 1's ambiguous empty records,
+and write the version 3 cache with explicit unavailable-record accounting;
 subsequent funder-only rebuilds can safely use `--skip-fetch`.
+Normal collection retries explicitly unavailable PMIDs; an offline rebuild
+does not refresh that upstream evidence. See [funding metadata safeguards](DATA_PIPELINE.md#pubmed-funding-metadata).
 
 ## Health and integrity checks
 

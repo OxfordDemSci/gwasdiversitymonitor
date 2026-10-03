@@ -198,9 +198,12 @@ class PubMedFundingTests(unittest.TestCase):
             b"</PubmedArticle></PubmedArticleSet>"
         )
         session = mock.Mock()
-        session.post.side_effect = [
-            self._response(200, partial), self._response(200, partial)
-        ]
+        def respond(url, *, data, **kwargs):
+            if data['retmode'] == 'json':
+                return self._response(200, b'{"header":{"type":"esummary"},"result":{"uids":[]}}')
+            return self._response(200, partial if data['id'] == '123,456'
+                                  else b'<PubmedArticleSet />')
+        session.post.side_effect = respond
         with tempfile.TemporaryDirectory() as directory:
             cache_path = self._write_catalog(directory, ["123", "456"])
             with mock.patch("funder_pipeline.time.sleep") as sleep, \
@@ -214,7 +217,7 @@ class PubMedFundingTests(unittest.TestCase):
 
             self.assertFalse(cache_path.exists())
 
-        self.assertEqual(session.post.call_count, 2)
+        self.assertEqual(session.post.call_count, 5)
         sleep.assert_called_once_with(1)
 
     def test_collector_revalidates_ambiguous_empty_legacy_records(self):
@@ -1693,6 +1696,8 @@ class FunderArtifactTests(unittest.TestCase):
             "records": {"123": {"grants": []}},
             "publicationCount": 1,
             "retrievedPublicationCount": 1,
+            "unavailablePublicationCount": 0,
+            "unavailablePublicationIds": [],
             "fundedPublicationCount": 0,
             "unfundedPublicationCount": 1,
             "grantCount": 0,
@@ -1820,6 +1825,31 @@ class FunderArtifactTests(unittest.TestCase):
             with self.assertRaisesRegex(
                     ValueError, "missing Catalog PMIDs: 123"):
                 validate_funder_artifacts(str(root))
+
+    def test_release_accepts_audited_unavailability_without_dropping_study_rows(self):
+        from funder_pipeline import make_unavailable_pubmed_record, _set_pubmed_cache_metadata
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self._write_release(root)
+            pd.DataFrame({'PUBMEDID': ['123', '24513584']}).to_csv(
+                root / 'catalog/raw/Cat_Stud.tsv', sep='\t', index=False,
+            )
+            cache_path = root / 'funders/pubmed_grants.json'
+            cache = json.loads(cache_path.read_text())
+            cache['records']['24513584'] = make_unavailable_pubmed_record()
+            _set_pubmed_cache_metadata(cache, ['123', '24513584'])
+            cache_path.write_text(json.dumps(cache))
+            audit = build_funder_normalization_audit(cache, {'Alias': 'Canonical'})
+            (root / 'funders/normalization-audit.json').write_text(json.dumps(audit))
+
+            self.assertEqual(validate_funder_artifacts(directory), funder_artifact_files(directory))
+            rows = pd.DataFrame({'PUBMEDID': ['123', '24513584'], 'N': [100, 250]})
+            result = attach_funding_metadata(rows, funding_names_by_publication(cache, {}))
+            pd.testing.assert_frame_equal(result[['PUBMEDID', 'N']], rows)
+            self.assertEqual(result.loc[1, 'FUNDER'], '')
+            self.assertEqual(audit['unavailablePublicationIds'], ['24513584'])
+            self.assertEqual(audit['publicationsWithoutGrantListCount'], 1)
 
     def test_release_validator_rejects_stale_normalization_audit(self):
         with tempfile.TemporaryDirectory() as directory:

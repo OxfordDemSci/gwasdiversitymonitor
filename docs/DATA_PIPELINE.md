@@ -73,16 +73,39 @@ API and caches them in `data/funders/pubmed_grants.json`. The version-controlled
 `data/funders/funder_cleaner.json` map resolves known aliases to canonical
 funder names.
 
-The collector only publishes a cache batch when PubMed returns every requested
-PMID. This distinguishes an article that was returned without a GrantList from
-an article omitted by an incomplete response. Rate-limit and transient server
+An omitted batch PMID is retried individually rather than treating the entire
+batch as unfunded. An individual empty EFetch response is accepted as upstream
+unavailability only when an independent ESummary response names the exact
+requested UID and explicitly reports that its document summary is unavailable.
+A similar title or a different PMID is not sufficient evidence of an alias.
+Rate-limit and transient server
 responses are retried with bounded backoff (respecting `Retry-After`), while
 permanent client errors fail immediately with the HTTP status and affected
-batch. Cache validation requires one valid returned record for every PMID in
-the current Catalog snapshot.
+batch. Normal complete batches make no additional requests.
+
+Cache version 3 retains every original Catalog PMID. Successful records retain
+the existing `grants` list; a verified unavailable record instead carries
+`retrievalStatus: "unavailable"`, `reason: "pubmed_record_unavailable"`, an empty
+`grants` list, and a timezone-aware `checkedAt` timestamp. This is **unknown
+funding**, not confirmed absence of grants. Its studies remain in the dashboard;
+no funder is invented. Such records are retried on each subsequent collection.
+Version 2's confirmed empty records remain valid during migration; version 1's
+ambiguous empty records still require retrieval.
+
+Cache metadata and the normalization audit separately report unavailable counts
+and `unavailablePublicationIds`. Unavailable records are excluded from both
+`retrievedPublicationCount` and confirmed no-grant counts. Publication requires
+at least one retrieved record and no more than `max(1, publicationCount // 100)`
+unavailable records, preventing widespread API failures from becoming a release.
+All other incomplete, ambiguous, or erroneous responses still stop generation
+and leave the last published dataset intact.
+PubMed collection failures retain completed cache batches and do not consume
+the validated raw Catalog snapshot's generation-failure retry allowance; a
+funding API failure is not evidence that the Catalog download is corrupt.
 
 `data/funders/normalization-audit.json` reports retrieval and mapping coverage,
-including publications with and without GrantLists, grant records without an
+including retrieved publications with and without GrantLists, explicitly
+unavailable publications, grant records without an
 agency, reviewed exclusions, alias merges, and source names that do not yet
 have an explicit alias. Unaliased non-empty agencies remain available under
 their cleaned source name rather than being silently discarded.

@@ -3242,6 +3242,19 @@ def _verified_previous_runtime_fingerprints(repository_path, data_path):
 def _verified_previous_funder_fingerprints(data_path):
     """Return trusted funder files when the live release already has them."""
     try:
+        # A new collector/audit schema must not invalidate a previously
+        # published, byte-verified runtime snapshot. Enumerate only the safe
+        # filenames named by its runtime index, never arbitrary manifest paths.
+        relative_paths = funder_pipeline.funder_artifact_files(data_path)
+        state = _read_json(os.path.join(data_path, GENERATION_STATE_FILE))
+        artifacts = state.get('artifact_fingerprints', {})
+        fingerprints = {relative_path: artifacts[relative_path]
+                        for relative_path in relative_paths}
+        if _fingerprints_match(data_path, fingerprints):
+            return fingerprints
+    except (AttributeError, KeyError, OSError, TypeError, ValueError):
+        pass
+    try:
         relative_paths = funder_pipeline.validate_funder_artifacts(data_path)
         return _fingerprint_files(data_path, relative_paths)
     except Exception:
@@ -3568,8 +3581,16 @@ def _generate_locked(repository_path, data_path, ebi_download):
             raise RuntimeError(
                 'Raw inputs changed while the staged release was generated'
             )
-    except Exception:
-        _record_workspace_generation_failure(paths)
+    except Exception as error:
+        if isinstance(error, funder_pipeline.PubMedCollectionError):
+            diversity_logger.warning(
+                'PubMed collection failed; retaining the validated raw '
+                'Catalog snapshot and completed PubMed cache for retry. '
+                'This upstream lookup failure does not count against the '
+                'raw-generation failure limit.'
+            )
+        else:
+            _record_workspace_generation_failure(paths)
         raise
     completion_state = _build_completion_state(
         repository_path, validation, input_bundle_fingerprint,

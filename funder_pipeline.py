@@ -27,7 +27,8 @@ LOGGER = logging.getLogger("diversity_logger")
 
 
 NCBI_EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
-CACHE_VERSION = 2
+NCBI_ESUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+CACHE_VERSION = 3
 ARTIFACT_VERSION = 2
 REPORT_SCHEMA_VERSION = 3
 DEFAULT_MIN_STUDIES = 50
@@ -55,7 +56,7 @@ FUNDER_DOWNLOAD_MEMBERS = {
 FUNDER_DIRECTORY = "funders"
 FUNDER_CLEANER_FILE = "funder_cleaner.json"
 FUNDER_NORMALIZATION_AUDIT_FILE = "normalization-audit.json"
-FUNDER_NORMALIZATION_AUDIT_VERSION = 2
+FUNDER_NORMALIZATION_AUDIT_VERSION = 3
 NIH_COMPONENT_ALIASES = (
     ("NHLBI", "NHLBI NIH HHS"),
     ("NHGRI", "NHGRI NIH HHS"),
@@ -265,6 +266,10 @@ class PubMedResponseError(ValueError):
     """Raised when PubMed returns parseable but unusable response data."""
 
 
+class PubMedCollectionError(RuntimeError):
+    """Funding lookup failed; this is not evidence of a bad Catalog snapshot."""
+
+
 def parse_pubmed_grants(xml_content, requested_ids):
     """Parse records actually returned by PubMed.
 
@@ -357,10 +362,43 @@ def parse_pubmed_grants(xml_content, requested_ids):
     return records
 
 
+def is_pubmed_record_unavailable(record):
+    """Identify explicit upstream absence, never infer it from empty grants."""
+    return isinstance(record, dict) and record.get("retrievalStatus") == "unavailable"
+
+
+def make_unavailable_pubmed_record(checked_at=None):
+    """Record separately verified upstream absence under the Catalog's PMID."""
+    record = {
+        "grants": [], "retrievalStatus": "unavailable",
+        "reason": "pubmed_record_unavailable",
+        "checkedAt": checked_at if checked_at is not None else
+        datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }
+    if not _valid_pubmed_record(record):
+        raise ValueError("Unavailable PubMed evidence needs a timezone-aware checkedAt timestamp")
+    return record
+
+
+def pubmed_unavailable_limit(publication_count):
+    """A small isolated missing record must not hide a service-wide outage."""
+    return max(1, publication_count // 100)
+
+
 def _valid_pubmed_record(record):
-    return isinstance(record, dict) \
-        and isinstance(record.get("grants"), list) \
-        and all(
+    if not isinstance(record, dict) or not isinstance(record.get("grants"), list):
+        return False
+    if "retrievalStatus" in record:
+        if not is_pubmed_record_unavailable(record) or record["grants"] \
+                or record.get("reason") != "pubmed_record_unavailable" \
+                or not isinstance(record.get("checkedAt"), str):
+            return False
+        try:
+            checked_at = datetime.datetime.fromisoformat(record["checkedAt"].replace("Z", "+00:00"))
+            return checked_at.utcoffset() is not None
+        except (ValueError, OverflowError):
+            return False
+    return all(
             isinstance(grant, dict)
             and all(isinstance(grant.get(key, ""), str) for key in PUBMED_GRANT_FIELDS)
             and any(grant.get(key, "").strip() for key in PUBMED_GRANT_FIELDS)
@@ -394,7 +432,7 @@ def _load_pubmed_cache_for_collection(path):
         raise ValueError("The PubMed funding cache records are invalid; the existing file was not replaced")
     raw_records = raw["records"]
     version = raw.get("version")
-    if type(version) is not int or version not in (1, CACHE_VERSION):
+    if type(version) is not int or version not in (1, 2, CACHE_VERSION):
         raise ValueError(f"Unsupported PubMed funding cache version {version!r}; the existing file was not replaced")
     records = {}
     unverified_empty_count = 0
@@ -407,7 +445,8 @@ def _load_pubmed_cache_for_collection(path):
         if pmid in seen_pmids:
             raise ValueError(f"The PubMed funding cache contains colliding PMID aliases: {pmid}")
         seen_pmids.add(pmid)
-        if not _valid_pubmed_record(record):
+        if not _valid_pubmed_record(record) \
+                or (version < 3 and "retrievalStatus" in record):
             invalid_records.append(pmid)
             continue
         if version == 1 and not record["grants"]:
@@ -415,8 +454,7 @@ def _load_pubmed_cache_for_collection(path):
             # a PMID omitted by a partial response, so revalidate empty rows.
             unverified_empty_count += 1
             continue
-        if version in (1, CACHE_VERSION):
-            records[pmid] = record
+        records[pmid] = record
 
     if version == 1:
         LOGGER.warning(
@@ -433,7 +471,7 @@ def _load_pubmed_cache_for_collection(path):
 
     cache = {"version": CACHE_VERSION, "records": records}
     changed = version != CACHE_VERSION or records != raw_records
-    if version == CACHE_VERSION:
+    if version in (2, CACHE_VERSION):
         for key, value in raw.items():
             if key not in ("version", "records"):
                 cache[key] = value
@@ -442,11 +480,18 @@ def _load_pubmed_cache_for_collection(path):
 
 def _pubmed_cache_metadata(cache, publication_ids):
     records = cache["records"]
-    current = [records[pmid] for pmid in publication_ids if pmid in records]
+    unavailable = sorted({
+        pmid for pmid in publication_ids if pmid in records
+        and is_pubmed_record_unavailable(records[pmid])
+    }, key=int)
+    current = [records[pmid] for pmid in publication_ids if pmid in records
+               and not is_pubmed_record_unavailable(records[pmid])]
     funded = sum(bool(record["grants"]) for record in current)
     return {
         "publicationCount": len(publication_ids),
         "retrievedPublicationCount": len(current),
+        "unavailablePublicationCount": len(unavailable),
+        "unavailablePublicationIds": unavailable,
         "fundedPublicationCount": funded,
         "unfundedPublicationCount": len(current) - funded,
         "grantCount": sum(len(record["grants"]) for record in current),
@@ -455,13 +500,14 @@ def _pubmed_cache_metadata(cache, publication_ids):
 
 def _set_pubmed_cache_metadata(cache, publication_ids):
     metadata = _pubmed_cache_metadata(cache, publication_ids)
-    changed = any(cache.get(key) != value for key, value in metadata.items())
+    changed = any(type(cache.get(key)) is not type(value) or cache.get(key) != value
+                  for key, value in metadata.items())
     cache.update(metadata)
     return changed
 
 
 def validate_pubmed_cache(cache, publication_ids):
-    """Require a valid returned record for every current Catalog PMID."""
+    """Require returned records or bounded, individually verified absence."""
     if not isinstance(cache, dict) or type(cache.get("version")) is not int \
             or cache.get("version") != CACHE_VERSION:
         raise ValueError("The PubMed funding cache has an invalid version")
@@ -505,12 +551,20 @@ def validate_pubmed_cache(cache, publication_ids):
     metadata = _pubmed_cache_metadata(cache, sorted(expected, key=int))
     mismatched = [
         key for key, value in metadata.items()
-        if type(cache.get(key)) is not int or cache.get(key) != value
+        if type(cache.get(key)) is not type(value) or cache.get(key) != value
     ]
     if mismatched:
         raise ValueError(
             "The PubMed funding cache has inconsistent retrieval metadata: "
             + ", ".join(mismatched)
+        )
+    if not metadata["retrievedPublicationCount"]:
+        raise ValueError("The PubMed funding cache has no retrieved publications; refusing an unavailable-only release")
+    limit = pubmed_unavailable_limit(len(expected))
+    if metadata["unavailablePublicationCount"] > limit:
+        raise ValueError(
+            "The PubMed funding cache exceeds its unavailable-publication safety limit "
+            f"({metadata['unavailablePublicationCount']} > {limit})"
         )
     return cache
 
@@ -555,7 +609,89 @@ def _pubmed_http_error(response, batch):
     )
     if detail:
         message += f": {detail}"
-    return RuntimeError(message)
+    return PubMedCollectionError(message)
+
+
+def _summary_confirms_unavailable(response, pmid):
+    """Require a specific, matching upstream answer, not a generic API error."""
+    payload = json.loads(response.content, object_pairs_hook=_pubmed_json_object,
+                         parse_constant=_invalid_pubmed_json_constant)
+    if not isinstance(payload, dict) or payload.get("error") \
+            or not isinstance(payload.get("header"), dict) \
+            or payload["header"].get("type") != "esummary":
+        return False
+    result = payload.get("result")
+    if not isinstance(result, dict) or result.get("uids") != [pmid]:
+        return False
+    item = result.get(pmid)
+    return isinstance(item, dict) and item.get("uid") == pmid \
+        and item.get("error") == "cannot get document summary"
+
+
+def _fetch_pubmed_records(session, batch, email, max_retries,
+                          request_delay=0.36, confirm_unavailable=False):
+    """Fetch a batch, or independently resolve one omitted PMID off-line.
+
+    Only a valid empty single-ID EFetch followed by an explicit matching
+    ESummary answer can establish unavailable metadata. HTTP errors, malformed
+    bodies, wrong IDs and ordinary batch omissions never establish no funding.
+    """
+    if confirm_unavailable and len(batch) != 1:
+        raise ValueError("Unavailable-record confirmation requires exactly one PMID")
+    request_data = {"db": "pubmed", "retmode": "xml", "id": ",".join(batch),
+                    "tool": "gwas-diversity-monitor"}
+    if email:
+        request_data["email"] = email
+    last_error = None
+    for attempt in range(max_retries):
+        response = None
+        try:
+            response = session.post(NCBI_EFETCH_URL, data=request_data, timeout=90)
+            status = int(getattr(response, "status_code", 0))
+            if status == 200:
+                parsed = parse_pubmed_grants(response.content, batch)
+                if parsed or not confirm_unavailable:
+                    return parsed
+                # NCBI rate limits apply across EFetch and ESummary alike.
+                if request_delay:
+                    time.sleep(request_delay)
+                response = session.post(
+                    NCBI_ESUMMARY_URL, data=dict(request_data, retmode="json"), timeout=90,
+                )
+                status = int(getattr(response, "status_code", 0))
+                if status == 200:
+                    if _summary_confirms_unavailable(response, batch[0]):
+                        LOGGER.warning(
+                            "PubMed record %s is unavailable in both single-ID EFetch "
+                            "and ESummary; retaining its Catalog studies with funding "
+                            "metadata explicitly unknown (not confirmed unfunded). "
+                            "This ID will be checked again on the next PubMed collection.", batch[0],
+                        )
+                        return {batch[0]: make_unavailable_pubmed_record()}
+                    raise PubMedResponseError(
+                        "PubMed response omitted requested PMIDs: " + batch[0]
+                        + "; ESummary did not confirm an unavailable record"
+                    )
+            last_error = _pubmed_http_error(response, batch)
+            if not _retryable_pubmed_status(status):
+                raise last_error
+        except (requests.RequestException, ElementTree.ParseError, ValueError) as error:
+            last_error = error
+
+        if attempt + 1 < max_retries:
+            retry_after = _retry_after_seconds(response) if response is not None else None
+            delay = retry_after if retry_after is not None else min(2 ** attempt, 8)
+            delay = min(delay, PUBMED_MAX_RETRY_DELAY)
+            LOGGER.warning(
+                "PubMed funding request attempt %d/%d for batch beginning %s "
+                "failed (%s); retrying in %.1f seconds",
+                attempt + 1, max_retries, batch[0], last_error, delay,
+            )
+            time.sleep(delay)
+    raise PubMedCollectionError(
+        f"PubMed funding request failed after {max_retries} attempts for batch "
+        f"beginning {batch[0]}: {last_error}"
+    ) from last_error
 
 
 def collect_pubmed_grants(
@@ -582,91 +718,50 @@ def collect_pubmed_grants(
             "Removed %d obsolete publications from the PubMed funding cache",
             len(obsolete),
         )
-    missing = [pmid for pmid in publication_ids if pmid not in records]
+    missing = [pmid for pmid in publication_ids
+               if pmid not in records or is_pubmed_record_unavailable(records[pmid])]
     session = session or requests.Session()
+    confirmed_unavailable = set()
+    unavailable_limit = pubmed_unavailable_limit(len(publication_ids))
 
     for offset in range(0, len(missing), batch_size):
         batch = missing[offset:offset + batch_size]
-        last_error = None
-        for attempt in range(max_retries):
-            response = None
-            try:
-                request_data = {
-                        "db": "pubmed",
-                        "retmode": "xml",
-                        "id": ",".join(batch),
-                        "tool": "gwas-diversity-monitor",
-                }
-                if email:
-                    request_data["email"] = email
-                response = session.post(
-                    NCBI_EFETCH_URL,
-                    data=request_data,
-                    timeout=90,
+        parsed = _fetch_pubmed_records(session, batch, email, max_retries, request_delay)
+        absent = [pmid for pmid in batch if pmid not in parsed]
+        if absent:
+            LOGGER.warning("PubMed batch omitted %d PMID(s); checking each missing "
+                           "record individually: %s", len(absent), ", ".join(absent[:10]))
+        for pmid in absent:
+            if request_delay:
+                time.sleep(request_delay)
+            parsed.update(_fetch_pubmed_records(
+                session, [pmid], email, max_retries, request_delay, confirm_unavailable=True,
+            ))
+            if is_pubmed_record_unavailable(parsed[pmid]):
+                confirmed_unavailable.add(pmid)
+            # Stop a possible outage promptly, not after probing every omitted
+            # ID. Old unavailable entries still awaiting recheck may recover;
+            # count only this run's evidence until final cache validation.
+            if len(confirmed_unavailable) > unavailable_limit:
+                raise PubMedCollectionError(
+                    "Too many unavailable PubMed records; possible upstream outage. "
+                    "The current batch was not saved."
                 )
-            except requests.RequestException as error:
-                last_error = error
-            else:
-                status = int(getattr(response, "status_code", 0))
-                if not 200 <= status <= 299:
-                    last_error = _pubmed_http_error(response, batch)
-                    if not _retryable_pubmed_status(status):
-                        raise last_error
-                else:
-                    try:
-                        parsed = parse_pubmed_grants(
-                            response.content, batch
-                        )
-                        absent = [pmid for pmid in batch if pmid not in parsed]
-                        if absent:
-                            raise PubMedResponseError(
-                                "PubMed response omitted requested PMIDs: "
-                                + ", ".join(absent[:10])
-                            )
-                    except (ElementTree.ParseError,
-                            PubMedResponseError) as error:
-                        last_error = error
-                    else:
-                        records.update(parsed)
-                        cache_changed = True
-                        _set_pubmed_cache_metadata(cache, publication_ids)
-                        cache["updatedAt"] = datetime.datetime.now(
-                            datetime.timezone.utc
-                        ).isoformat()
-                        _atomic_json(output_path, cache)
-                        cache_changed = False
-                        LOGGER.info(
-                            "Collected PubMed funding data: %d/%d",
-                            min(offset + len(batch), len(missing)),
-                            len(missing),
-                        )
-                        last_error = None
-                        break
-
-            if attempt + 1 < max_retries:
-                retry_after = (
-                    _retry_after_seconds(response)
-                    if response is not None else None
-                )
-                delay = retry_after \
-                    if retry_after is not None else min(2 ** attempt, 8)
-                delay = min(delay, PUBMED_MAX_RETRY_DELAY)
-                LOGGER.warning(
-                    "PubMed funding request attempt %d/%d for batch "
-                    "beginning %s failed (%s); retrying in %.1f seconds",
-                    attempt + 1,
-                    max_retries,
-                    batch[0],
-                    last_error,
-                    delay,
-                )
-                time.sleep(delay)
-        if last_error is not None:
-            raise RuntimeError(
-                "PubMed funding request failed after "
-                f"{max_retries} attempts for batch beginning {batch[0]}: "
-                f"{last_error}"
-            ) from last_error
+        has_retrieved = any(not is_pubmed_record_unavailable(record) for record in parsed.values()) \
+            or any(not is_pubmed_record_unavailable(record)
+                   for pmid, record in records.items() if pmid not in parsed)
+        if offset + len(batch) >= len(missing) and not has_retrieved:
+            raise PubMedCollectionError(
+                "No PubMed records were retrieved; refusing to publish an entirely "
+                "unavailable funding dataset."
+            )
+        records.update(parsed)
+        _set_pubmed_cache_metadata(cache, publication_ids)
+        cache["updatedAt"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        _atomic_json(output_path, cache)
+        cache_changed = False
+        LOGGER.info("Collected PubMed funding data: %d/%d",
+                    min(offset + len(batch), len(missing)), len(missing))
         if request_delay and offset + len(batch) < len(missing):
             time.sleep(request_delay)
 
@@ -756,6 +851,7 @@ def build_funder_normalization_audit(cache, cleaner):
     excluded_grants = Counter()
     publication_ids = set()
     publications_with_grants = set()
+    unavailable_publications = set()
     publications_with_mapped_agency = set()
     grant_record_count = 0
     grant_records_without_agency = 0
@@ -764,6 +860,9 @@ def build_funder_normalization_audit(cache, cleaner):
         if not pmid or not _valid_pubmed_record(record):
             continue
         publication_ids.add(pmid)
+        if is_pubmed_record_unavailable(record):
+            unavailable_publications.add(pmid)
+            continue
         grants = record["grants"]
         if grants:
             publications_with_grants.add(pmid)
@@ -848,9 +947,12 @@ def build_funder_normalization_audit(cache, cleaner):
         "sourceNameCount": len(source_publications),
         "canonicalNameCount": len(canonical_publications),
         "publicationCount": len(publication_ids),
+        "retrievedPublicationCount": len(publication_ids - unavailable_publications),
+        "unavailablePublicationCount": len(unavailable_publications),
+        "unavailablePublicationIds": sorted(unavailable_publications, key=int),
         "publicationsWithGrantListCount": len(publications_with_grants),
         "publicationsWithoutGrantListCount": (
-            len(publication_ids - publications_with_grants)
+            len(publication_ids - publications_with_grants - unavailable_publications)
         ),
         "publicationsWithMappedAgencyCount": len(
             publications_with_mapped_agency
@@ -2348,6 +2450,8 @@ def validate_funder_artifacts(data_path):
                 not isinstance(audit.get(key), int)
                 for key in (
                     "publicationCount",
+                    "retrievedPublicationCount",
+                    "unavailablePublicationCount",
                     "publicationsWithGrantListCount",
                     "publicationsWithoutGrantListCount",
                     "publicationsWithMappedAgencyCount",
