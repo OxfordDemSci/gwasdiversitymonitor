@@ -39,9 +39,8 @@
             finally { busy = false; update(); }
         });
         document.addEventListener('click', event => {
-            const icon = event.target.closest('.icon-zone .icon-download-data');
-            const link = event.target.closest('.icon-zone a');
-            const zone = (icon || link) && (icon || link).closest('.icon-zone');
+            const control = event.target.closest('.icon-zone [data-chart-download], .icon-zone a');
+            const zone = control && control.closest('.icon-zone');
             if (!zone || !controls[zone.id]) return;
             event.preventDefault();
             registry.download(controls[zone.id]);

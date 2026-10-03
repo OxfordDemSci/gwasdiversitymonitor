@@ -27,6 +27,18 @@ function fixture(search = '') {
         setView: value => { view = state.normalize(value); }};
 }
 
+test('copy refuses a failed or pending selection before showing a manual link', async () => {
+    const f = fixture();
+    f.adapter.canShare = () => false;
+    let fallback = false;
+    f.adapter.showLink = () => { fallback = true; };
+    const api = state.create(f.adapter, f.browser);
+    await api.ready();
+    assert.equal(await api.copy(), false);
+    assert.equal(fallback, false);
+    assert.match(f.messages.at(-1), /loading successfully/);
+});
+
 test('round trips the complete research view without removing unrelated URL fields', () => {
     const original = state.normalize({
         metric: 'studies', stage: 'replication', funders: ['wellcome', 'nih'], cohorts: ['uk-biobank'],

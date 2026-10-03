@@ -247,6 +247,7 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
         });
 
         getGraphPerYear(specificData, currentYear);
+        enhanceHeatMap();
         if (window.gwasChartData) window.gwasChartData.changed('heatMap');
     }
 
@@ -423,6 +424,17 @@ function drawHeatMap(data, withMetric, withStage, ancestriesOrdered, preservedSt
             }
         }
 
+    }
+
+    function enhanceHeatMap() {
+        if (!window.gwasChartAccessibility) return;
+        window.gwasChartAccessibility.enhanceMarks('heatMap', svg.selectAll('rect').filter(function(row) {
+            return row && row.ancestry !== undefined && row.term !== undefined;
+        }), function(row) {
+            return currentYear + ', ' + row.term + ', ' + row.ancestry + ': '
+                + Number(row.value).toLocaleString('en-GB')
+                + (withMetric ? ' ancestry records.' : ' participant instances.');
+        });
     }
 
     function uniq(a) {

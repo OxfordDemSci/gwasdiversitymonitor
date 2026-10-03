@@ -92,7 +92,9 @@ class InitialLoadPerformanceTests(unittest.TestCase):
 
         self.assertIn("startPlotRequests", html)
         self.assertIn("window.fetch(", html)
-        self.assertIn("loadPlotJson('tsPlot'", html)
+        self.assertIn("loadDashboardPanel('timeSeries', ['tsPlot']", html)
+        self.assertIn("dashboard-loading.js", html)
+        self.assertNotIn("d3.json(bootstrap.urls", html)
 
         early_names = re.search(
             r"let earlyPlotNames = \[(.*?)\];", html, re.DOTALL

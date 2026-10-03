@@ -40,7 +40,7 @@ $(window).scroll(function() {
 // Pop up
 
 function imagePopup(id, container, svg_id) {
-	document.getElementById(id).classList.add('active');
+	launchPopup(id);
 	d3.select('#button_svg').on('click', null).on('click', function () {downloadImage(container, svg_id, false).catch(function() {}); hidePopup(id); }).text('SVG + matching data (.zip)');
 	d3.select('#button_png').on('click', null).on('click', function () {downloadImage(container, svg_id, true).catch(function() {}); hidePopup(id); }).text('PNG + matching data (.zip)');
 }
@@ -58,11 +58,31 @@ function bindImageDownload(controlSelector, container, svg_id, beforeOpen) {
 }
 
 function launchPopup(id) {
-	document.getElementById(id).classList.add('active');
+	var popup = document.getElementById(id);
+	if (!popup || popup.open) return;
+	popup.__gwasReturnFocus = document.activeElement;
+	if (!popup.__gwasFocusBound) {
+		popup.__gwasFocusBound = true;
+		popup.addEventListener('cancel', function(event) {
+			event.preventDefault();
+			hidePopup(id);
+		});
+		popup.addEventListener('close', function() {
+			popup.classList.remove('active');
+			var opener = popup.__gwasReturnFocus;
+			popup.__gwasReturnFocus = null;
+			if (opener && opener.isConnected) opener.focus();
+		});
+	}
+	popup.classList.add('active');
+	popup.showModal();
 }
 
 function hidePopup(id) {
-	document.getElementById(id).classList.remove('active');
+	var popup = document.getElementById(id);
+	if (!popup) return;
+	popup.classList.remove('active');
+	if (popup.open) popup.close();
 }
 
 

@@ -1,14 +1,16 @@
+{% set filter_id = control_id|default(name ~ '-filter') %}
+{% set filter_label = control_label|default({'parentTerms': 'Parent term', 'trait': 'Search traits', 'ancestries': 'Ancestry'}[name]) %}
 <div class="gwas-select-container {% if type=='single' %} gwas-select-container-single {% else %} gwas-select-container-multiple {% endif %}">
+    <label id="{{ filter_id }}-label" for="{{ filter_id }}" class="gwas-sr-only">{{ filter_label }}</label>
     {% if type=='multiple' %}
-        <i class="icon-search"></i>
+        <i class="icon-search" aria-hidden="true"></i>
     {% endif %}
-    <select name="{{ name }}" id="{{ name }}-filter" class="gwas-filter">
+    <select name="{{ name }}" id="{{ filter_id }}" class="gwas-filter"
+            aria-labelledby="{{ filter_id }}-label" {% if type=='multiple' %}multiple{% endif %}>
         {% if name=='ancestries' %}
             <option value="all-{{ name }}" name="all">All {{ name }}</option>
         {% elif name=='parentTerms' %}
             <option value="all" name="all">All parent terms</option>
-        {% elif name=='trait' %}
-            <option value="empty" name="empty"></option>
         {% endif %}
         {% for key, value in items %}
             <option value="{{ value }}" name="{{ key }}">{{ key }}</option>

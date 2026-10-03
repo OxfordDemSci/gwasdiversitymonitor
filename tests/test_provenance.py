@@ -206,6 +206,24 @@ class ProvenanceRouteTests(ProvenanceFixture, unittest.TestCase):
         response.close()
         self.assertEqual(selected.read_bytes(), content)
 
+    def test_option_apis_bind_identity_and_reject_stale_before_reading_options(self):
+        with mock.patch('app.routes.get_dashboard_filter_store') as store, \
+                mock.patch('app.routes.DataLoader.DataLoader') as loader:
+            store.return_value.funders.return_value = []
+            store.return_value.cohorts.return_value = []
+            loader.return_value.filterTraits.return_value = []
+            for path in ('/api/funders', '/api/cohorts', '/api/datasets', '/api/traits'):
+                response = self.client.get(path + '?datasetId=' + self.identifier)
+                self.assertEqual(response.status_code, 200, path)
+                self.assertEqual(response.headers['X-GWAS-Dataset-ID'], self.identifier)
+            store.reset_mock()
+            loader.reset_mock()
+            for path in ('/api/funders', '/api/cohorts', '/api/datasets', '/api/traits'):
+                response = self.client.get(path + '?datasetId=gwas-' + 'f' * 64)
+                self.assertEqual(response.status_code, 409, path)
+            store.assert_not_called()
+            loader.assert_not_called()
+
 
 class ProvenanceLifecycleTests(ProvenanceFixture, unittest.TestCase):
     def setUp(self):

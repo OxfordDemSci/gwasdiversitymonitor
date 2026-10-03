@@ -1,9 +1,15 @@
-<div id="{{id}}" class="icon-zone">
-    <a href="{{ url_for('getCSV', filename=filename) }}">
-        <button class="three-icons icon"><i class="icon-download-data"></i></button>
-    </a>
+{% set chart_id = {'bubble_df': 'bubbleGraph', 'timeseries': 'timeSeries', 'heatmap': 'heatMap', 'choro_df': 'worldMap', 'doughnut_df': 'doughnutGraph'}[filename] %}
+{% set chart_name = {'bubble_df': 'bubble chart', 'timeseries': 'time series', 'heatmap': 'heat map', 'choro_df': 'world map', 'doughnut_df': 'ancestry distribution'}[filename] %}
+<div id="{{id}}" class="icon-zone" role="group" aria-label="{{ chart_name|capitalize }} actions">
+    <button type="button" class="three-icons icon" data-chart-download="{{ chart_id }}"
+            aria-label="Download displayed data for {{ chart_name }}" title="Download displayed data">
+        <i class="icon-download-data" aria-hidden="true"></i>
+    </button>
     {% if browser != 'msie' %}
-        <button class="three-icons icon"><i class="icon-download-image"></i></button>
+        <button type="button" class="three-icons icon" aria-haspopup="dialog"
+                aria-controls="popup-download-image" aria-label="Export {{ chart_name }} image and data"
+                title="Export image and data"><i class="icon-download-image" aria-hidden="true"></i></button>
     {% endif %}
-<!--    <button class="three-icons icon"><i class="icon-full-screen"></i></button>-->
+    <button type="button" class="gwas-view-data" data-chart-table="{{ chart_id }}"
+            aria-haspopup="dialog" aria-label="View {{ chart_name }} data table">View data</button>
 </div>

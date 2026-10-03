@@ -9,15 +9,16 @@
         <p class="doughnut-graph-filter-detail-associations">Click to <span>show</span> associations discovered</p>
         <div class="gwas-switch-container associations">
             <div class="gwas-switch-input-container">
-                <input type="checkbox" id="cbAssociation" class="gwas-switch"/>
+                <input type="checkbox" id="cbAssociation" class="gwas-switch" role="switch"
+                       aria-label="Show discovery associations"/>
                 <label class="gwas-switch-button" for="cbAssociation"></label>
-                <i id="associationArrow" class="icon-chevron-assoc"></i>
+                <i id="associationArrow" class="icon-chevron-assoc" aria-hidden="true"></i>
                 <div class="switch-infos">
                     <span id="associationLabel">Show More</span>
                 </div>
             </div>
         </div>
-        {% with name='parentTerms', items=parentTerms.items(), type='single' %}
+        {% with name='parentTerms', items=parentTerms.items(), type='single', control_id='doughnut-parentTerms-filter', control_label='Ancestry distribution parent term' %}
             {% include 'components/select.html' %}
         {% endwith %}
     </div>
@@ -25,11 +26,11 @@
 <span class="doughnut-graph-no-data"></span>
 <div class="doughnut-graph-footer">
     <div class="doughnut-graph-change-year">
-        <button class="previous icon" onclick="dgfirstYear()"><i class="icon-double-chevron-left"></i></button>
-        <button class="previous icon" onclick="dgpreviousYear()"><i class="icon-chevron-left"></i></button>
-        <span></span>
-        <button class="next icon" onclick="dgnextYear()"><i class="icon-chevron-right"></i></button>
-        <button class="next icon" onclick="dglastestYear()"><i class="icon-double-chevron-right"></i></button>
+        <button type="button" class="previous icon" onclick="dgfirstYear()" aria-label="First ancestry distribution year"><i class="icon-double-chevron-left" aria-hidden="true"></i></button>
+        <button type="button" class="previous icon" onclick="dgpreviousYear()" aria-label="Previous ancestry distribution year"><i class="icon-chevron-left" aria-hidden="true"></i></button>
+        <span aria-live="polite" aria-label="Ancestry distribution year"></span>
+        <button type="button" class="next icon" onclick="dgnextYear()" aria-label="Next ancestry distribution year"><i class="icon-chevron-right" aria-hidden="true"></i></button>
+        <button type="button" class="next icon" onclick="dglastestYear()" aria-label="Latest ancestry distribution year"><i class="icon-double-chevron-right" aria-hidden="true"></i></button>
     </div>
     {% with filename='doughnut_df', id='doughnut-graph-controls' %}
         {% include 'components/three-icons.html' %}

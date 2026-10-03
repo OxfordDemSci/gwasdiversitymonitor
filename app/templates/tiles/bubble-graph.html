@@ -6,7 +6,7 @@
 
     <div class="bubble-graph-filter filter">
 
-        {% with name='parentTerms', items=parentTerms.items(), type='single' %}
+        {% with name='parentTerms', items=parentTerms.items(), type='single', control_id='bubble-parentTerms-filter', control_label='Bubble chart parent term' %}
             {% include 'components/select.html' %}
         {% endwith %}
 
@@ -20,18 +20,20 @@
 </div>
 
 <div class="right col-xs-12 col-sm-4 col-md-3">
-    <div class="filter ancestry-filter">
-        <span class="option all" dataFilter="all">View all</span>
+    <div class="filter ancestry-filter" role="group" aria-label="Ancestries shown in the bubble chart">
+        <button type="button" class="option all" dataFilter="all" aria-pressed="true">View all</button>
         {% for key, value in ancestries.items() %}
-        <span class="option btn {{ value }}" dataFilter="{{ value }}">
-            <i class="circle {{ value }}"></i>
+        <button type="button" class="option btn {{ value }}" dataFilter="{{ value }}"
+                aria-pressed="true" title="Show or hide {{ key }} ancestry">
+            <i class="circle {{ value }}" aria-hidden="true"></i>
             {{ key }}
-        </span>
+        </button>
         {% endfor %}
     </div>
     <div class="details-zone">
         <div class="details-header">
-            <button onclick="clearSelected()" class="three-icons icon"><i class="icon-chevron-left"></i></button>
+            <button type="button" onclick="clearSelected()" class="three-icons icon"
+                    aria-label="Clear selected study"><i class="icon-chevron-left" aria-hidden="true"></i></button>
             Active area
         </div>
         <div class="details-content">
@@ -39,6 +41,11 @@
         </div>
     </div>
 </div>
+
+<p id="bubble-keyboard-help" class="gwas-sr-only">Use the arrow keys to inspect the next or previous bubble,
+    Home or End for the first or last, and Escape to clear the selection. Tap a bubble to inspect it.
+    View data opens a table of all plotted records.</p>
+<span id="bubble-keyboard-status" class="gwas-sr-only" role="status" aria-live="polite"></span>
 
 <div class="bubble-graph-footer">
     {% with filename='bubble_df', id='bubble-graph-controls' %}

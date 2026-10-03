@@ -103,11 +103,18 @@
                         if (!dialog.open || requestedRevision !== revision) return {abort: function() {}};
                         const requestData = Object.assign({}, params.data);
                         delete requestData._comparisonRevision;
+                        if (window.gwasProvenance.loaded.datasetId) requestData.datasetId = window.gwasProvenance.loaded.datasetId;
                         const request = $.ajax(Object.assign({}, params, {data: requestData}));
                         facetRequests.add(request);
-                        request.done(function(data) {
+                        request.done(function(data, status, xhr) {
+                            if (window.gwasProvenance.loaded.datasetId && !window.gwasProvenance.isCurrent(xhr.getResponseHeader('X-GWAS-Dataset-ID'))) {
+                                window.gwasProvenance.markStale();
+                                failure({status: 409}, 'error', window.gwasProvenance.message);
+                                return;
+                            }
                             if (requestedRevision === revision && dialog.open) success(data);
                         }).fail(function(xhr, requestStatus, reason) {
+                            if (xhr.status === 409) window.gwasProvenance.markStale();
                             if (requestStatus !== 'abort' && requestedRevision === revision && dialog.open) {
                                 failure(xhr, requestStatus, reason);
                             }

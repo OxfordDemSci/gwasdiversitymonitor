@@ -222,8 +222,9 @@ def getFilterTraits():
     if search is None:
         search = ''
     with DataLoader.published_data_lock() as published_path:
+        identifier = _bound_dataset(published_path)
         dataLoader = DataLoader.DataLoader(published_path)
-        return jsonify(results=dataLoader.filterTraits(search))
+        return _dataset_response(jsonify(results=dataLoader.filterTraits(search)), identifier)
 
 
 def _filter_query_values(plural_name, legacy_name):
@@ -258,6 +259,7 @@ def getFilterFunders():
         "initial", "discovery", "replication",
     }
     with DataLoader.published_data_lock() as published_path:
+        identifier = _bound_dataset(published_path)
         store = get_dashboard_filter_store(published_path)
         try:
             entries = store.funders(search, cohort_ids, stage)
@@ -268,7 +270,7 @@ def getFilterFunders():
         start = 0 if complete_list else (page - 1) * page_size
         page_entries = entries if complete_list \
             else entries[start:start + page_size]
-        return jsonify(results=[{
+        return _dataset_response(jsonify(results=[{
             "id": entry["slug"],
             "text": entry["name"],
             "studyCount": entry["studyCount"],
@@ -276,7 +278,7 @@ def getFilterFunders():
         } for entry in page_entries], pagination={
             "more": False if complete_list \
             else start + page_size < len(entries),
-        })
+        }), identifier)
 
 
 @app.route("/api/cohorts", methods=["GET"])
@@ -295,6 +297,7 @@ def getFilterDatasets():
         "initial", "discovery", "replication",
     }
     with DataLoader.published_data_lock() as published_path:
+        identifier = _bound_dataset(published_path)
         store = get_dashboard_filter_store(published_path)
         try:
             entries = store.cohorts(search, funder_slugs, stage)
@@ -305,7 +308,7 @@ def getFilterDatasets():
         start = 0 if complete_list else (page - 1) * page_size
         page_entries = entries if complete_list \
             else entries[start:start + page_size]
-        return jsonify(results=[{
+        return _dataset_response(jsonify(results=[{
             "id": entry["id"],
             "text": entry["name"],
             "studyCount": entry["studyCount"],
@@ -313,7 +316,7 @@ def getFilterDatasets():
         } for entry in page_entries], pagination={
             "more": False if complete_list \
             else start + page_size < len(entries),
-        })
+        }), identifier)
 
 
 @app.route("/json/filtered-dashboard.json")

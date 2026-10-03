@@ -1,0 +1,28 @@
+<dialog id="dashboard-table-dialog" class="dashboard-table" aria-labelledby="dashboard-table-title">
+    <div class="dashboard-table__heading">
+        <h2 id="dashboard-table-title">Chart data</h2>
+        <button id="dashboard-table-close" type="button" aria-label="Close data table" autofocus>Close</button>
+    </div>
+    <p id="dashboard-table-context" class="dashboard-table__context"></p>
+    <details class="dashboard-table__notes">
+        <summary>Counting methods and scope</summary>
+        <ul id="dashboard-table-methodology"></ul>
+    </details>
+    <p id="dashboard-table-status" role="status" aria-live="polite"></p>
+    <div class="dashboard-table__scroll" tabindex="0" role="region" aria-label="Scrollable chart data">
+        <table>
+            <caption id="dashboard-table-caption">Exact plotted values</caption>
+            <thead id="dashboard-table-head"></thead>
+            <tbody id="dashboard-table-body"></tbody>
+        </table>
+    </div>
+    <nav class="dashboard-table__pagination" aria-label="Data table pages">
+        <button id="dashboard-table-previous" type="button">Previous 50 rows</button>
+        <span id="dashboard-table-range" role="status" aria-live="polite" aria-atomic="true"></span>
+        <button id="dashboard-table-next" type="button">Next 50 rows</button>
+    </nav>
+    <div class="dashboard-table__actions">
+        <button id="dashboard-table-refresh" type="button">Refresh table</button>
+        <button id="dashboard-table-export" type="button">Export this chart (ZIP)</button>
+    </div>
+</dialog>

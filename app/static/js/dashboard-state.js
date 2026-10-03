@@ -201,8 +201,8 @@
                     return Promise.resolve(false);
                 }
                 var href = url(capture(), browser.location.href);
-                if (!ready || restoring || href.length > maxURLLength) {
-                    announce(!ready || restoring ? 'Wait for the view to finish loading before sharing.' :
+                if (!ready || restoring || (adapter.canShare && !adapter.canShare()) || href.length > maxURLLength) {
+                    announce(!ready || restoring || (adapter.canShare && !adapter.canShare()) ? 'Wait for the selected view to finish loading successfully before sharing.' :
                         'This selection is too large to share as a link. Reduce the selected traits.');
                     return Promise.resolve(false);
                 }

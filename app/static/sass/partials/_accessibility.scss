@@ -1,0 +1,92 @@
+/* Keep in sync with css/dashboard-accessibility.css. */
+.gwas-sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.gwas-switch {
+  display: block;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+}
+.dashboard button:focus-visible,
+.dashboard input:focus-visible,
+.dashboard select:focus-visible,
+.dashboard canvas:focus-visible,
+.popup-container button:focus-visible,
+.popup-container a:focus-visible,
+.gwas-switch:focus-visible + .gwas-switch-button,
+.dashboard .select2-container--focus .select2-selection {
+  outline: 3px solid #607bbd;
+  outline-offset: 3px;
+}
+.gwas-switch:disabled + .gwas-switch-button { opacity: .5; cursor: default; }
+.dashboard .icon-zone { align-items: center; flex-wrap: wrap; gap: 3px; }
+.dashboard .gwas-view-data {
+  min-height: 36px;
+  padding: 5px 9px;
+  border: 1px solid #c8d0df;
+  border-radius: 4px;
+  color: #374282;
+  background: #fff;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.dashboard .gwas-view-data:hover { background: #f0f3f9; }
+.dashboard .gwas-view-data:disabled { color: #788394; opacity: .65; }
+#bubbleGraph .ancestry-filter button.option { font-family: inherit; text-align: left; }
+#bubbleGraph .ancestry-filter button.all { padding: 3px 0; }
+#bubbleGraph .ancestry-filter button.option:focus-visible { outline-offset: 2px; }
+.dashboard .gwas-interactive-mark:focus-visible { outline: 2px solid #263268; outline-offset: 3px; stroke: #263268 !important; stroke-width: 3px !important; }
+.gwas-chart-tooltip {
+  position: fixed;
+  z-index: 250;
+  width: 290px;
+  max-width: calc(100vw - 20px);
+  padding: 8px 11px;
+  border-radius: 5px;
+  background: #263268;
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.4;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, .18);
+  pointer-events: none;
+}
+.gwas-chart-tooltip[hidden] { display: none; }
+dialog.popup-container {
+  max-width: none;
+  max-height: none;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+dialog.popup-container:not([open]) { display: none !important; }
+dialog.popup-container::backdrop { background: transparent; }
+.popup-container .popup-box { height: auto; max-height: calc(100dvh - 24px); min-height: 180px; padding: 28px 22px 20px; overflow: auto; }
+.popup-container .popup-box h2 { margin: 0 24px 12px; font-size: 20px; text-align: center; }
+.popup-container .popup-close { position: absolute; right: 5px; top: 5px; width: 36px; height: 36px; padding: 0; font-size: 25px; color: #374282; }
+.popup-container .popup-export-actions { width: 100%; display: grid; gap: 10px; }
+.popup-container .popup-export-actions button { width: 100%; border-radius: 4px; }
+@media (pointer: coarse) {
+  .dashboard button.icon, .dashboard .gwas-view-data { min-width: 44px; min-height: 44px; }
+  #bubbleGraph .ancestry-filter button.option { min-height: 36px; }
+  .gwas-switch + .gwas-switch-button { border: 10px solid transparent; background-clip: padding-box; box-sizing: content-box; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gwas-switch + .gwas-switch-button, .gwas-switch + .gwas-switch-button::after,
+  #associationArrow, .popup-container { animation: none !important; transition: none !important; }
+}

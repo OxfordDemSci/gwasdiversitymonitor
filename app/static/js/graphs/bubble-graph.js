@@ -443,6 +443,11 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     var canvas = document.createElement("canvas");
     canvas.id = "bubbleCanvas";
     canvas.className = "bubble-canvas";
+    canvas.tabIndex = 0;
+    canvas.setAttribute('role', 'group');
+    canvas.setAttribute('aria-roledescription', 'interactive scatter plot');
+    canvas.setAttribute('aria-label', 'GWAS participant instances');
+    canvas.setAttribute('aria-describedby', 'bubble-keyboard-help');
 
     var ctx = canvas.getContext("2d", { alpha: true });
     var dpr = window.devicePixelRatio || 1;
@@ -728,6 +733,11 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         state.parentFilter = parentFilter;
         state.ancestryFilters = ancestryFilters.slice();
         state.selectedTraits = selectedTraits.slice();
+        $(selector).find('.ancestry-filter .option').each(function() {
+            var included = $(this).attr('dataFilter') === 'all'
+                ? ancestryFilters.length === 0 : !$(this).hasClass('active');
+            this.setAttribute('aria-pressed', String(included));
+        });
 
         ctx.clearRect(0, 0, canvasW, canvasH);
         state.points = [];
@@ -776,6 +786,7 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         ctx.restore();
 
         state.visibleCount = state.points.length;
+        canvas.tabIndex = state.visibleCount ? 0 : -1;
         state.drawCount += 1;
         if (window.gwasChartData) window.gwasChartData.changed('bubbleGraph');
     }
@@ -825,8 +836,10 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
     function selectPoint(p) {
         if (!p) return false;
 
+        var pointPosition = state.points.indexOf(p);
         clearSelected();
         state.selectedIndex = p.index;
+        state.keyboardIndex = pointPosition;
 
         var bg = document.querySelector(selector + " svg #bubbleData .background");
         if (bg && bg.classList) bg.classList.add("clicked");
@@ -834,6 +847,11 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         var proxy = setProxyFromPoint(p);
         makeSelected(proxy);
         rebuildPointsAndDraw();
+        var status = document.getElementById('bubble-keyboard-status');
+        if (status) status.textContent = 'Record ' + (pointPosition + 1) + ' of ' + state.visibleCount
+            + '. ' + (p.d.Broader || 'Ancestry not recorded') + ', '
+            + __dcN(p.d).toLocaleString('en-GB') + ' participant instances. '
+            + __dcDiseaseClean(p.d) + '. Study ' + (p.d.ACCESSION || p.d.PUBMEDID || 'not recorded') + '.';
 
         return true;
     }
@@ -849,6 +867,29 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
             state.selectedIndex = null;
             rebuildPointsAndDraw();
         }
+    });
+
+    canvas.addEventListener('keydown', function(event) {
+        if (!isCurrentState() || event.altKey || event.ctrlKey || event.metaKey) return;
+        if (event.key === 'Escape') {
+            event.preventDefault();
+            clearSelected();
+            rebuildPointsAndDraw();
+            var status = document.getElementById('bubble-keyboard-status');
+            if (status) status.textContent = 'Study selection cleared.';
+            return;
+        }
+        if (!state.points.length) return;
+        var current = state.selectedIndex === null ? -1 : state.keyboardIndex;
+        var next;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowDown') next = (current + 1) % state.points.length;
+        else if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') next = current <= 0 ? state.points.length - 1 : current - 1;
+        else if (event.key === 'Home') next = 0;
+        else if (event.key === 'End') next = state.points.length - 1;
+        else if (event.key === 'Enter' || event.key === ' ') next = current < 0 ? 0 : current;
+        else return;
+        event.preventDefault();
+        selectPoint(state.points[next]);
     });
 
     var hoverScheduled = false;
@@ -991,11 +1032,15 @@ function drawBubbleGraph(selector, data, replication, preserveFilters) {
         placeholder: "Search for one or more traits",
         ajax: {
             url: '/api/traits',
+            transport: filterOptionTransport,
             data: function (params) {
                 return { search: params.term };
             }
         }
     });
+    $("select[name='trait']").next('.select2-container')
+        .find('.select2-selection, .select2-search__field')
+        .attr('aria-labelledby', 'trait-filter-label');
 
     if (!window.__bubbleCanvasClearSelectedWrapped) {
         window.__bubbleCanvasClearSelectedWrapped = true;

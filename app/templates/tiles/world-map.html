@@ -7,30 +7,30 @@
 </div>
 <div class="world-map-footer">
     <div class="world-map-change-year">
-        <button class="previous icon" onclick="wmfirstYear()">
-            <i class="icon-double-chevron-left"></i>
+        <button type="button" class="previous icon" onclick="wmfirstYear()" aria-label="First world-map year">
+            <i class="icon-double-chevron-left" aria-hidden="true"></i>
         </button>
-        <button class="previous icon" onclick="wmpreviousYear()">
-            <i class="icon-chevron-left"></i>
+        <button type="button" class="previous icon" onclick="wmpreviousYear()" aria-label="Previous world-map year">
+            <i class="icon-chevron-left" aria-hidden="true"></i>
         </button>
-        <span></span>
-        <button class="next icon" onclick="wmnextYear()">
-            <i class="icon-chevron-right"></i>
+        <span aria-live="polite" aria-label="World-map year"></span>
+        <button type="button" class="next icon" onclick="wmnextYear()" aria-label="Next world-map year">
+            <i class="icon-chevron-right" aria-hidden="true"></i>
         </button>
-        <button class="next icon" onclick="wmlastestYear()">
-            <i class="icon-double-chevron-right"></i>
+        <button type="button" class="next icon" onclick="wmlastestYear()" aria-label="Latest world-map year">
+            <i class="icon-double-chevron-right" aria-hidden="true"></i>
         </button>
     </div>
     <div class="world-map-header-actions">
         <div class="world-map-zoom-controls">
             <button class="three-icons icon" type="button" onclick="wmZoomIn()" aria-label="Zoom map in" title="Zoom in">
-                <i class="icon-zoom-out"></i>
+                <i class="icon-zoom-out" aria-hidden="true"></i>
             </button>
             <button class="three-icons icon" type="button" onclick="wmResetZoom()" aria-label="Reset map zoom" title="Reset zoom">
-                <i class="icon-full-screen"></i>
+                <i class="icon-full-screen" aria-hidden="true"></i>
             </button>
             <button class="three-icons icon" type="button" onclick="wmZoomOut()" aria-label="Zoom map out" title="Zoom out">
-                <i class="icon-zoom-in"></i>
+                <i class="icon-zoom-in" aria-hidden="true"></i>
             </button>
         </div>
         {% with filename='choro_df', id='world-map-controls' %} {% include

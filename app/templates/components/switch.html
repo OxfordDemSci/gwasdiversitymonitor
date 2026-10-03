@@ -1,6 +1,8 @@
 <div class="gwas-switch-container">
     <span class="switch-infos">{{ name }}</span>
-    <input type="checkbox" id="{{ id }}" class="gwas-switch" onchange="redrawGraph(this)"/>
+    <input type="checkbox" id="{{ id }}" class="gwas-switch" role="switch"
+           aria-label="{% if name == 'Metric' %}Show study counts{% else %}Show replication stage{% endif %}"
+           onchange="redrawGraph(this)"/>
     <label class="gwas-switch-button" for="{{ id }}"></label>
     <div class="switch-infos">
         {% if name == 'Metric' %}

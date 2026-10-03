@@ -6,7 +6,11 @@
     <script defer src="{{ versioned_static('js/imports/select2.min.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-state.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-provenance.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-loading.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-help.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-chart-data.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-table.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-accessibility.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-export-controls.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-comparison.js') }}"></script>
     <script>
@@ -22,6 +26,8 @@
     <link href="{{ versioned_static('css/select2.min.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ versioned_static('css/dashboard-comparison.css') }}" rel="stylesheet" type="text/css">
     <link href="{{ versioned_static('css/dashboard-provenance.css') }}" rel="stylesheet" type="text/css">
+    <link href="{{ versioned_static('css/dashboard-help.css') }}" rel="stylesheet" type="text/css">
+    <link href="{{ versioned_static('css/dashboard-table.css') }}" rel="stylesheet" type="text/css">
 {% endblock %}
 
 {% block content %}
@@ -30,6 +36,8 @@
     {% include 'components/funder-toolbar.html' %}
     {% include 'components/dashboard-comparison.html' %}
     {% include 'components/dashboard-export.html' %}
+    {% include 'components/dashboard-help.html' %}
+    {% include 'components/dashboard-table.html' %}
 
     <div id="dashboard-dataset-stale" class="dashboard-dataset-stale" role="alert" hidden>
         <p>The dataset changed while this view was open. Reload to load one consistent dataset before sharing or exporting.</p>
@@ -91,11 +99,18 @@
     <script defer src="{{ versioned_static('js/graphs/heat-map.js') }}"></script>
     <script defer src="{{ versioned_static('js/graphs/doughnut-graph.js') }}"></script>
     <script type="text/javascript">
+		// Lock controls before deferred libraries arrive, not only at DOM ready.
+		document.querySelectorAll('.dashboard button, .dashboard input, .dashboard select, #cb1, #cb2').forEach(function(control) {
+			if (!control.disabled) {
+				control.setAttribute('data-gwas-bootstrap-disabled', 'true');
+				control.disabled = true;
+			}
+		});
 		/*
 		 * Start every plot's download while deferred chart scripts are loading.
 		 * Parse the large bubble response only after the first paint. Store settled
-		 * results rather than rejected promises so a
-		 * transient early failure can safely fall back to d3.json later.
+			 * responses rather than rejected promises. The shared loader verifies
+			 * dataset headers before parsing, including every explicit retry.
 		 */
 		window.__gwasPlotBootstrap = {
 			urls: {
@@ -120,21 +135,7 @@
 				bootstrap.requests[name] = window.fetch(
 					bootstrap.urls[name], {credentials: 'same-origin'}
 				).then(function(response) {
-					let expectedId = window.gwasLoadedProvenance.datasetId;
-					let responseId = response.headers.get('X-GWAS-Dataset-ID');
-					if (response.status === 409 || (response.ok && expectedId && responseId !== expectedId)) {
-						let changed = new Error('The dataset changed. Reload this view.');
-						changed.status = 409;
-						if (window.gwasProvenance) window.gwasProvenance.markStale();
-						throw changed;
-					}
-					if (!response.ok) {
-						throw new Error('HTTP ' + response.status);
-					}
-					return name === 'bubbleGraph' ? response : response.json();
-				}).then(function(data) {
-					return name === 'bubbleGraph'
-						? {ok: true, response: data} : {ok: true, data: data};
+					return {response: response};
 				}, function(error) {
 					return {ok: false, error: error};
 				});
@@ -153,16 +154,21 @@
 			let dashboardFilterRequest = null;
 			let dashboardFilterRevision = 0;
 			let baseDashboardReady = false;
+		let plotLoader;
+		let panelLoads = {};
+		let readyPanels = new Set();
+		let selectionFailed = false;
 
 		function markBaseDashboardReady() {
 			let required = [
 				'tsPlot', 'heatMap', 'chloroMap', 'doughnutGraph',
 				'bubbleGraph', 'summary'
 			];
-			baseDashboardReady = required.every(function(key) {
+			baseDashboardReady = readyPanels.size === 6 && required.every(function(key) {
 				return !!baseDashboardData[key];
 			}) && !!ancestriesData;
 			if (baseDashboardReady) {
+				$('#cb1, #cb2').prop('disabled', false);
 				if (window.gwasChartData && !window.gwasDashboardState.isReady()) window.gwasChartData.setSelectionReady(true);
 				$('#funder-filter').prop('disabled', false);
 				$('#dataset-filter').prop('disabled', false);
@@ -171,46 +177,23 @@
 			}
 		}
 
-		function drawBaseHeatMapWhenReady() {
-			if (!heatData || !ancestriesData) return;
-			drawHeatMap(heatData, false, false, ancestriesData);
-			markBaseDashboardReady();
-		}
-
-		function loadPlotJson(name, callback) {
-			let bootstrap = window.__gwasPlotBootstrap;
-			let request = bootstrap.requests[name];
-			function complete(error, data) {
-				if (error && error.status === 409) window.gwasProvenance.markStale();
-				if (!window.gwasProvenance.isCurrent()) {
-					callback(error || new Error(window.gwasProvenance.message));
-					return;
-				}
-				callback(error, data);
-			}
-			if (!request) {
-				d3.json(bootstrap.urls[name], complete);
-				return;
-			}
-
-			request.then(function(result) {
-				if (result.ok) {
-					if (result.response) {
-						result.response.json().then(function(data) {
-							complete(null, data);
-						}, function(error) { complete(error); });
-						return;
-					}
-					complete(null, result.data);
-					return;
-				}
-				if (result.error && result.error.status === 409) {
-					complete(result.error);
-					return;
-				}
-				// Retry through the established d3 callback path on fetch failure.
-				d3.json(bootstrap.urls[name], complete);
-			});
+		function loadDashboardPanel(id, resources, render, retry) {
+			if (panelLoads[id]) return panelLoads[id];
+			window.gwasDashboardHelp.panelState(id, 'loading');
+			panelLoads[id] = Promise.all(resources.map(function(name) { return plotLoader.load(name, retry); }))
+				.then(function(values) {
+					// Release bootstrap-only locks before drawing; chart code then
+					// sets its own year-boundary and selection control states.
+					window.gwasDashboardHelp.panelState(id, 'ready');
+					render.apply(null, values);
+					readyPanels.add(id);
+					markBaseDashboardReady();
+				}).catch(function(error) {
+					window.gwasDashboardHelp.panelState(id, error.status === 409 ? 'stale' : 'error', function() {
+						loadDashboardPanel(id, resources, render, true);
+					});
+				}).finally(function() { delete panelLoads[id]; });
+			return panelLoads[id];
 		}
 
 		function scheduleAfterFirstPaint(callback) {
@@ -238,15 +221,13 @@
 
 		function loadBubbleGraphAfterFirstPaint() {
 			scheduleAfterFirstPaint(function() {
-				loadPlotJson('bubbleGraph', function(error, data) {
-					if (error) return;
+				loadDashboardPanel('bubbleGraph', ['bubbleGraph'], function(data) {
 					bubbleData = data;
 					baseDashboardData.bubbleGraph = data;
 					drawBubbleGraph(
 						'#bubbleGraph', bubbleData,
 						document.getElementById('cb2').checked
 					);
-					markBaseDashboardReady();
 				});
 			});
 		}
@@ -256,44 +237,40 @@
 			initFunderFilter();
 			initDatasetFilter();
 			initDashboardState();
+			plotLoader = GwasDashboardLoading.create(window, window.__gwasPlotBootstrap);
+			window.gwasDashboardHelp.initialise({applyExample: applyDashboardExample});
+			$('#cb1, #cb2').prop('disabled', true);
+			$('#dashboard-filter-retry').on('click', function() {
+				applyDashboardFilters(captureDashboardState()).then(function(success) {
+					if (success) window.gwasDashboardState.settled();
+				});
+			});
 
-			loadPlotJson('tsPlot', (error, data) => {
-				if (error) return;
+			loadDashboardPanel('timeSeries', ['tsPlot'], (data) => {
 				timeseriesData = data;
 				baseDashboardData.tsPlot = data;
 				drawTimeSeries(timeseriesData, '#timeSeries');
-				markBaseDashboardReady();
 			});
-			loadPlotJson('heatMap', (error, data) => {
-				if (error) return;
+			loadDashboardPanel('heatMap', ['heatMap', 'ancestriesOrdered'], (data, ancestries) => {
 				heatData = data;
 				baseDashboardData.heatMap = data;
-				drawBaseHeatMapWhenReady();
+				ancestriesData = ancestries;
+				drawHeatMap(heatData, false, false, ancestriesData);
 			});
-			loadPlotJson('ancestriesOrdered', (error, data) => {
-				if (error) return;
-				ancestriesData = data;
-				drawBaseHeatMapWhenReady();
-			});
-			loadPlotJson('chloroMap', (error, data) => {
-				if (error) return;
+			loadDashboardPanel('worldMap', ['chloroMap'], (data) => {
 				mapData = data;
 				baseDashboardData.chloroMap = data;
 				drawWorldMapChart(mapData, false, false);
-				markBaseDashboardReady();
 			});
-			loadPlotJson('doughnutGraph', (error, data) => {
-				if (error) return;
+			loadDashboardPanel('doughnutGraph', ['doughnutGraph'], (data) => {
 				doughnutData = data;
 				baseDashboardData.doughnutGraph = data;
 				drawDoughnutGraph("#doughnutGraph", doughnutData, false, false);
-				markBaseDashboardReady();
 			});
 
-			loadPlotJson('summary', (error, data) => {
-				if (error) return;
+			loadDashboardPanel('summary', ['summary'], (data) => {
 				baseDashboardData.summary = data;
-				markBaseDashboardReady();
+				updateSummaryFromFunder(data);
 			});
 
 			loadBubbleGraphAfterFirstPaint();
@@ -388,6 +365,7 @@
         function initDashboardState() {
             window.gwasDashboardState = GwasDashboardState.create({
                 capture: captureDashboardState,
+                canShare: function() { return window.gwasChartData.canExport(); },
                 restore: restoreDashboardState,
                 announce: function(message) { $('#dashboard-share-status').text(message); },
                 showLink: function(href) {
@@ -510,7 +488,8 @@
 				cohorts: data.cohorts || '',
 				funders: data.funders || '',
 				stage: data.stage || '',
-				page: data.page || 1
+				page: data.page || 1,
+				datasetId: data.datasetId || window.gwasLoadedProvenance.datasetId || ''
 			});
 		}
 
@@ -554,10 +533,20 @@
 			if (filterOptionRequests.has(key)) {
 				return filterOptionRequests.get(key);
 			}
-			let request = $.ajax(params);
+			let result = $.Deferred();
+			let xhrRequest = $.ajax(params);
+			let request = result.promise();
 			filterOptionRequests.set(key, request);
-			request.done(function(payload) {
-				cacheFilterOptions(key, payload);
+			xhrRequest.done(function(payload, status, xhr) {
+				try {
+					plotLoader.verify(xhr.status, xhr.getResponseHeader('X-GWAS-Dataset-ID'));
+					cacheFilterOptions(key, payload);
+					result.resolve(payload);
+				} catch (error) { result.reject({status: error.status}, 'error', error.message); }
+			});
+			xhrRequest.fail(function(xhr, status, error) {
+				if (xhr.status === 409) window.gwasProvenance.markStale();
+				result.reject(xhr, status, error);
 			});
 			request.always(function() {
 				if (filterOptionRequests.get(key) === request) {
@@ -568,27 +557,38 @@
 		}
 
 		function filterOptionTransport(params, success, failure) {
+			params.data = $.extend({}, params.data);
+			if (window.gwasLoadedProvenance.datasetId) params.data.datasetId = window.gwasLoadedProvenance.datasetId;
+			if (!window.gwasProvenance.isCurrent()) {
+				failure({status: 409}, 'error', window.gwasProvenance.message);
+				return {abort: function() {}};
+			}
+			let active = true;
+			function deliver(payload) {
+				if (!active) return;
+				if (window.gwasProvenance.isCurrent()) success(payload);
+				else failure({status: 409}, 'error', window.gwasProvenance.message);
+			}
 			let key = filterOptionCacheKey(params.url, params.data);
 			if (filterOptionCache.has(key)) {
 				let payload = filterOptionCache.get(key);
 				filterOptionCache.delete(key);
 				filterOptionCache.set(key, payload);
-				setTimeout(function() { success(payload); }, 0);
-				return { abort: function() {} };
+				setTimeout(function() { deliver(payload); }, 0);
+				return { abort: function() { active = false; } };
 			}
 
 			let localPayload = locallyFilteredOptions(
 				params.url, params.data
 			);
 			if (localPayload) {
-				setTimeout(function() { success(localPayload); }, 0);
-				return { abort: function() {} };
+				setTimeout(function() { deliver(localPayload); }, 0);
+				return { abort: function() { active = false; } };
 			}
 
-			let active = true;
 			let request = requestFilterOptions(params, key);
 			request.done(function(payload) {
-				if (active) success(payload);
+				if (active) deliver(payload);
 			});
 			request.fail(function(xhr, status, error) {
 				if (active) failure(xhr, status, error);
@@ -610,6 +610,7 @@
         }
 
         function updateSelectionStatus(selection) {
+            if (selectionFailed) return;
             if (!selection) {
                 $('#funder-status').text('All published GWAS');
                 return;
@@ -641,9 +642,11 @@
         }
 
         function updateSelectionActions(funderEntries, cohortEntries) {
+            $('#dashboard-copy-link').prop('disabled', !window.gwasChartData.canExport());
             let download = $('#funder-data-download');
             let report = $('#funder-report-link');
-            if ((!funderEntries.length && !cohortEntries.length) || !window.gwasProvenance.isCurrent()) {
+            if ((!funderEntries.length && !cohortEntries.length) || !window.gwasProvenance.isCurrent() ||
+                    !window.gwasChartData.canExport()) {
                 download.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 report.removeAttr('href').attr('aria-disabled', 'true').addClass('is-disabled');
                 return;
@@ -664,6 +667,11 @@
         }
 
         window.addEventListener('gwas:viewchange', function() {
+            updateSelectionActions(selectedFilterEntries('#funder-filter'), selectedFilterEntries('#dataset-filter'));
+        });
+        window.addEventListener('gwas:chartdatachanged', function() {
+            let ready = window.gwasChartData.canExport();
+            $('#dashboard-copy-link').prop('disabled', !ready);
             updateSelectionActions(selectedFilterEntries('#funder-filter'), selectedFilterEntries('#dataset-filter'));
         });
 
@@ -777,13 +785,15 @@
                 return true;
             } catch (error) {
                 console.error('Could not render dashboard selection', error);
-                $('#funder-status').text('Could not render this selection');
+                showFilterFailure('Could not render this selection.', true);
                 return false;
             }
         }
 
         function applyDashboardFilters(preservedState) {
             if (!baseDashboardReady || !window.gwasProvenance.isCurrent()) return Promise.resolve(false);
+            selectionFailed = false;
+            $('#dashboard-filter-retry, #dashboard-share-fallback').prop('hidden', true);
             if (window.gwasChartData) window.gwasChartData.setSelectionReady(false);
 			let revision = ++dashboardFilterRevision;
 			let funderSlugs = selectedFilterValues('#funder-filter');
@@ -827,9 +837,8 @@
                     if (dashboardFilterRequest !== request || revision !== dashboardFilterRevision) return;
                     if (status !== 'abort') {
                         let message = xhr.responseJSON && xhr.responseJSON.error;
-                        $('#funder-status').text(
-                            xhr.status === 409 ? window.gwasProvenance.message : (message || 'Could not load this selection')
-                        );
+                        if (xhr.status === 409) $('#funder-status').text(window.gwasProvenance.message);
+                        else showFilterFailure(message || 'Could not load this selection.');
                     }
                 })
                 .always(function() {
@@ -845,6 +854,24 @@
             $('.funder-toolbar')
                 .toggleClass('is-loading', isLoading)
                 .attr('aria-busy', isLoading ? 'true' : 'false');
+            if (!isLoading) window.gwasChartData.changed();
+            let ready = window.gwasChartData.canExport();
+            $('#dashboard-copy-link').prop('disabled', !ready);
+            updateSelectionActions(selectedFilterEntries('#funder-filter'), selectedFilterEntries('#dataset-filter'));
+        }
+
+        function showFilterFailure(message, renderingFailed) {
+            selectionFailed = true;
+            $('#funder-status').text(message + (renderingFailed ? ' Charts may be incomplete.' : ' Previous charts are still shown.') + ' Retry or change the selection.');
+            $('#dashboard-filter-retry').prop('hidden', false);
+        }
+
+        function applyDashboardExample(facet, entry) {
+            if (!baseDashboardReady || !window.gwasProvenance.isCurrent()) return;
+            setDashboardFacet('#funder-filter', facet === 'funder' ? [entry.id] : [], facet === 'funder' ? [entry] : []);
+            setDashboardFacet('#dataset-filter', facet === 'cohort' ? [entry.id] : [], facet === 'cohort' ? [entry] : []);
+            window.gwasDashboardState.changed();
+            applyDashboardFilters();
         }
 
         function syncFilterInputState(select) {
@@ -980,6 +1007,7 @@
         }
 
         function redrawGraph(el) {
+            if (!baseDashboardReady || !window.gwasProvenance.isCurrent()) return;
             if (window.gwasChartData) window.gwasChartData.setSelectionReady(false);
             let switchMetric = document.getElementById('cb1');
             let switchStage = document.getElementById('cb2');

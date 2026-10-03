@@ -131,6 +131,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
         if (associationSwitch.checked) {
             drawDoughnutAssociation(data['doughnut_associations'], currentYear, parentTerm);
         }
+        enhanceDoughnut();
         if (window.gwasChartData) window.gwasChartData.changed('doughnutGraph');
     });
 
@@ -297,8 +298,23 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
                 });
             }
         }
+        enhanceDoughnut();
         if (window.gwasChartData) window.gwasChartData.changed('doughnutGraph');
     };
+
+    enhanceDoughnut();
+
+    function enhanceDoughnut() {
+        if (!window.gwasChartAccessibility) return;
+        window.gwasChartAccessibility.enhanceMarks('doughnutGraph',
+            mainSvg.selectAll('.doughnutPart, .doughnutPartAssociation'), function(row, node) {
+                var isAssociation = node.classList.contains('doughnutPartAssociation');
+                var series = isAssociation ? 'Discovery associations' :
+                    (withMetric ? 'Ancestry records' : 'Participant instances');
+                return currentYear + ', ' + series + ', ' + row.data.value.ancestry + ': '
+                    + Number(row.data.value.value) + '%.';
+            });
+    }
 
     if (window.gwasChartData) window.gwasChartData.register('doughnutGraph', function() {
         var year = currentYear === undefined ? null : Number(currentYear);
@@ -372,6 +388,7 @@ function drawDoughnutGraph(selector, data, withMetric, withStage, preservedState
                 drawDoughnutAssociation(data['doughnut_associations'], currentYear, 'All');
             }
         }
+        enhanceDoughnut();
         if (window.gwasChartData) window.gwasChartData.changed('doughnutGraph');
     }
 

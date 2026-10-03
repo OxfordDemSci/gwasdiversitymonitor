@@ -678,6 +678,14 @@ function drawWorldMapChart(data, withMetric, replication, preservedState) {
         } else {
             drawLegend(colorsForParticipants);
         }
+        if (window.gwasChartAccessibility) {
+            window.gwasChartAccessibility.enhanceMarks('worldMap', svg.selectAll('.countries path')
+                .filter(function(row) { return !!row.country; }), function(row) {
+                    return year + ', ' + row.country + ': '
+                        + Number(withMetric ? row.studies : row.participants).toLocaleString('en-GB')
+                        + (withMetric ? ' ancestry records.' : ' participant instances.');
+                });
+        }
         if (window.gwasChartData) window.gwasChartData.changed('worldMap');
     }
 

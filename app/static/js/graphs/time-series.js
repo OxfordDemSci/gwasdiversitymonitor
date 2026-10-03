@@ -166,6 +166,7 @@ function addGraph(data, svg, width, yAxis, xScale) {
             .enter()
             .append('circle')
             .attr('class', 'dot el ' + slug)
+            .attr('data-ancestry', key)
             .attr('cx', function (d) { return xScale(new Date(d.year)); } )
             .attr('cy', function (d) { return yScale(d.value); } )
             .attr('r', 5)
@@ -183,6 +184,11 @@ function addGraph(data, svg, width, yAxis, xScale) {
                     .style("opacity", 0);
             });
     });
+    if (window.gwasChartAccessibility) {
+        window.gwasChartAccessibility.enhanceMarks('timeSeries', svg.selectAll('circle.dot'), function(row, node) {
+            return node.getAttribute('data-ancestry') + ', ' + row.year + ': ' + Number(row.value) + '%.';
+        });
+    }
 }
 
 function hasTimeSeriesData(data) {
