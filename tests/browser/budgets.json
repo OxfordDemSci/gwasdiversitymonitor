@@ -1,0 +1,10 @@
+{
+  "kind": "synthetic-fixture-regression-guard",
+  "staticEncodedBytes": 850000,
+  "plotEncodedBytes": 12000,
+  "resourceEncodedBytes": 900000,
+  "readyMs": 20000,
+  "maxResourceRequests": 55,
+  "baseline": {"staticEncodedBytes": 733535, "plotEncodedBytes": 3540, "resourceRequests": 41},
+  "note": "Byte budgets apply to a fixed 72-study fixture and shipped assets, not the real Catalog. Readiness is a generous CI hang/regression guard, not a production speed promise."
+}
