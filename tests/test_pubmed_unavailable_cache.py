@@ -37,12 +37,13 @@ class PubMedUnavailableCacheTests(unittest.TestCase):
         cache = self.cache({
             "100": {"grants": [{"agency": "New agency"}]},
             "200": {"grants": []}, "24513584": self.unavailable(),
+            **{str(pmid): {"grants": []} for pmid in range(2000, 2018)},
         })
         self.assertEqual(pipeline.validate_pubmed_cache(cache, list(cache["records"])), cache)
-        self.assertEqual(cache["publicationCount"], 3)
-        self.assertEqual(cache["retrievedPublicationCount"], 2)
+        self.assertEqual(cache["publicationCount"], 21)
+        self.assertEqual(cache["retrievedPublicationCount"], 20)
         self.assertEqual(cache["fundedPublicationCount"], 1)
-        self.assertEqual(cache["unfundedPublicationCount"], 1)
+        self.assertEqual(cache["unfundedPublicationCount"], 19)
         self.assertEqual(cache["unavailablePublicationCount"], 1)
         self.assertEqual(cache["unavailablePublicationIds"], ["24513584"])
         self.assertEqual(cache["grantCount"], 1)
@@ -79,9 +80,10 @@ class PubMedUnavailableCacheTests(unittest.TestCase):
                     pipeline.validate_pubmed_cache(cache, ["1", "2"])
 
     def test_outage_circuit_breaker_requires_retrieved_peer_and_limits_missing_fraction(self):
-        for total, unavailable_count, allowed in ((1, 1, False), (2, 1, True),
-                                                   (100, 2, False), (199, 2, False),
-                                                   (200, 2, True), (300, 3, True)):
+        cases = ((0, 0, False), (1, 0, True), (1, 1, False), (2, 1, False),
+                 (20, 1, False), (21, 1, True), (1000, 49, True),
+                 (1000, 50, False), (1000, 51, False))
+        for total, unavailable_count, allowed in cases:
             records = {str(index): self.unavailable() if index <= unavailable_count
                        else {"grants": []} for index in range(1, total + 1)}
             cache = self.cache(records)
@@ -91,6 +93,19 @@ class PubMedUnavailableCacheTests(unittest.TestCase):
                 else:
                     with self.assertRaisesRegex(ValueError, "unavailable-only|safety limit"):
                         pipeline.validate_pubmed_cache(cache, list(records))
+
+    def test_integer_limit_is_strict_and_has_no_small_catalog_exception(self):
+        for total, allowed_count in ((0, 0), (1, 0), (19, 0), (20, 0),
+                                     (21, 1), (40, 1), (41, 2), (1000, 49)):
+            with self.subTest(total=total):
+                self.assertEqual(pipeline.pubmed_unavailable_limit(total), allowed_count)
+
+    def test_denominator_deduplicates_catalog_pmids(self):
+        records = {str(pmid): {"grants": []} for pmid in range(1, 21)}
+        records['20'] = self.unavailable()
+        cache = self.cache(records)
+        with self.assertRaisesRegex(ValueError, "fewer than 5%"):
+            pipeline.validate_pubmed_cache(cache, list(records) * 10)
 
     def test_unavailable_metadata_is_checked_against_original_catalog_keys(self):
         correct = self.cache({"1": {"grants": []}, "24513584": self.unavailable()})

@@ -78,10 +78,14 @@ batch as unfunded. An individual empty EFetch response is accepted as upstream
 unavailability only when an independent ESummary response names the exact
 requested UID and explicitly reports that its document summary is unavailable.
 A similar title or a different PMID is not sufficient evidence of an alias.
-Rate-limit and transient server
-responses are retried with bounded backoff (respecting `Retry-After`), while
-permanent client errors fail immediately with the HTTP status and affected
-batch. Normal complete batches make no additional requests.
+Rate-limit and transient server responses are retried with bounded backoff
+(respecting `Retry-After`). PubMed can also intermittently return HTTP 400 for
+a valid batch: these requests are retried, then split into smaller batches if
+the HTTP 400 persists. An unresolved single-ID HTTP error still stops generation;
+an HTTP error is never enough to classify a PMID as unavailable. Other permanent
+client errors, such as HTTP 401 or 403, fail immediately. Error logs extract the
+upstream XML error explanation rather than truncating it behind the XML header.
+Normal complete batches make no additional requests.
 
 Cache version 3 retains every original Catalog PMID. Successful records retain
 the existing `grants` list; a verified unavailable record instead carries
@@ -95,8 +99,13 @@ ambiguous empty records still require retrieval.
 Cache metadata and the normalization audit separately report unavailable counts
 and `unavailablePublicationIds`. Unavailable records are excluded from both
 `retrievedPublicationCount` and confirmed no-grant counts. Publication requires
-at least one retrieved record and no more than `max(1, publicationCount // 100)`
-unavailable records, preventing widespread API failures from becoming a release.
+at least one retrieved record and **strictly fewer than 5%** of distinct current
+Catalog PMIDs to be confirmed unavailable. The denominator includes valid cached
+records as well as newly requested PMIDs, not just the current request batch.
+The integer ceiling is `max(0, (publicationCount - 1) // 20)`: exactly 5% fails,
+and there is no one-record exception for small catalogs (20 PMIDs allow zero
+unavailable records; 21 allow one). This prevents widespread API failures from
+becoming a release.
 All other incomplete, ambiguous, or erroneous responses still stop generation
 and leave the last published dataset intact.
 PubMed collection failures retain completed cache batches and do not consume

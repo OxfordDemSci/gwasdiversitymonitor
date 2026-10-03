@@ -105,7 +105,13 @@ class PubMedMissingRecordTests(unittest.TestCase):
         self.assertEqual(cache['records']['456']['grants'][0]['agency'], 'Agency A')
 
     def make_confirmed_unavailable_cache(self):
-        self.catalog(['123', '456'])
+        cached_pmids = [str(pmid) for pmid in range(2000, 2019)]
+        all_pmids = ['123', '456'] + cached_pmids
+        self.catalog(all_pmids)
+        cache = {'version': pipeline.CACHE_VERSION,
+                 'records': {pmid: {'grants': []} for pmid in cached_pmids}}
+        pipeline._set_pubmed_cache_metadata(cache, all_pmids)
+        self.cache_path.write_text(json.dumps(cache))
         session = self.session(
             lambda ids: self.response(content=(self.articles('123') if ',' in ids else self.articles())),
             lambda pmid: self.response(content=self.unavailable_summary(pmid)),
@@ -123,10 +129,10 @@ class PubMedMissingRecordTests(unittest.TestCase):
         self.assertIsNotNone(datetime.datetime.fromisoformat(missing['checkedAt'].replace('Z', '+00:00')).utcoffset())
         self.assertTrue(pipeline.is_pubmed_record_unavailable(missing))
         self.assertFalse(pipeline.is_pubmed_record_unavailable(cache['records']['123']))
-        self.assertEqual(cache['publicationCount'], 2)
-        self.assertEqual(cache['retrievedPublicationCount'], 1)
+        self.assertEqual(cache['publicationCount'], 21)
+        self.assertEqual(cache['retrievedPublicationCount'], 20)
         self.assertEqual(cache['fundedPublicationCount'], 0)
-        self.assertEqual(cache['unfundedPublicationCount'], 1)
+        self.assertEqual(cache['unfundedPublicationCount'], 20)
         self.assertEqual(cache['unavailablePublicationCount'], 1)
         self.assertEqual(cache['unavailablePublicationIds'], ['456'])
         self.assertEqual(json.loads(self.cache_path.read_text()), cache)
@@ -137,9 +143,9 @@ class PubMedMissingRecordTests(unittest.TestCase):
         cache = self.collect(session)
         self.assertEqual(self.requests_to(session, pipeline.NCBI_EFETCH_URL), ['456'])
         self.assertEqual(cache['unavailablePublicationCount'], 0)
-        self.assertEqual(cache['retrievedPublicationCount'], 2)
+        self.assertEqual(cache['retrievedPublicationCount'], 21)
         self.assertEqual(cache['fundedPublicationCount'], 1)
-        self.assertEqual(cache['unfundedPublicationCount'], 1)
+        self.assertEqual(cache['unfundedPublicationCount'], 20)
         self.assertNotIn('retrievalStatus', cache['records']['456'])
 
     def test_summary_must_match_uid_and_exact_document_missing_evidence(self):
@@ -227,19 +233,33 @@ class PubMedMissingRecordTests(unittest.TestCase):
             self.collect(session)
         self.assertFalse(self.cache_path.exists())
 
-    def test_one_percent_ceiling_allows_two_confirmed_ids_among_two_hundred(self):
-        pmids = [str(pmid) for pmid in range(100, 300)]
+    def test_fewer_than_five_percent_allows_49_confirmed_ids_among_one_thousand(self):
+        pmids = [str(pmid) for pmid in range(1000, 2000)]
         self.catalog(pmids)
-        known = pmids[:-2]
+        known = pmids[:-49]
         session = self.session(
             lambda ids: self.response(content=(self.articles(*known) if ',' in ids else self.articles())),
             lambda pmid: self.response(content=self.unavailable_summary(pmid)),
         )
-        cache = self.collect(session, batch_size=200)
-        self.assertEqual(cache['publicationCount'], 200)
-        self.assertEqual(cache['unavailablePublicationCount'], 2)
-        self.assertEqual(cache['retrievedPublicationCount'], 198)
-        self.assertEqual(cache['unfundedPublicationCount'], 198)
+        cache = self.collect(session, batch_size=1000)
+        self.assertEqual(cache['publicationCount'], 1000)
+        self.assertEqual(cache['unavailablePublicationCount'], 49)
+        self.assertEqual(cache['retrievedPublicationCount'], 951)
+        self.assertEqual(cache['unfundedPublicationCount'], 951)
+
+    def test_exactly_five_percent_and_above_are_rejected(self):
+        pmids = [str(pmid) for pmid in range(100, 200)]
+        self.catalog(pmids)
+        for missing_count in (5, 6):
+            with self.subTest(missing_count=missing_count):
+                known = pmids[:-missing_count]
+                session = self.session(
+                    lambda ids: self.response(content=(self.articles(*known) if ',' in ids else self.articles())),
+                    lambda pmid: self.response(content=self.unavailable_summary(pmid)),
+                )
+                with self.assertRaises(pipeline.PubMedCollectionError):
+                    self.collect(session, batch_size=100)
+                self.assertFalse(self.cache_path.exists())
 
     def test_failed_recovery_preserves_existing_cache_bytes(self):
         self.catalog(['123'])
@@ -264,20 +284,23 @@ class PubMedMissingRecordTests(unittest.TestCase):
         with self.assertRaises(pipeline.PubMedCollectionError):
             self.collect(session)
         self.assertEqual(self.requests_to(session, pipeline.NCBI_EFETCH_URL),
-                         ['100,200,300,400,500', '200', '300'])
+                         ['100,200,300,400,500', '200'])
         self.assertFalse(self.cache_path.exists())
 
     def test_old_unknowns_can_recover_later_without_premature_ceiling(self):
-        self.catalog(['100', '200', '300'])
+        cached_pmids = [str(pmid) for pmid in range(2000, 2018)]
+        all_pmids = ['100', '200', '300'] + cached_pmids
+        self.catalog(all_pmids)
         cache = {
             'version': pipeline.CACHE_VERSION,
             'records': {
                 '100': {'grants': []},
                 '200': pipeline.make_unavailable_pubmed_record(),
                 '300': pipeline.make_unavailable_pubmed_record(),
+                **{pmid: {'grants': []} for pmid in cached_pmids},
             },
         }
-        pipeline._set_pubmed_cache_metadata(cache, ['100', '200', '300'])
+        pipeline._set_pubmed_cache_metadata(cache, all_pmids)
         self.cache_path.write_text(json.dumps(cache))
         session = self.session(
             lambda ids: self.response(content=(self.articles('300') if ids == '300' else self.articles())),
@@ -286,7 +309,7 @@ class PubMedMissingRecordTests(unittest.TestCase):
         result = self.collect(session, batch_size=1)
         self.assertEqual(self.requests_to(session, pipeline.NCBI_EFETCH_URL), ['200', '200', '300'])
         self.assertEqual(result['unavailablePublicationIds'], ['200'])
-        self.assertEqual(result['retrievedPublicationCount'], 2)
+        self.assertEqual(result['retrievedPublicationCount'], 20)
 
 
 if __name__ == '__main__':

@@ -113,7 +113,11 @@ version 2's confirmed records, revalidate version 1's ambiguous empty records,
 and write the version 3 cache with explicit unavailable-record accounting;
 subsequent funder-only rebuilds can safely use `--skip-fetch`.
 Normal collection retries explicitly unavailable PMIDs; an offline rebuild
-does not refresh that upstream evidence. See [funding metadata safeguards](DATA_PIPELINE.md#pubmed-funding-metadata).
+does not refresh that upstream evidence. Publication allows confirmed unavailable
+metadata for strictly fewer than 5% of all distinct current Catalog PMIDs,
+including records already cached. Exactly 5% or more still stops publication;
+timeouts and unconfirmed API failures are not counted as missing records.
+See [funding metadata safeguards](DATA_PIPELINE.md#pubmed-funding-metadata).
 
 ## Health and integrity checks
 

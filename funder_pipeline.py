@@ -381,8 +381,8 @@ def make_unavailable_pubmed_record(checked_at=None):
 
 
 def pubmed_unavailable_limit(publication_count):
-    """A small isolated missing record must not hide a service-wide outage."""
-    return max(1, publication_count // 100)
+    """Largest count strictly below 5% of distinct current Catalog PMIDs."""
+    return max(0, (publication_count - 1) // 20)
 
 
 def _valid_pubmed_record(record):
@@ -564,13 +564,25 @@ def validate_pubmed_cache(cache, publication_ids):
     if metadata["unavailablePublicationCount"] > limit:
         raise ValueError(
             "The PubMed funding cache exceeds its unavailable-publication safety limit "
-            f"({metadata['unavailablePublicationCount']} > {limit})"
+            f"({metadata['unavailablePublicationCount']} > {limit}); fewer than 5% "
+            "of distinct Catalog PMIDs may have confirmed unavailable metadata"
         )
     return cache
 
 
 def _response_excerpt(response, limit=200):
     text = getattr(response, "text", "") or ""
+    # EFetch errors put the useful explanation after a long XML declaration
+    # and DOCTYPE. Keep that explanation rather than truncating at the header.
+    if not re.search(r"<!ENTITY\s", text, re.IGNORECASE):
+        try:
+            root = ElementTree.fromstring(text)
+            errors = ["".join(node.itertext()).strip() for node in root.iter()
+                      if node.tag.rsplit("}", 1)[-1].casefold() == "error"]
+            if any(errors):
+                text = "; ".join(error for error in errors if error)
+        except (ElementTree.ParseError, ValueError):
+            pass
     text = re.sub(r"\s+", " ", str(text)).strip()
     if len(text) > limit:
         return text[:limit] + "..."
@@ -596,7 +608,9 @@ def _retry_after_seconds(response):
 
 
 def _retryable_pubmed_status(status_code):
-    return status_code in PUBMED_RETRYABLE_STATUS_CODES \
+    # PubMed can intermittently reject a valid ID batch with HTTP 400; the
+    # same request may succeed on retry. Never interpret that as absent IDs.
+    return status_code == 400 or status_code in PUBMED_RETRYABLE_STATUS_CODES \
         or 500 <= status_code <= 599
 
 
@@ -635,6 +649,8 @@ def _fetch_pubmed_records(session, batch, email, max_retries,
     Only a valid empty single-ID EFetch followed by an explicit matching
     ESummary answer can establish unavailable metadata. HTTP errors, malformed
     bodies, wrong IDs and ordinary batch omissions never establish no funding.
+    Rejected HTTP-400 batches get bounded retries, then smaller requests;
+    persistent single-ID failures still stop collection without inventing data.
     """
     if confirm_unavailable and len(batch) != 1:
         raise ValueError("Unavailable-record confirmation requires exactly one PMID")
@@ -688,6 +704,23 @@ def _fetch_pubmed_records(session, batch, email, max_retries,
                 attempt + 1, max_retries, batch[0], last_error, delay,
             )
             time.sleep(delay)
+    if response is not None and response.status_code == 400 \
+            and len(batch) > 1 and not confirm_unavailable:
+        split = len(batch) // 2
+        LOGGER.warning(
+            "PubMed rejected a %d-PMID batch beginning %s with HTTP 400 "
+            "after %d attempts (%s); retrying as batches of %d and %d. "
+            "No PMID has been marked unavailable because of this error.",
+            len(batch), batch[0], max_retries, last_error, split, len(batch) - split,
+        )
+        recovered = {}
+        for smaller_batch in (batch[:split], batch[split:]):
+            if request_delay:
+                time.sleep(request_delay)
+            recovered.update(_fetch_pubmed_records(
+                session, smaller_batch, email, max_retries, request_delay,
+            ))
+        return recovered
     raise PubMedCollectionError(
         f"PubMed funding request failed after {max_retries} attempts for batch "
         f"beginning {batch[0]}: {last_error}"
@@ -744,7 +777,10 @@ def collect_pubmed_grants(
             # count only this run's evidence until final cache validation.
             if len(confirmed_unavailable) > unavailable_limit:
                 raise PubMedCollectionError(
-                    "Too many unavailable PubMed records; possible upstream outage. "
+                    f"Confirmed unavailable PubMed records reached "
+                    f"{len(confirmed_unavailable)}/{len(publication_ids)}; "
+                    f"publication requires strictly less than 5% "
+                    f"(at most {unavailable_limit} IDs). "
                     "The current batch was not saved."
                 )
         has_retrieved = any(not is_pubmed_record_unavailable(record) for record in parsed.values()) \
@@ -772,6 +808,14 @@ def collect_pubmed_grants(
         _atomic_json(output_path, cache)
 
     validate_pubmed_cache(cache, publication_ids)
+    LOGGER.info(
+        "PubMed funding coverage: %d/%d publications retrieved; %d/%d "
+        "(%.3f%%) confirmed unavailable. Publication requires strictly "
+        "less than 5%% unavailable; unknown funding is not counted as unfunded.",
+        cache["retrievedPublicationCount"], len(publication_ids),
+        cache["unavailablePublicationCount"], len(publication_ids),
+        100.0 * cache["unavailablePublicationCount"] / len(publication_ids),
+    )
     return cache
 
 

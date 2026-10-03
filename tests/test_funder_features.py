@@ -174,12 +174,12 @@ class PubMedFundingTests(unittest.TestCase):
 
     def test_collector_fails_permanent_client_errors_without_retrying(self):
         session = mock.Mock()
-        session.post.return_value = self._response(400, b"invalid request")
+        session.post.return_value = self._response(403, b"forbidden")
         with tempfile.TemporaryDirectory() as directory:
             cache_path = self._write_catalog(directory, ["123"])
             with mock.patch("funder_pipeline.time.sleep") as sleep, \
                     self.assertRaisesRegex(
-                        RuntimeError, "HTTP 400.*batch beginning 123"
+                        RuntimeError, "HTTP 403.*batch beginning 123"
                     ):
                 collect_pubmed_grants(
                     directory, cache_path, request_delay=0,
@@ -1832,13 +1832,16 @@ class FunderArtifactTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             self._write_release(root)
-            pd.DataFrame({'PUBMEDID': ['123', '24513584']}).to_csv(
+            cached_pmids = [str(pmid) for pmid in range(2000, 2019)]
+            all_pmids = ['123', '24513584'] + cached_pmids
+            pd.DataFrame({'PUBMEDID': all_pmids}).to_csv(
                 root / 'catalog/raw/Cat_Stud.tsv', sep='\t', index=False,
             )
             cache_path = root / 'funders/pubmed_grants.json'
             cache = json.loads(cache_path.read_text())
             cache['records']['24513584'] = make_unavailable_pubmed_record()
-            _set_pubmed_cache_metadata(cache, ['123', '24513584'])
+            cache['records'].update({pmid: {'grants': []} for pmid in cached_pmids})
+            _set_pubmed_cache_metadata(cache, all_pmids)
             cache_path.write_text(json.dumps(cache))
             audit = build_funder_normalization_audit(cache, {'Alias': 'Canonical'})
             (root / 'funders/normalization-audit.json').write_text(json.dumps(audit))
@@ -1849,7 +1852,7 @@ class FunderArtifactTests(unittest.TestCase):
             pd.testing.assert_frame_equal(result[['PUBMEDID', 'N']], rows)
             self.assertEqual(result.loc[1, 'FUNDER'], '')
             self.assertEqual(audit['unavailablePublicationIds'], ['24513584'])
-            self.assertEqual(audit['publicationsWithoutGrantListCount'], 1)
+            self.assertEqual(audit['publicationsWithoutGrantListCount'], 20)
 
     def test_release_validator_rejects_stale_normalization_audit(self):
         with tempfile.TemporaryDirectory() as directory:
