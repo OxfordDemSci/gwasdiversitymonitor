@@ -2469,6 +2469,21 @@ def _fingerprints_match(root, fingerprints):
     return True
 
 
+def _runtime_bundle_path(repository_path):
+    """A directory mount survives atomic bundle replacement and recreation."""
+    directory = os.environ.get('GWAS_RUNTIME_DIRECTORY')
+    if directory and not os.path.isabs(directory):
+        raise ValueError('GWAS_RUNTIME_DIRECTORY must be an absolute directory')
+    return os.path.join(directory or repository_path, 'data_static.zip')
+
+
+def _maintained_inputs_path(repository_path):
+    directory = os.environ.get('GWAS_RELEASE_INPUTS')
+    if directory and not os.path.isabs(directory):
+        raise ValueError('GWAS_RELEASE_INPUTS must be an absolute directory')
+    return directory or os.path.join(repository_path, 'data')
+
+
 def _implementation_fingerprints(repository_path):
     implementation_files = (
         'generate_data.py',
@@ -2476,10 +2491,12 @@ def _implementation_fingerprints(repository_path):
         'app/Provenance.py',
         'app/DashboardFilters.py',
         'funder_pipeline.py',
-        'data/funders/funder_cleaner.json',
-        'data/support/cohort_cleaner.json',
     )
-    return _fingerprint_files(repository_path, implementation_files)
+    fingerprints = _fingerprint_files(repository_path, implementation_files)
+    inputs = _maintained_inputs_path(repository_path)
+    for relative in ('funders/funder_cleaner.json', 'support/cohort_cleaner.json'):
+        fingerprints['data/' + relative] = _file_fingerprint(os.path.join(inputs, relative))
+    return fingerprints
 
 
 def _expected_published_files(data_path):
@@ -2725,7 +2742,7 @@ def _completion_state_valid(data_path, repository_path=None,
                 and raw_fingerprints != expected_raw_fingerprints:
             return False
         if repository_path is not None:
-            bundle_path = os.path.join(repository_path, 'data_static.zip')
+            bundle_path = _runtime_bundle_path(repository_path)
             if state.get('static_bundle_fingerprint') != \
                     _file_fingerprint(bundle_path):
                 return False
@@ -2859,7 +2876,7 @@ def _initialize_generation_workspace(repository_path, data_path,
         shutil.rmtree(paths['workspace'])
     os.makedirs(paths['workspace_data'])
 
-    live_bundle = os.path.join(repository_path, 'data_static.zip')
+    live_bundle = _runtime_bundle_path(repository_path)
     if not os.path.isfile(live_bundle):
         raise FileNotFoundError(f'Missing static data bundle: {live_bundle}')
     shutil.copy2(live_bundle, paths['workspace_bundle'])
@@ -2901,7 +2918,7 @@ def _prepare_generation_workspace(repository_path, data_path, ebi_download):
 
 
 def _reset_workspace_for_wrangling(repository_path, paths):
-    live_bundle = os.path.join(repository_path, 'data_static.zip')
+    live_bundle = _runtime_bundle_path(repository_path)
     shutil.copy2(live_bundle, paths['workspace_bundle'])
     input_bundle_fingerprint = _file_fingerprint(live_bundle)
     _safe_extract_static_bundle(
@@ -2992,11 +3009,11 @@ def _run_funder_wrangling(repository_path, data_path, previous_data_path=None):
     """Build funder outputs in the staged release, reusing its PubMed cache."""
     funder_root = os.path.join(data_path, 'funders')
     cleaner_source = funder_pipeline.funder_cleaner_path(
-        os.path.join(repository_path, 'data')
+        _maintained_inputs_path(repository_path)
     )
     cleaner_path = funder_pipeline.funder_cleaner_path(data_path)
     cohort_cleaner_source = cohort_cleaner_path(
-        os.path.join(repository_path, 'data')
+        _maintained_inputs_path(repository_path)
     )
     cohort_cleaner_target = cohort_cleaner_path(data_path)
     cache_path = os.path.join(funder_root, 'pubmed_grants.json')
@@ -3073,7 +3090,7 @@ def _build_completion_state(repository_path, validation,
                             source_state=None):
     if input_static_bundle_fingerprint is None:
         input_static_bundle_fingerprint = _file_fingerprint(
-            os.path.join(repository_path, 'data_static.zip')
+            _runtime_bundle_path(repository_path)
         )
     state = {
         'version': GENERATION_STATE_VERSION,
@@ -3162,7 +3179,7 @@ def _staged_state_valid(paths, repository_path=None):
             return False
         if repository_path is not None:
             current_bundle_fingerprint = _file_fingerprint(
-                os.path.join(repository_path, 'data_static.zip')
+                _runtime_bundle_path(repository_path)
             )
             allowed_bundle_fingerprints = [input_bundle_fingerprint]
             if os.path.isfile(paths['publication']):
@@ -3193,7 +3210,7 @@ def _verified_previous_runtime_fingerprints(repository_path, data_path):
 
     try:
         validation = validate_generated_release(
-            data_path, os.path.join(repository_path, 'data_static.zip')
+            data_path, _runtime_bundle_path(repository_path)
         )
         return {
             relative_path: validation['artifact_fingerprints'][relative_path]
@@ -3366,7 +3383,7 @@ def _publish_staged_release(repository_path, data_path, paths):
 
     _atomic_copy(
         paths['workspace_bundle'],
-        os.path.join(repository_path, 'data_static.zip'),
+        _runtime_bundle_path(repository_path),
         state['static_bundle_fingerprint']
     )
     _atomic_copy(

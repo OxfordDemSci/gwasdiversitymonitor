@@ -1,5 +1,9 @@
 # Operations and deployment
 
+For the opt-in digest-pinned release workflow, health endpoints, protected
+production approval and explicit rollback, see [versioned releases](RELEASES.md).
+The instructions below describe the existing checkout-based Compose path.
+
 This guide defines the operating contract for the Monitor: keep the public
 application available, publish data only as complete validated releases, and
 make failures observable without weakening those guarantees.
@@ -84,8 +88,8 @@ deploy/gwasdiversitymonitor_crontab
 ```
 
 Install it only after adjusting the path and service user for the target host.
-The legacy `deploy/deploy.sh` bootstraps an Ubuntu host but should be reviewed
-before use rather than treated as an unattended, idempotent installer.
+The legacy `deploy/deploy.sh` is disabled and retained as historical notes, not
+an unattended installer. It must not be used to overwrite a working host.
 
 ### Rebuild funder products from the existing PubMed cache
 

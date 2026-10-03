@@ -2,6 +2,9 @@
 # docker container for GWAS flask app with gunicorn wsgi server
 
 FROM python:3.13-slim
+ARG GWAS_BUILD_SHA
+ENV GWAS_BUILD_SHA=$GWAS_BUILD_SHA
+LABEL org.opencontainers.image.revision=$GWAS_BUILD_SHA
 
 WORKDIR /app
 

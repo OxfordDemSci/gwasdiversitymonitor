@@ -1,4 +1,8 @@
 #!/bin/bash
+echo "Legacy bootstrap disabled: review docs/RELEASES.md and docs/OPERATIONS.md instead." >&2
+exit 1
+
+# Historical installation notes below are retained for reference only.
 sudo apt-get update -y
 sudo apt-get upgrade -y
 
@@ -20,9 +24,8 @@ sudo apt-get update && sudo apt-get install -y docker-compose
 # add user to docker group
 sudo usermod -aG docker ubuntu
 
-# crontab to persist read/write access to docker socket
-sudo crontab -e
-# @reboot chmod a+rw /var/run/docker.sock
+# Docker group membership is root-equivalent. Never grant world-write access
+# to /var/run/docker.sock; the managed controller uses narrowly scoped sudo.
 
 
 #---- github ----#

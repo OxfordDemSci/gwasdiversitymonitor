@@ -8,6 +8,7 @@ import json
 import os
 import re
 from urllib.parse import unquote, urlsplit
+from app.Version import application_version
 
 
 MANIFEST_FILE = ".generation_complete.json"
@@ -226,7 +227,9 @@ def published_provenance(data_path):
         result = _cached_manifest(path, stat.st_ino, stat.st_mtime_ns, stat.st_ctime_ns, stat.st_size)
     except OSError:
         result = manifest_provenance({})
-    return copy.deepcopy(result)
+    result = copy.deepcopy(result)
+    result['application'] = application_version()
+    return result
 
 
 def runtime_status(data_root):

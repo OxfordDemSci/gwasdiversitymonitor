@@ -223,6 +223,11 @@ The Monitor extends the earlier scientometric review:
 
 ## Contributing and support
 
+See [browser/performance testing](docs/TESTING.md),
+[accessible dashboard interactions](docs/DASHBOARD_ACCESSIBILITY.md), and
+[versioned releases and monitoring](docs/RELEASES.md) for the tested development
+and opt-in deployment workflows. Shipping code does not automatically deploy it.
+
 Issues and pull requests are welcome through the
 [GitHub repository](https://github.com/OxfordDemSci/gwasdiversitymonitor).
 Changes to classifications, counting rules, or normalisation maps should be

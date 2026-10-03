@@ -1,0 +1,62 @@
+# Standalone image-only deployment. Never layer this over docker-compose.yml.
+services:
+  flask:
+    image: ${GWAS_FLASK_IMAGE:?Use release.py}
+    container_name: gwas_flask
+    command: [gunicorn, --config, gunicorn_config.py, 'wsgi:app']
+    environment:
+      GWAS_DEPLOYMENT_DOMAIN: ${GWAS_DEPLOYMENT_DOMAIN:?Use release.py}
+      GWAS_NOINDEX: ${GWAS_NOINDEX:?Use release.py}
+      GOATCOUNTER_URL: https://stats.gwasdiversitymonitor.com
+    volumes:
+      - ${GWAS_DATA_DIRECTORY:?Use release.py}:/app/data
+    healthcheck:
+      test: [CMD, python3, -c, 'import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/health/ready", timeout=20)']
+      interval: 30s
+      timeout: 25s
+      start_period: 120s
+      retries: 3
+    restart: unless-stopped
+  nginx:
+    image: ${GWAS_NGINX_IMAGE:?Use release.py}
+    container_name: gwas_nginx
+    ports: ['80:80']
+    depends_on:
+      flask:
+        condition: service_healthy
+      goatcounter:
+        condition: service_started
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1/health/ready']
+      interval: 30s
+      timeout: 25s
+      retries: 3
+    restart: unless-stopped
+  goatcounter:
+    image: ${GWAS_GOATCOUNTER_IMAGE:?Pin the existing analytics image digest}
+    container_name: gwas_goatcounter
+    environment:
+      GOATCOUNTER_LISTEN: ':8080'
+    volumes:
+      - goatcounter-data:/home/goatcounter/goatcounter-data
+    restart: unless-stopped
+  data:
+    image: ${GWAS_DATA_IMAGE:?Use release.py}
+    container_name: gwas_data
+    profiles: [jobs]
+    command: [python3, generate_data.py]
+    environment:
+      GWAS_DEPLOYMENT_DOMAIN: ${GWAS_DEPLOYMENT_DOMAIN:?Use release.py}
+      GWAS_RELEASE_INPUTS: /app/release-inputs
+      GWAS_RUNTIME_DIRECTORY: /app/runtime
+      GWAS_LOCAL_MAIL_HOST: 127.0.0.1
+    volumes:
+      - ${GWAS_DATA_DIRECTORY:?Use release.py}:/app/data
+      - ${GWAS_RUNTIME_DIRECTORY_HOST:?Use release.py}:/app/runtime
+      - ${GWAS_LOG_DIRECTORY:?Use release.py}:/app/app/logging
+    network_mode: host
+    restart: 'no'
+volumes:
+  goatcounter-data:
+    external: true
+    name: gwas_goatcounter_data

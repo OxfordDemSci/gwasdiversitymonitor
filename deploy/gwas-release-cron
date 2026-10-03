@@ -1,0 +1,4 @@
+# Install only AFTER the first managed deployment; disable the legacy data cron.
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0 0 * * * root /usr/bin/python3 /opt/gwas-release/release.py data >> /var/log/gwas-data-cron.log 2>&1

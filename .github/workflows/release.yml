@@ -1,0 +1,160 @@
+name: Build and promote an immutable release
+
+on:
+  workflow_dispatch:
+    inputs:
+      deploy_staging:
+        description: Deploy these images to the configured staging environment
+        type: boolean
+        default: false
+      deploy_production:
+        description: After staging, request protected production approval (main only)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: immutable-release
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Refuse unprotected or unintended deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          REF: ${{ github.ref }}
+          STAGING: ${{ inputs.deploy_staging }}
+          PRODUCTION: ${{ inputs.deploy_production }}
+        run: |
+          set -euo pipefail
+          if [ "$PRODUCTION" = true ]; then
+            test "$STAGING" = true
+            test "$REF" = refs/heads/main
+            gh api "repos/$REPOSITORY/environments/production" > "$RUNNER_TEMP/environment.json"
+            jq -e '.can_admins_bypass == false and any(.protection_rules[]; .type == "required_reviewers" and .prevent_self_review == true and (.reviewers | length) > 0)' "$RUNNER_TEMP/environment.json"
+          fi
+          if [ "$STAGING" = true ]; then
+            gh api "repos/$REPOSITORY/environments/staging" > /dev/null
+          fi
+  tests:
+    needs: guard
+    uses: ./.github/workflows/ci.yml
+  images:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      commit: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        id: flask
+        with:
+          context: .
+          file: deploy/flask.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/oxforddemsci/gwasdiversitymonitor-flask:${{ github.sha }}
+          build-args: GWAS_BUILD_SHA=${{ github.sha }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        id: data
+        with:
+          context: .
+          file: deploy/data.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/oxforddemsci/gwasdiversitymonitor-data:${{ github.sha }}
+          build-args: GWAS_BUILD_SHA=${{ github.sha }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        id: nginx
+        with:
+          context: .
+          file: deploy/nginx.Dockerfile
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/oxforddemsci/gwasdiversitymonitor-nginx:${{ github.sha }}
+          build-args: GWAS_BUILD_SHA=${{ github.sha }}
+      - name: Record the exact image digests
+        env:
+          COMMIT: ${{ github.sha }}
+          FLASK: ${{ steps.flask.outputs.digest }}
+          DATA: ${{ steps.data.outputs.digest }}
+          NGINX: ${{ steps.nginx.outputs.digest }}
+        run: |
+          python - <<'PY'
+          import json, os
+          release = {'version': 1, 'commit': os.environ['COMMIT'], 'images': {
+              name: 'ghcr.io/oxforddemsci/gwasdiversitymonitor-' + name + '@' + os.environ[name.upper()]
+              for name in ('flask', 'data', 'nginx')}}
+          with open('release.json', 'w') as stream:
+              json.dump(release, stream, indent=2)
+          PY
+          python deploy/release.py validate release.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: release-${{ github.sha }}
+          path: release.json
+          if-no-files-found: error
+          retention-days: 90
+  staging:
+    if: inputs.deploy_staging
+    needs: images
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-${{ github.sha }}
+      - name: Deploy staging and verify the public commit and job heartbeat
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_DOMAIN: dev.gwasdiversitymonitor.com
+        run: |
+          bash deploy/remote_release.sh release.json
+          python deploy/monitor.py https://dev.gwasdiversitymonitor.com --expected-commit "$GITHUB_SHA"
+  production:
+    if: inputs.deploy_production
+    needs: [images, staging]
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          name: release-${{ github.sha }}
+      - name: Promote the same staged digests and check production
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_DOMAIN: gwasdiversitymonitor.com
+        run: |
+          bash deploy/remote_release.sh release.json
+          python deploy/monitor.py https://gwasdiversitymonitor.com --expected-commit "$GITHUB_SHA"

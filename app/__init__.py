@@ -144,4 +144,14 @@ def versioned_static(filename):
 
     return url_for('static', filename=filename, v=version)
 
+from app.Health import health
+from app.Version import application_version
+app.register_blueprint(health)
+
+
+@app.context_processor
+def release_template_scope():
+    return {'application_version': application_version()}
+
+
 from app import routes
