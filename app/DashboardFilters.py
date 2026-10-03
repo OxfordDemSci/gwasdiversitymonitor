@@ -9,6 +9,7 @@ import unicodedata
 import zipfile
 from collections import OrderedDict, defaultdict
 from pathlib import Path
+from types import MappingProxyType
 
 import pandas as pd
 
@@ -16,7 +17,7 @@ import funder_pipeline
 from app.Provenance import (
     MONITOR_CITATION, SOFTWARE_CITATION, SOURCE_EXPORT_SCOPE, published_provenance,
 )
-from app.DataLoader import FILTER_RUNTIME_FILES, PublishedDataUnavailable
+from app.DataLoader import FILTER_RUNTIME_FILES, GENERATION_STATE_FILE, PublishedDataUnavailable
 
 
 FILTER_SCHEMA_VERSION = 8
@@ -164,6 +165,7 @@ class DashboardFilterStore:
     """Build and cache dashboards for cohort and funder selections."""
 
     CACHE_LIMIT = 4
+    OPTION_CACHE_LIMIT = 32
 
     def __init__(self, data_path="data", use_precomputed=True):
         self.data_path = os.path.abspath(data_path)
@@ -176,6 +178,7 @@ class DashboardFilterStore:
         self._accession_pmids = None
         self._stage_accessions = None
         self._recorded_stage_accessions = None
+        self._recorded_accessions = None
         self._bubble_stage_accessions = None
         self._bubble_accession_row_counts = None
         self._dataset_entries = None
@@ -190,7 +193,7 @@ class DashboardFilterStore:
         self._precomputed_archive = os.path.join(
             self.data_path, PRECOMPUTED_FILTER_ARCHIVE
         ) if use_precomputed else None
-        self._precomputed_options = {}
+        self._option_cache = OrderedDict()
 
     def _build_cache_root(self):
         source_paths = (
@@ -290,11 +293,6 @@ class DashboardFilterStore:
         if not member or not self._precomputed_archive \
                 or not os.path.isfile(self._precomputed_archive):
             return None
-        cache_key = (kind, stage)
-        with self._lock:
-            cached = self._precomputed_options.get(cache_key)
-            if cached is not None:
-                return cached
         try:
             with zipfile.ZipFile(self._precomputed_archive) as archive:
                 payload = json.loads(archive.read(member))
@@ -306,8 +304,6 @@ class DashboardFilterStore:
         except (KeyError, OSError, TypeError, ValueError,
                 zipfile.BadZipFile, json.JSONDecodeError):
             return None
-        with self._lock:
-            self._precomputed_options[cache_key] = entries
         return entries
 
     @staticmethod
@@ -335,11 +331,6 @@ class DashboardFilterStore:
         )
         if not member:
             return None
-        cache_key = (kind, self._normalise_stage(stage), opposite_ids[0])
-        with self._lock:
-            cached = self._precomputed_options.get(cache_key)
-            if cached is not None:
-                return cached
         try:
             with zipfile.ZipFile(self._precomputed_archive) as archive:
                 payload = json.loads(archive.read(member))
@@ -351,8 +342,6 @@ class DashboardFilterStore:
         except (KeyError, OSError, TypeError, ValueError,
                 zipfile.BadZipFile, json.JSONDecodeError):
             return None
-        with self._lock:
-            self._precomputed_options[cache_key] = entries
         return entries
 
     def _load_studies(self):
@@ -532,6 +521,10 @@ class DashboardFilterStore:
             }
         else:
             self._recorded_stage_accessions = dict(self._stage_accessions)
+        # This release-wide union must not be rebuilt for every dropdown option.
+        self._recorded_accessions = frozenset().union(
+            *self._recorded_stage_accessions.values()
+        )
 
     def _ensure_facet_indexes(self):
         with self._lock:
@@ -784,9 +777,7 @@ class DashboardFilterStore:
             "recordedAncestryStudyCount": len(
                 matching & self._recorded_stage_accessions[stage]
             ) if stage else len(
-                matching & frozenset().union(
-                    *self._recorded_stage_accessions.values()
-                )
+                matching & self._recorded_accessions
             ),
         }
 
@@ -827,6 +818,8 @@ class DashboardFilterStore:
         ]
         if unknown:
             raise KeyError(unknown[0])
+        if len(cohort_ids) == 1:
+            return self._dataset_accessions[cohort_ids[0]]
         return frozenset().union(*(
             self._dataset_accessions[cohort_id]
             for cohort_id in cohort_ids
@@ -852,6 +845,8 @@ class DashboardFilterStore:
                         studies["PUBMEDID"].isin(pmids), "STUDY ACCESSION"
                     ].dropna().astype(str)
                 )
+        if len(funder_slugs) == 1:
+            return self._funder_accessions[funder_slugs[0]]
         return frozenset().union(*(
             self._funder_accessions[slug] for slug in funder_slugs
         ))
@@ -871,60 +866,65 @@ class DashboardFilterStore:
             accessions &= self._stage_accessions[stage]
         return accessions
 
-    def cohorts(self, search="", funder_slugs=None, stage=None):
-        funder_slugs = _selection_ids(funder_slugs)
-        stage_name = self._normalise_stage(stage)
-        needle = normalize_cohort_name(search)
-        if not funder_slugs and stage_name:
-            precomputed = self._load_precomputed_options(
-                "cohorts", stage_name
-            )
-            if precomputed is not None:
-                return [
-                    entry.copy() for entry in precomputed
-                    if not needle
-                    or needle in normalize_cohort_name(entry["name"])
-                    or needle in entry["id"].casefold()
-                ]
-        if len(funder_slugs) == 1 and stage_name:
-            precomputed = self._load_precomputed_conditional_options(
-                "cohorts", stage_name, funder_slugs
-            )
-            if precomputed is not None:
-                return [
-                    entry.copy() for entry in precomputed
-                    if not needle
-                    or needle in normalize_cohort_name(entry["name"])
-                    or needle in entry["id"].casefold()
-                ]
-        self._ensure_dataset_index()
-        if not funder_slugs and not stage_name:
-            results = [
-                entry.copy() for entry in self._dataset_entries
-                if not needle
-                or needle in normalize_cohort_name(entry["name"])
-                or needle in entry["id"].casefold()
-            ]
-            results.sort(key=self._entry_sort_key)
-            return results
-        self._ensure_facet_indexes()
-        opposite = self._funder_union(funder_slugs)
-        if stage_name:
-            opposite &= self._stage_accessions[stage_name]
+    def _option_entries(self, kind, opposite_ids, stage):
+        """Cache immutable, complete options; search never changes their scope."""
+        opposite_ids = _selection_ids(opposite_ids)
+        stage = self._normalise_stage(stage)
+        key = (kind, stage, opposite_ids)
+        # Coalesce simultaneous cold requests as well as keeping LRU operations
+        # atomic. Index builders use the same re-entrant lock.
+        with self._lock:
+            cached = self._option_cache.get(key)
+            if cached is not None:
+                self._option_cache.move_to_end(key)
+                return cached
+            entries = None
+            if stage and not opposite_ids:
+                entries = self._load_precomputed_options(kind, stage)
+            elif stage and len(opposite_ids) == 1:
+                entries = self._load_precomputed_conditional_options(
+                    kind, stage, opposite_ids
+                )
+            if entries is None:
+                entries = self._build_option_entries(kind, opposite_ids, stage)
+            cached = tuple(MappingProxyType(dict(entry)) for entry in entries)
+            self._option_cache[key] = cached
+            while len(self._option_cache) > self.OPTION_CACHE_LIMIT:
+                self._option_cache.popitem(last=False)
+            return cached
 
+    def _build_option_entries(self, kind, opposite_ids, stage):
+        if kind == "cohorts":
+            self._ensure_dataset_index()
+            if not opposite_ids and not stage:
+                return sorted(self._dataset_entries, key=self._entry_sort_key)
+            self._ensure_facet_indexes()
+            opposite = self._funder_union(opposite_ids)
+            entries = self._dataset_entries
+            accessions_for = lambda entry: self._dataset_accessions[entry["id"]]
+        else:
+            self._ensure_funder_index()
+            self._ensure_facet_indexes()
+            opposite = self._cohort_union(opposite_ids)
+            entries = self._funder_entries.values()
+            accessions_for = lambda entry: self._funder_union((entry["slug"],))
+        if stage:
+            opposite &= self._stage_accessions[stage]
         results = []
-        for entry in self._dataset_entries:
-            if needle and needle not in normalize_cohort_name(entry["name"]) \
-                    and needle not in entry["id"].casefold():
-                continue
-            matching = self._dataset_accessions[entry["id"]] & opposite
-            if not matching:
-                continue
-            result = entry.copy()
-            result.update(self._counts(matching))
-            results.append(result)
+        for entry in entries:
+            matching = accessions_for(entry) & opposite
+            if matching:
+                result = entry.copy()
+                result.update(self._counts(matching, stage))
+                results.append(result)
         results.sort(key=self._entry_sort_key)
         return results
+
+    def cohorts(self, search="", funder_slugs=None, stage=None):
+        needle = normalize_cohort_name(search)
+        return [dict(entry) for entry in self._option_entries("cohorts", funder_slugs, stage)
+                if not needle or needle in normalize_cohort_name(entry["name"])
+                or needle in entry["id"].casefold()]
 
     def datasets(self, search="", funder_slug=None, stage=None):
         return self.cohorts(search, funder_slug, stage)
@@ -940,49 +940,10 @@ class DashboardFilterStore:
         return self.cohort(dataset_id)
 
     def funders(self, search="", cohort_ids=None, stage=None):
-        cohort_ids = _selection_ids(cohort_ids)
-        stage_name = self._normalise_stage(stage)
         needle = str(search or "").strip().casefold()
-        if not cohort_ids and stage_name:
-            precomputed = self._load_precomputed_options(
-                "funders", stage_name
-            )
-            if precomputed is not None:
-                return [
-                    entry.copy() for entry in precomputed
-                    if not needle
-                    or needle in entry["name"].casefold()
-                    or needle in entry["slug"].casefold()
-                ]
-        if len(cohort_ids) == 1 and stage_name:
-            precomputed = self._load_precomputed_conditional_options(
-                "funders", stage_name, cohort_ids
-            )
-            if precomputed is not None:
-                return [
-                    entry.copy() for entry in precomputed
-                    if not needle
-                    or needle in entry["name"].casefold()
-                    or needle in entry["slug"].casefold()
-                ]
-        self._ensure_funder_index()
-        opposite = self._cohort_union(cohort_ids)
-        if stage_name:
-            opposite &= self._stage_accessions[stage_name]
-
-        results = []
-        for slug, entry in self._funder_entries.items():
-            if needle and needle not in entry["name"].casefold() \
-                    and needle not in slug.casefold():
-                continue
-            matching = self._funder_accessions[slug] & opposite
-            if not matching:
-                continue
-            result = entry.copy()
-            result.update(self._counts(matching))
-            results.append(result)
-        results.sort(key=self._entry_sort_key)
-        return results
+        return [dict(entry) for entry in self._option_entries("funders", cohort_ids, stage)
+                if not needle or needle in entry["name"].casefold()
+                or needle in entry["slug"].casefold()]
 
     def funders_for_dataset(self, dataset_id, stage=None):
         return {
@@ -1551,6 +1512,8 @@ def get_dashboard_filter_store(data_path="data"):
             'being recovered. The previous dashboard remains available; try again shortly.'
         )
     source_paths = (
+        os.path.join(absolute_path, GENERATION_STATE_FILE),
+        os.path.join(absolute_path, PRECOMPUTED_FILTER_ARCHIVE),
         os.path.join(absolute_path, "catalog", "raw", "Cat_Stud.tsv"),
         os.path.join(
             absolute_path, "catalog", "synthetic", "Cat_Anc_wBroader.tsv"
@@ -1562,7 +1525,8 @@ def get_dashboard_filter_store(data_path="data"):
     signature = []
     for path in source_paths:
         try:
-            modified = os.path.getmtime(path)
+            stat = os.stat(path)
+            modified = (stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
         except OSError:
             modified = None
         signature.append((path, modified))

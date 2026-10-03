@@ -1233,6 +1233,115 @@ class DatasetFilterTests(unittest.TestCase):
         self.assertEqual(counts["recordedAncestryStudyCount"], 0)
         self.assertEqual(counts["bubbleStudyCount"], 0)
 
+    def test_option_cache_reuses_complete_scope_across_search_and_returns_copies(self):
+        store = self._store()
+        with mock.patch.object(store, "_counts", wraps=store._counts) as counts:
+            first = store.cohorts("Large", ["wellcome"], "replication")
+            self.assertEqual(counts.call_count, 2)
+            first[0]["studyCount"] = 999
+            all_options = store.cohorts("", "wellcome,wellcome", "replication")
+            self.assertEqual(counts.call_count, 2, "Typing/search must not recount accessions")
+            self.assertEqual({row["id"]: row["studyCount"] for row in all_options},
+                             {"large": 1, "small": 1})
+            self.assertEqual(store.cohorts("small", ["wellcome"], "replication")[0]["id"], "small")
+            self.assertEqual(counts.call_count, 2)
+        cached = store._option_cache[("cohorts", "replication", ("wellcome",))]
+        with self.assertRaises(TypeError):
+            cached[0]["studyCount"] = 5
+        self.assertEqual(store._dataset_entries[0]["studyCount"], 3)
+
+    def test_option_cache_keys_keep_facets_stage_and_sorted_opposite_selections_separate(self):
+        store = self._store()
+        with mock.patch.object(store, "_build_option_entries", wraps=store._build_option_entries) as build:
+            initial = store.cohorts("", ["wellcome", "another"], "discovery")
+            again = store.cohorts("", ["another", "wellcome", "wellcome"], "initial")
+            self.assertEqual(initial, again)
+            self.assertEqual(build.call_count, 1)
+            self.assertEqual(initial[0]["studyCount"], 2)
+            self.assertEqual(store.cohorts("", ["wellcome"], "initial")[0]["studyCount"], 1)
+            self.assertEqual(len(store.cohorts("", ["wellcome"], "replication")), 2)
+            self.assertEqual(store.cohorts("", (), "initial")[0]["studyCount"], 2)
+            self.assertEqual(store.funders("", ["large"], "initial")[0]["studyCount"], 1)
+            self.assertEqual(build.call_count, 5)
+        self.assertEqual(len(store._option_cache), 5)
+
+    def test_option_cache_includes_empty_results_and_evicts_least_recent_context(self):
+        store = self._store()
+        store.OPTION_CACHE_LIMIT = 2
+        with mock.patch.object(store, "_build_option_entries", wraps=store._build_option_entries) as build:
+            self.assertEqual(store.funders("", ["small"], "initial"), [])
+            self.assertEqual(store.funders("well", ["small"], "initial"), [])
+            self.assertEqual(build.call_count, 1)
+            store.cohorts("", ["wellcome"], "initial")
+            store.funders("", ["small"], "discovery")  # Touch the empty context.
+            store.cohorts("", ["wellcome"], "replication")
+            self.assertEqual(len(store._option_cache), 2)
+            self.assertIn(("funders", "initial", ("small",)), store._option_cache)
+            self.assertNotIn(("cohorts", "initial", ("wellcome",)), store._option_cache)
+            store.cohorts("", ["wellcome"], "initial")
+            self.assertEqual(build.call_count, 4)
+
+    def test_precomputed_scoped_options_share_the_bounded_immutable_cache(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        entries = ({"id": "ukb", "name": "UKB", "studyCount": 2, "publicationCount": 1},)
+        with mock.patch.object(store, "_load_precomputed_conditional_options", return_value=entries) as load, \
+                mock.patch.object(store, "_build_option_entries") as live:
+            first = store.cohorts("UK", ["wellcome"], "initial")
+            entries[0]["studyCount"] = 999
+            first[0]["publicationCount"] = 999
+            second = store.cohorts("", ["wellcome", "wellcome"], "discovery")
+            self.assertEqual(second[0]["studyCount"], 2)
+            self.assertEqual(second[0]["publicationCount"], 1)
+            load.assert_called_once_with("cohorts", "initial", ("wellcome",))
+            live.assert_not_called()
+
+    def test_option_recorded_ancestry_counts_follow_the_selected_stage(self):
+        store = self._store()
+        sources = list(store._sources)
+        ancestry = sources[1].copy()
+        ancestry.loc[ancestry["STUDY ACCESSION"].eq("A"), "Broader"] = "In Part Not Recorded"
+        sources[1] = pd.concat([ancestry, pd.DataFrame([{
+            "STUDY ACCESSION": "A", "STAGE": "replication", "Broader": "European",
+        }])], ignore_index=True)
+        store._sources = tuple(sources)
+        initial = store.cohorts("", ["wellcome"], "initial")
+        self.assertEqual(initial[0]["studyCount"], 1)
+        self.assertEqual(initial[0]["recordedAncestryStudyCount"], 0)
+        replication = store.cohorts("large", ["wellcome"], "replication")
+        self.assertEqual(replication[0]["studyCount"], 2)
+        self.assertEqual(replication[0]["recordedAncestryStudyCount"], 2)
+        self.assertEqual(store._counts({"A"})["recordedAncestryStudyCount"], 1)
+
+    def test_recorded_accession_union_is_not_rebuilt_for_each_option_count(self):
+        store = self._store()
+        store._ensure_facet_indexes()
+        class NoRepeatedUnion(dict):
+            def values(self):
+                raise AssertionError("Release-wide ancestry union must be calculated only once")
+        store._recorded_stage_accessions = NoRepeatedUnion(store._recorded_stage_accessions)
+        self.assertEqual(store._counts({"A", "D"})["recordedAncestryStudyCount"], 1)
+        self.assertEqual(store._counts({"B", "C"})["recordedAncestryStudyCount"], 2)
+        self.assertEqual(store._counts({"A", "D"}, "replication")["recordedAncestryStudyCount"], 0)
+
+    def test_live_store_option_cache_invalidates_on_release_or_precomputed_archive_replacement(self):
+        from app import DashboardFilters as filters
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(filters, "_stores", {}):
+            first = filters.get_dashboard_filter_store(directory)
+            self.assertIs(filters.get_dashboard_filter_store(directory), first)
+            manifest = Path(directory) / ".generation_complete.json"
+            manifest.write_text("{}")
+            second = filters.get_dashboard_filter_store(directory)
+            self.assertIsNot(second, first)
+            archive = Path(directory) / PRECOMPUTED_FILTER_ARCHIVE
+            archive.parent.mkdir()
+            archive.write_bytes(b"fixture archive identity")
+            third = filters.get_dashboard_filter_store(directory)
+            self.assertIsNot(third, second)
+            replacement = archive.with_suffix(".replacement")
+            replacement.write_bytes(archive.read_bytes())
+            replacement.replace(archive)
+            self.assertIsNot(filters.get_dashboard_filter_store(directory), third)
+
     def test_small_bubble_subsets_are_embedded_without_large_payloads(self):
         store = self._store()
 

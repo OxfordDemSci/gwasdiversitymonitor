@@ -485,8 +485,8 @@
 			data = data || {};
 			return url + '?' + $.param({
 				search: data.search || data.term || '',
-				cohorts: data.cohorts || '',
-				funders: data.funders || '',
+				cohorts: String(data.cohorts || '').split(',').filter(Boolean).sort().join(','),
+				funders: String(data.funders || '').split(',').filter(Boolean).sort().join(','),
 				stage: data.stage || '',
 				page: data.page || 1,
 				datasetId: data.datasetId || window.gwasLoadedProvenance.datasetId || ''
@@ -556,14 +556,21 @@
 			return request;
 		}
 
-		function filterOptionTransport(params, success, failure) {
+		function filterOptionTransport(params, success, failure, searchDelay) {
 			params.data = $.extend({}, params.data);
 			if (window.gwasLoadedProvenance.datasetId) params.data.datasetId = window.gwasLoadedProvenance.datasetId;
-			if (!window.gwasProvenance.isCurrent()) {
-				failure({status: 409}, 'error', window.gwasProvenance.message);
-				return {abort: function() {}};
-			}
 			let active = true;
+			let timer;
+			let handle = {abort: function() {
+				active = false;
+				clearTimeout(timer);
+			}};
+			if (!window.gwasProvenance.isCurrent()) {
+				timer = setTimeout(function() {
+					if (active) failure({status: 409}, 'error', window.gwasProvenance.message);
+				}, 0);
+				return handle;
+			}
 			function deliver(payload) {
 				if (!active) return;
 				if (window.gwasProvenance.isCurrent()) success(payload);
@@ -574,26 +581,33 @@
 				let payload = filterOptionCache.get(key);
 				filterOptionCache.delete(key);
 				filterOptionCache.set(key, payload);
-				setTimeout(function() { deliver(payload); }, 0);
-				return { abort: function() { active = false; } };
+				timer = setTimeout(function() { deliver(payload); }, 0);
+				return handle;
 			}
 
 			let localPayload = locallyFilteredOptions(
 				params.url, params.data
 			);
 			if (localPayload) {
-				setTimeout(function() { deliver(localPayload); }, 0);
-				return { abort: function() { active = false; } };
+				timer = setTimeout(function() { deliver(localPayload); }, 0);
+				return handle;
 			}
 
-			let request = requestFilterOptions(params, key);
-			request.done(function(payload) {
-				if (active) deliver(payload);
-			});
-			request.fail(function(xhr, status, error) {
-				if (active) failure(xhr, status, error);
-			});
-			return { abort: function() { active = false; } };
+			function send() {
+				let request = requestFilterOptions(params, key);
+				request.done(function(payload) {
+					if (active) deliver(payload);
+				});
+				request.fail(function(xhr, status, error) {
+					if (active) failure(xhr, status, error);
+				});
+			}
+			// Cached options and local searches are immediate. Only debounce
+			// genuinely new typed searches, without delaying dropdown opening.
+			if (searchDelay && params.data.search && !filterOptionRequests.has(key)) {
+				timer = setTimeout(send, searchDelay);
+			} else send();
+			return handle;
 		}
 
         function formattedCount(value, singular, plural) {
@@ -792,6 +806,7 @@
 
         function applyDashboardFilters(preservedState) {
             if (!baseDashboardReady || !window.gwasProvenance.isCurrent()) return Promise.resolve(false);
+            closeDashboardFilterSearches();
             selectionFailed = false;
             $('#dashboard-filter-retry, #dashboard-share-fallback').prop('hidden', true);
             if (window.gwasChartData) window.gwasChartData.setSelectionReady(false);
@@ -889,6 +904,67 @@
                 .attr('aria-describedby', helpId);
         }
 
+        function keepFilterClosedOnRemove(select) {
+            let removing = false;
+            let removalTimer;
+            select.on('select2:clearing select2:unselecting', function() {
+                // Select2 toggles the dropdown after its clear/remove handlers.
+                // Removing a selection should only update the dashboard, not
+                // reopen the search or request another catalogue of options.
+                removing = true;
+                clearTimeout(removalTimer);
+                select.select2('close');
+                removalTimer = setTimeout(function() { removing = false; }, 0);
+            });
+            select.on('select2:opening', function(event) {
+                if (removing) event.preventDefault();
+            });
+        }
+
+        function filterSearchTransport(select) {
+            return function(params, success, failure) {
+                // Select2 can query even when its opening event is prevented,
+                // or when a delayed search outlives a closed dropdown.
+                if (!select.next('.select2-container').hasClass('select2-container--open')) {
+                    return {status: 0, abort: function() {}};
+                }
+                let opposite = select.attr('id') === 'funder-filter' ? '#dataset-filter' : '#funder-filter';
+                function scope() {
+                    return JSON.stringify([activeStageName(), selectedFilterValues(opposite).slice().sort()]);
+                }
+                let requestedScope = scope();
+                function isCurrentSearch() {
+                    return requestedScope === scope() && select.next('.select2-container').hasClass('select2-container--open');
+                }
+                return filterOptionTransport(params, function(payload) {
+                    if (isCurrentSearch()) success(payload);
+                }, function(xhr, status, error) {
+                    if (isCurrentSearch()) failure(xhr, status, error);
+                }, 150);
+            };
+        }
+
+        function clearPendingFilterResults(select) {
+            // Select2 normally keeps old selectable rows below "Searching…".
+            // Those rows may belong to a different funder/cohort or stage.
+            // Decorate the installed adapter so pagination and accessibility
+            // retain Select2's usual behaviour; only fresh queries clear rows.
+            let results = select.data('select2').results;
+            let showLoading = results.showLoading;
+            results.showLoading = function(params) {
+                this.clear();
+                showLoading.call(this, params);
+            };
+        }
+
+        function closeDashboardFilterSearches() {
+            $('#funder-filter, #dataset-filter').each(function() {
+                let select = $(this);
+                select.select2('close');
+                select.data('select2').results.clear();
+            });
+        }
+
         function initFunderFilter() {
             let select = $('#funder-filter');
 			select.select2({
@@ -900,8 +976,7 @@
 					ajax: {
 						url: '/api/funders',
 						dataType: 'json',
-						delay: 150,
-						transport: filterOptionTransport,
+						transport: filterSearchTransport(select),
 						data: function(params) {
 							return {
 								search: params.term || '',
@@ -926,6 +1001,8 @@
 						.find('small').text(optionCountLabel(entry)).end();
 				}
 			});
+			keepFilterClosedOnRemove(select);
+			clearPendingFilterResults(select);
 			select.on(
 				'select2:select select2:unselect select2:clear',
 				function() {
@@ -955,8 +1032,7 @@
 				ajax: {
 					url: '/api/cohorts',
                     dataType: 'json',
-                    delay: 150,
-					transport: filterOptionTransport,
+					transport: filterSearchTransport(select),
                     data: function(params) {
 						return {
 							search: params.term || '',
@@ -981,6 +1057,8 @@
 						.find('small').text(optionCountLabel(entry)).end();
 				}
 			});
+			keepFilterClosedOnRemove(select);
+			clearPendingFilterResults(select);
 			select.on(
 				'select2:select select2:unselect select2:clear',
 				function() {
@@ -1008,6 +1086,7 @@
 
         function redrawGraph(el) {
             if (!baseDashboardReady || !window.gwasProvenance.isCurrent()) return;
+            closeDashboardFilterSearches();
             if (window.gwasChartData) window.gwasChartData.setSelectionReady(false);
             let switchMetric = document.getElementById('cb1');
             let switchStage = document.getElementById('cb2');

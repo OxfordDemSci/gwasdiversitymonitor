@@ -317,10 +317,12 @@
             @include align-items(center);
             @include flex-wrap(wrap);
 
-            span {
+            .option {
               cursor: pointer;
 
               &.all {
+                padding: 0;
+                font: inherit;
                 color: $white;
                 text-transform: uppercase;
                 text-align: center;
@@ -578,7 +580,7 @@
             .ancestry-filter {
               @include justify-content(space-between);
 
-              span {
+              .option {
 
                 &.all {
                   width: 100%;
@@ -648,7 +650,7 @@
             .ancestry-filter {
               @include flex-direction(column);
 
-              span {
+              .option {
 
                 &.all {
                   margin-bottom: 33px;
@@ -757,7 +759,7 @@
 
               @media screen and (max-width: 2222px) {
 
-                span {
+                .option {
 
                   &.btn {
                     min-height: 46px;
@@ -819,7 +821,7 @@
 
       .ancestry-filter {
 
-        span.btn {
+        .option.btn {
           padding: 14px 6px 15px 20px !important;
         }
       }

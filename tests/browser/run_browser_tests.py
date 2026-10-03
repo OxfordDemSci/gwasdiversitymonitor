@@ -18,6 +18,8 @@ import zipfile
 from playwright.sync_api import expect, sync_playwright
 
 from fixture_data import REPOSITORY
+from filter_clear_scenarios import run as run_filter_clear_scenarios
+from facet_count_scenarios import run as run_facet_count_scenarios
 from race_scenarios import run as run_race_scenarios
 
 sys.path.insert(0, str(REPOSITORY / 'scripts/performance'))
@@ -59,6 +61,48 @@ def select_facet(page, selector, term, label):
     search.fill(term)
     page.locator('.select2-results__option[role="option"]').filter(has_text=label).first.click()
     ready(page)
+
+
+def check_ancestry_panel(page, artifacts, check, *, mobile=False):
+    """Keep native ancestry buttons visually equivalent to the original cards."""
+    panel = page.locator('#bubbleGraph .ancestry-filter')
+    panel.screenshot(path=str(artifacts / ('mobile-ancestry.png' if mobile else 'desktop-ancestry.png')))
+    appearance = panel.evaluate("""panel => {
+      const rect = node => { const r = node.getBoundingClientRect();
+        return {width:r.width, height:r.height, left:r.left, right:r.right, centerY:r.y+r.height/2}; };
+      const style = getComputedStyle(panel);
+      const all = panel.querySelector('.option.all'), allStyle = getComputedStyle(all);
+      return {width:panel.clientWidth-parseFloat(style.paddingLeft)-parseFloat(style.paddingRight),
+        all:{...rect(all), color:allStyle.color, transform:allStyle.textTransform, align:allStyle.textAlign},
+        cards:[...panel.querySelectorAll('.option.btn')].map(node => {
+          const s = getComputedStyle(node), dot = node.querySelector('.circle'), d = getComputedStyle(dot);
+          return {...rect(node), background:s.backgroundColor,
+            dot:{...rect(dot), background:d.backgroundColor, radius:d.borderRadius, position:d.position}};
+        })};
+    }""")
+    label = 'mobile' if mobile else 'desktop'
+    cards = appearance['cards']
+    check(len(cards) >= 4 and all(card['background'] == 'rgb(255, 255, 255)' for card in cards),
+          label + ' ancestry controls retain white cards')
+    check(all(abs(card['dot']['width'] - 10) < .5 and abs(card['dot']['height'] - 10) < .5
+              and card['dot']['position'] == 'absolute' and card['dot']['radius'] == '50%'
+              and card['dot']['background'] not in ('transparent', 'rgba(0, 0, 0, 0)') for card in cards),
+          label + ' ancestry color dots remain visible 10px circles')
+    check(appearance['all']['color'] == 'rgb(255, 255, 255)'
+          and appearance['all']['transform'] == 'uppercase' and appearance['all']['align'] == 'center',
+          label + ' View all retains white centered uppercase styling')
+    check(max(card['width'] for card in cards) - min(card['width'] for card in cards) < 2,
+          label + ' ancestry cards have equal widths')
+    if mobile:
+        check(all(abs(card['width'] - .48 * appearance['width']) < 2 for card in cards)
+              and cards[1]['left'] > cards[0]['right']
+              and abs(cards[0]['centerY'] - cards[1]['centerY']) < 2
+              and cards[2]['centerY'] > cards[0]['centerY'] + 10
+              and abs(appearance['all']['width'] - appearance['width']) < 2,
+              '390px ancestry panel retains two columns and full-width View all')
+    else:
+        check(all(abs(card['width'] - appearance['width']) < 2 for card in cards),
+              '1440px ancestry cards fill the sidebar width')
 
 
 def check_zip(download, directory, *, image=None):
@@ -116,6 +160,19 @@ def scenario(browser, base, fixture, artifacts):
         check(not any('/api/' in path or 'dashboard-export.js' in path or 'd3plus-text' in path for path in paths),
               'no eager comparison, facets, metadata coverage, examples, or export library')
         check(metrics['datasetId'] == fixture['datasetId'], 'fixture dataset identity served')
+        check_ancestry_panel(page, artifacts, check)
+        ancestry = page.locator('#bubbleGraph .ancestry-filter .option.btn').first
+        ancestry.focus(); page.keyboard.press('Enter')
+        expect(ancestry).to_have_attribute('aria-pressed', 'false')
+        check(page.locator('#bubbleGraph .ancestry-filter .option.btn[aria-pressed="false"]').count() == 1,
+              'Enter excludes exactly one ancestry')
+        page.locator('#bubbleGraph .ancestry-filter .option.all').focus()
+        page.keyboard.press('Enter')
+        expect(ancestry).to_have_attribute('aria-pressed', 'true')
+        ready(page)
+        check(page.locator('#bubbleGraph .ancestry-filter .option.btn[aria-pressed="false"]').count() == 0
+              and page.evaluate('gwasChartData.snapshot("bubbleGraph").rowCount') == fixture['bubbleRowsPerStage'],
+              'keyboard View all restores every ancestry and the original bubble count')
         check(metrics['bubbleRows'] == fixture['bubbleRowsPerStage'], 'all fixture discovery bubbles plotted')
         check(page.locator('#timeSeriesSVG, #worldMapSVG, #bubbleCanvas, #heatmapSVG, #doughnutSVG').count() == 5,
               'all five chart surfaces render')
@@ -211,6 +268,7 @@ def scenario(browser, base, fixture, artifacts):
         page.wait_for_timeout(400)  # Debounced responsive redraw (180 ms), not network readiness.
         ready(page)
         check(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), '390px mobile viewport has no page overflow')
+        check_ancestry_panel(page, artifacts, check, mobile=True)
         page.locator('[data-chart-table="bubbleGraph"]').click()
         check(page.evaluate('document.getElementById("dashboard-table-dialog").getBoundingClientRect().width <= innerWidth'),
               'mobile table stays within viewport')
@@ -328,6 +386,8 @@ def main():
                         result = scenario(browser, base, fixture, artifacts)
                         result['checks'].extend(failure_scenarios(browser, base, artifacts))
                         result['checks'].extend(run_race_scenarios(browser, base, artifacts))
+                        result['checks'].extend(run_filter_clear_scenarios(browser, base, artifacts))
+                        result['checks'].extend(run_facet_count_scenarios(browser, base, artifacts))
                     finally:
                         browser.close()
                 result['kind'] = 'synthetic-fixture-regression-test'
