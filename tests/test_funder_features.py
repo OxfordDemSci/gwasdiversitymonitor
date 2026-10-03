@@ -1,8 +1,11 @@
 import ast
 import json
+import os
 import tempfile
+import threading
 import unittest
 import zipfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from unittest import mock
 
@@ -753,9 +756,9 @@ class FunderSummaryTests(unittest.TestCase):
 
 
 class DatasetFilterTests(unittest.TestCase):
-    @staticmethod
-    def _store():
-        store = DashboardFilterStore("/tmp/not-used")
+    def _store(self):
+        directory = self.enterContext(tempfile.TemporaryDirectory(prefix="gwas-filter-unit-"))
+        store = DashboardFilterStore(directory)
         store._dataset_entries = [{
             "id": "large", "name": "Large", "studyCount": 3,
             "publicationCount": 3,
@@ -1188,6 +1191,62 @@ class DatasetFilterTests(unittest.TestCase):
             {normalize_cohort_name(name) for name in names}
         ))
 
+    def test_cohort_index_resolves_repeated_tokens_once_without_changing_ids(self):
+        with tempfile.TemporaryDirectory() as directory:
+            store = DashboardFilterStore(directory)
+            store._facet_studies = pd.DataFrame([
+                {"STUDY ACCESSION": str(index), "PUBMEDID": str(index // 2),
+                 "COHORT": value}
+                for index, value in enumerate([
+                    "A+B|UKBB", "A+B|UKBB", "A B|ukb", "A B|ukb",
+                    "UKBB|UKBB", "", None,
+                ])
+            ])
+            with mock.patch("app.DashboardFilters.load_cohort_cleaner",
+                            return_value={"ukbb": "UKB"}), \
+                    mock.patch("app.DashboardFilters.canonical_cohort_name",
+                               wraps=canonical_cohort_name) as canonical:
+                store._ensure_dataset_index()
+            self.assertEqual(canonical.call_count, 4)
+            rows = {row["id"]: row for row in store._dataset_entries}
+            self.assertEqual(rows["a-b"]["name"], "A+B")
+            self.assertEqual(rows["a-b-2"]["name"], "A B")
+            self.assertEqual(rows["ukb"]["studyCount"], 5)
+            self.assertEqual(rows["ukb"]["publicationCount"], 3)
+            self.assertEqual(store._dataset_accessions["ukb"],
+                             frozenset({"0", "1", "2", "3", "4"}))
+
+    def test_study_loader_normalizes_each_distinct_pmid_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            raw = Path(directory) / "catalog" / "raw"
+            raw.mkdir(parents=True)
+            pd.DataFrame({
+                "PUBMED ID": ["123.0", "123.0", " 456 ", "invalid", None],
+                "STUDY ACCESSION": list("ABCDE"),
+                "ASSOCIATION COUNT": [1] * 5,
+            }).to_csv(raw / "Cat_Stud.tsv", sep="\t", index=False)
+            store = DashboardFilterStore(directory)
+            from funder_pipeline import normalize_pmid
+            with mock.patch("app.DashboardFilters.funder_pipeline.normalize_pmid",
+                            wraps=normalize_pmid) as normalize:
+                studies = store._load_studies()
+            self.assertEqual(normalize.call_count, 3)
+            self.assertEqual(studies["PUBMEDID"].tolist(),
+                             ["123", "123", "456", "", ""])
+
+    def test_facet_index_preserves_multiple_and_missing_publication_ids(self):
+        store = DashboardFilterStore("/tmp/not-used")
+        studies = pd.DataFrame({
+            "STUDY ACCESSION": ["A", "A", "B", "C", "D", None],
+            "PUBMEDID": ["123.0", "456", "123.0", "invalid", None, "789"],
+        })
+        ancestry = pd.DataFrame({"STUDY ACCESSION": list("ABCD")})
+        store._set_facet_indexes(studies, ancestry)
+        self.assertEqual(store._accession_pmids,
+                         {"A": frozenset({"123", "456"}),
+                          "B": frozenset({"123"})})
+        self.assertEqual(store._counts({"A", "B", "C", "D"})["publicationCount"], 2)
+
     def test_multi_selection_unions_within_facets_and_intersects_between(self):
         store = self._store()
 
@@ -1295,6 +1354,178 @@ class DatasetFilterTests(unittest.TestCase):
             load.assert_called_once_with("cohorts", "initial", ("wellcome",))
             live.assert_not_called()
 
+    def test_cached_options_do_not_wait_behind_other_scope_index_loading(self):
+        store = self._store()
+        expected = store.cohorts(stage="initial")
+        started, release = threading.Event(), threading.Event()
+        original = store._build_option_entries
+
+        def slow_build(kind, opposite_ids, stage):
+            # Index loading holds this lock. An unrelated warmed scope needs
+            # only the independent, short-lived option-cache lock.
+            with store._lock:
+                started.set()
+                if not release.wait(5):
+                    raise AssertionError("Timed out waiting to release cold index build")
+                return original(kind, opposite_ids, stage)
+
+        with mock.patch.object(store, "_build_option_entries", side_effect=slow_build), \
+                ThreadPoolExecutor(max_workers=2) as executor:
+            cold = executor.submit(store.cohorts, "", ("wellcome",), "initial")
+            try:
+                self.assertTrue(started.wait(2))
+                warm = executor.submit(store.cohorts, "", (), "initial")
+                self.assertEqual(warm.result(timeout=2), expected)
+            finally:
+                release.set()
+            self.assertEqual(cold.result(timeout=2)[0]["studyCount"], 1)
+
+    def test_concurrent_same_scope_options_are_built_once(self):
+        store = self._store()
+        started, release = threading.Event(), threading.Event()
+        original = store._build_option_entries
+
+        def slow_build(*args):
+            started.set()
+            if not release.wait(5):
+                raise AssertionError("Timed out waiting to release option build")
+            return original(*args)
+
+        with mock.patch.object(store, "_build_option_entries", side_effect=slow_build) as build, \
+                ThreadPoolExecutor(max_workers=3) as executor:
+            first = executor.submit(store.cohorts, "", ("wellcome",), "initial")
+            try:
+                self.assertTrue(started.wait(2))
+                second = executor.submit(store.cohorts, "", ("wellcome",), "discovery")
+                third = executor.submit(store.cohorts, "Large", ("wellcome",), "initial")
+            finally:
+                release.set()
+            result = first.result(timeout=2)
+            self.assertEqual(second.result(timeout=2), result)
+            self.assertEqual(third.result(timeout=2), result)
+            self.assertEqual(build.call_count, 1)
+            self.assertIsNot(second.result()[0], result[0])
+        self.assertEqual(store._option_building, set())
+
+    def test_failed_option_build_releases_waiting_scope_for_retry(self):
+        store = self._store()
+        original = store._build_option_entries
+        with mock.patch.object(store, "_build_option_entries",
+                               side_effect=RuntimeError("temporary read failure")):
+            with self.assertRaisesRegex(RuntimeError, "temporary read failure"):
+                store.cohorts(stage="initial")
+        self.assertEqual(store._option_building, set())
+        with mock.patch.object(store, "_build_option_entries", wraps=original) as build:
+            self.assertEqual(store.cohorts(stage="initial")[0]["studyCount"], 2)
+            self.assertEqual(build.call_count, 1)
+
+    def test_four_baseline_lists_are_reused_by_a_fresh_worker_without_indexes(self):
+        store = self._store()
+        expected = {}
+        for kind in ("cohorts", "funders"):
+            for stage in ("initial", "replication"):
+                expected[(kind, stage)] = getattr(store, kind)(stage=stage)
+        other = DashboardFilterStore(store.data_path)
+        with mock.patch.object(other, "_build_option_entries",
+                               side_effect=AssertionError("Must reuse complete baseline cache")), \
+                mock.patch.object(other, "_ensure_facet_indexes",
+                                  side_effect=AssertionError("Must not read source indexes")):
+            for (kind, stage), rows in expected.items():
+                self.assertEqual(getattr(other, kind)(stage=stage), rows)
+        self.assertEqual(len(list(Path(store._cache_root).glob("baseline-options-v1/*.json"))), 4)
+        self.assertIsNone(other._sources)
+        self.assertIsNone(other._dataset_entries)
+        self.assertIsNone(other._funder_entries)
+
+    def test_disk_options_never_cache_arbitrary_selections_searches_or_all_stages(self):
+        store = self._store()
+        with mock.patch.object(store, "_atomic_json", wraps=store._atomic_json) as write:
+            store.cohorts("Large", stage="discovery")
+            store.cohorts("Small", stage="initial")
+            self.assertEqual(write.call_count, 1)
+            store.cohorts("", ["wellcome"], "initial")
+            store.cohorts("", ["wellcome", "another"], "replication")
+            store.funders("", ["large"], "initial")
+            store.cohorts()
+            self.assertEqual(write.call_count, 1)
+
+    def test_corrupt_or_mismatched_baseline_options_are_recomputed(self):
+        store = self._store()
+        expected = store.cohorts(stage="initial")
+        path = Path(store._baseline_option_cache_path("cohorts", (), "initial"))
+        valid = json.loads(path.read_text())
+        invalid = ["{", "null", "[]"]
+        for key, value in (("version", -1), ("filterSchema", -1),
+                           ("kind", "funders"), ("stage", "replication"),
+                           ("entries", {})):
+            changed = dict(valid, **{key: value})
+            invalid.append(json.dumps(changed))
+        for count in ("studyCount", "publicationCount", "recordedAncestryStudyCount"):
+            changed = json.loads(json.dumps(valid))
+            changed["entries"][0][count] = True
+            invalid.append(json.dumps(changed))
+        changed = json.loads(json.dumps(valid))
+        changed["entries"][0]["recordedAncestryStudyCount"] = 999
+        invalid.append(json.dumps(changed))
+        changed = json.loads(json.dumps(valid))
+        changed["entries"].append(changed["entries"][0])
+        invalid.append(json.dumps(changed))
+        for content in invalid:
+            with self.subTest(content=content[:60]):
+                path.write_text(content)
+                store._option_cache.clear()
+                with mock.patch.object(store, "_build_option_entries",
+                                       wraps=store._build_option_entries) as build:
+                    self.assertEqual(store.cohorts(stage="initial"), expected)
+                    build.assert_called_once()
+                self.assertEqual(json.loads(path.read_text()), valid)
+
+    def test_baseline_cache_read_and_write_failures_do_not_break_options(self):
+        store = self._store()
+        path = store._baseline_option_cache_path("cohorts", (), "initial")
+        with mock.patch("builtins.open", side_effect=PermissionError("read-only cache")):
+            self.assertIsNone(store._read_baseline_options(path, "cohorts", "initial"))
+        # Exercise both index-cache and option-cache writes, not just an
+        # already-built index whose cache is no longer consulted.
+        store._dataset_entries = None
+        store._dataset_accessions = None
+        store._facet_studies = store._sources[0].assign(COHORT="Same cohort")
+        with mock.patch.object(store, "_atomic_json",
+                               side_effect=PermissionError("read-only cache")) as write:
+            rows = store.cohorts(stage="initial")
+            self.assertEqual(rows[0]["studyCount"], 2)
+            self.assertEqual(write.call_count, 2)
+        self.assertEqual(store.cohorts(stage="initial"), rows)
+
+    def test_baseline_disk_identity_tracks_atomic_replacements_with_preserved_mtime(self):
+        inputs = (
+            "catalog/raw/Cat_Stud.tsv", "catalog/synthetic/Cat_Anc_wBroader.tsv",
+            "funders/pubmed_grants.json", "funders/funder_cleaner.json",
+            "support/cohort_cleaner.json", ".generation_complete.json",
+            PRECOMPUTED_FILTER_ARCHIVE,
+        )
+        for relative in inputs:
+            with self.subTest(relative=relative), tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(b"old")
+                previous_stat = path.stat()
+                first = DashboardFilterStore(directory, use_precomputed=False)
+                entries = [{"id": "a", "name": "A", "studyCount": 1,
+                            "publicationCount": 1, "recordedAncestryStudyCount": 1}]
+                with mock.patch.object(first, "_build_option_entries", return_value=entries):
+                    first.cohorts(stage="initial")
+                replacement = path.with_name(path.name + ".replacement")
+                replacement.write_bytes(b"new")
+                os.utime(replacement, ns=(previous_stat.st_atime_ns, previous_stat.st_mtime_ns))
+                replacement.replace(path)
+                second = DashboardFilterStore(directory, use_precomputed=False)
+                self.assertNotEqual(second._cache_root, first._cache_root)
+                updated = [dict(entries[0], studyCount=2)]
+                with mock.patch.object(second, "_build_option_entries", return_value=updated) as build:
+                    self.assertEqual(second.cohorts(stage="initial"), updated)
+                    build.assert_called_once()
+
     def test_option_recorded_ancestry_counts_follow_the_selected_stage(self):
         store = self._store()
         sources = list(store._sources)
@@ -1400,6 +1631,26 @@ class DatasetFilterTests(unittest.TestCase):
 
         self.assertEqual(store._funder_pmids["canonical"], frozenset({"123"}))
         self.assertEqual(store._funder_entries["canonical"]["studyCount"], 1)
+
+    def test_funder_publication_count_excludes_absent_pmids_and_deduplicates_accessions(self):
+        with tempfile.TemporaryDirectory() as directory:
+            funders = Path(directory) / "funders"
+            funders.mkdir()
+            (funders / "pubmed_grants.json").write_text(json.dumps({
+                "records": {pmid: {"grants": [{"agency": "Test agency"}]}
+                            for pmid in ["1", "2", "3", "999"]},
+            }))
+            store = DashboardFilterStore(directory)
+            store._set_facet_indexes(pd.DataFrame({
+                "STUDY ACCESSION": ["A", "A", "B", "C", "D"],
+                "PUBMEDID": ["1", "2", "1", "3", "4"],
+            }), pd.DataFrame({"STUDY ACCESSION": list("ABCD")}))
+            store._ensure_funder_index()
+            entry = store._funder_entries["test-agency"]
+            self.assertEqual(entry["studyCount"], 3)
+            self.assertEqual(entry["publicationCount"], 3)
+            self.assertEqual(store._funder_accessions["test-agency"],
+                             frozenset({"A", "B", "C"}))
 
 
 class FunderArtifactTests(unittest.TestCase):

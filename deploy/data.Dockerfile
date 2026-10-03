@@ -16,6 +16,8 @@ RUN pip3 install -r requirements.txt
 COPY data_static.zip data_static.zip
 COPY generate_data.py generate_data.py
 COPY funder_pipeline.py funder_pipeline.py
+COPY upstream_validation.py upstream_validation.py
+COPY generated_data_validation.py generated_data_validation.py
 COPY data/funders/funder_cleaner.json data/funders/funder_cleaner.json
 COPY data/support/cohort_cleaner.json data/support/cohort_cleaner.json
 COPY data/funders/funder_cleaner.json release-inputs/funders/funder_cleaner.json

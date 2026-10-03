@@ -37,6 +37,8 @@ COHORT_NORMALIZATION_AUDIT_FILE = os.path.join(
     "support", "cohort-normalization-audit.json"
 )
 BUBBLE_PAYLOAD_ROW_LIMIT = 5000
+BASELINE_OPTION_CACHE_VERSION = 1
+BASELINE_OPTION_CACHE_MAX_BYTES = 2 * 1024 * 1024
 
 _FACET_OVERVIEW_COUNT_KEYS = (
     "funder_count",
@@ -194,9 +196,16 @@ class DashboardFilterStore:
             self.data_path, PRECOMPUTED_FILTER_ARCHIVE
         ) if use_precomputed else None
         self._option_cache = OrderedDict()
+        # A warm dropdown must not wait for another scope to load large source
+        # indexes. Only same-scope misses wait; index construction remains
+        # protected independently by the store's re-entrant lock.
+        self._option_condition = threading.Condition()
+        self._option_building = set()
 
     def _build_cache_root(self):
         source_paths = (
+            os.path.join(self.data_path, GENERATION_STATE_FILE),
+            os.path.join(self.data_path, PRECOMPUTED_FILTER_ARCHIVE),
             os.path.join(self.data_path, "catalog", "raw", "Cat_Stud.tsv"),
             os.path.join(self.data_path, "catalog", "raw", "Cat_Map.tsv"),
             os.path.join(
@@ -218,7 +227,10 @@ class DashboardFilterStore:
         for path in source_paths:
             try:
                 stat = os.stat(path)
-                signature.append(f"{path}:{stat.st_size}:{stat.st_mtime_ns}")
+                signature.append(
+                    f"{path}:{stat.st_dev}:{stat.st_ino}:{stat.st_size}:"
+                    f"{stat.st_mtime_ns}:{stat.st_ctime_ns}"
+                )
             except OSError:
                 signature.append(f"{path}:missing")
         digest = hashlib.sha256("\n".join(signature).encode()).hexdigest()[:20]
@@ -355,13 +367,74 @@ class DashboardFilterStore:
         )
         if "PUBMED ID" in studies.columns:
             studies = studies.rename(columns={"PUBMED ID": "PUBMEDID"})
-        studies["PUBMEDID"] = studies["PUBMEDID"].map(
-            funder_pipeline.normalize_pmid
-        )
+        studies["PUBMEDID"] = studies["PUBMEDID"].map({
+            value: funder_pipeline.normalize_pmid(value)
+            for value in studies["PUBMEDID"].dropna().unique()
+        }).fillna("")
         studies["ASSOCIATION COUNT"] = pd.to_numeric(
             studies["ASSOCIATION COUNT"], errors="coerce"
         ).fillna(0)
         return studies
+
+    def _baseline_option_cache_path(self, kind, opposite_ids, stage):
+        # Only four fixed, complete lists can be written. Never create a disk
+        # entry for arbitrary selections or searches supplied by a client.
+        if opposite_ids or (kind, stage) not in PRECOMPUTED_FILTER_OPTION_MEMBERS:
+            return None
+        return os.path.join(
+            self._cache_root, "baseline-options-v1", f"{kind}-{stage}.json"
+        )
+
+    @staticmethod
+    def _read_baseline_options(path, kind, stage):
+        if path is None:
+            return None
+        try:
+            with open(path, encoding="utf-8") as source:
+                raw = source.read(BASELINE_OPTION_CACHE_MAX_BYTES + 1)
+            if len(raw) > BASELINE_OPTION_CACHE_MAX_BYTES:
+                return None
+            cached = json.loads(raw)
+            if not isinstance(cached, dict) \
+                    or cached.get("version") != BASELINE_OPTION_CACHE_VERSION \
+                    or cached.get("filterSchema") != FILTER_SCHEMA_VERSION \
+                    or cached.get("kind") != kind or cached.get("stage") != stage \
+                    or not isinstance(cached.get("entries"), list):
+                return None
+            identifiers = set()
+            id_key = "id" if kind == "cohorts" else "slug"
+            for entry in cached["entries"]:
+                if not isinstance(entry, dict) \
+                        or not isinstance(entry.get(id_key), str) \
+                        or not entry[id_key] \
+                        or entry[id_key] in identifiers \
+                        or not isinstance(entry.get("name"), str) \
+                        or not entry["name"]:
+                    return None
+                identifiers.add(entry[id_key])
+                for count in ("studyCount", "publicationCount",
+                              "recordedAncestryStudyCount"):
+                    if type(entry.get(count)) is not int or entry[count] < 0:
+                        return None
+                if entry["recordedAncestryStudyCount"] > entry["studyCount"]:
+                    return None
+            return cached["entries"]
+        except (OSError, ValueError, UnicodeError):
+            return None
+
+    def _write_baseline_options(self, path, kind, stage, entries):
+        if path is None:
+            return
+        try:
+            self._atomic_json(path, {
+                "version": BASELINE_OPTION_CACHE_VERSION,
+                "filterSchema": FILTER_SCHEMA_VERSION,
+                "kind": kind, "stage": stage, "entries": entries,
+            })
+        except OSError:
+            # Derived caches are optional even when the release is read-only,
+            # a disk is full, or an atomic replacement cannot be completed.
+            pass
 
     @staticmethod
     def _entry_sort_key(entry):
@@ -409,6 +482,11 @@ class DashboardFilterStore:
             accession_pmids = defaultdict(set)
             variants = defaultdict(lambda: defaultdict(set))
             cohort_cleaner = load_cohort_cleaner(self.data_path)
+            # Large catalogues repeat the same cohort list for many trait
+            # accessions. Resolve each literal list and token once, retaining
+            # the original row order used to assign stable collision suffixes.
+            cohort_lists = {}
+            cohort_tokens = {}
             for row in studies[
                     ["STUDY ACCESSION", "PUBMEDID", "COHORT"]
             ].itertuples(index=False, name=None):
@@ -418,13 +496,24 @@ class DashboardFilterStore:
                 accession = str(accession)
                 if pmid:
                     accession_pmids[accession].add(str(pmid))
-                for cohort_name in split_cohorts(cohort_value):
-                    cohort_name = canonical_cohort_name(
-                        cohort_name, cohort_cleaner
-                    )
-                    key = normalize_cohort_name(cohort_name)
-                    if key:
-                        variants[key][cohort_name].add(accession)
+                if pd.isna(cohort_value):
+                    continue
+                cohort_value = str(cohort_value)
+                names = cohort_lists.get(cohort_value)
+                if names is None:
+                    names = []
+                    for token in split_cohorts(cohort_value):
+                        resolved = cohort_tokens.get(token)
+                        if resolved is None:
+                            name = canonical_cohort_name(token, cohort_cleaner)
+                            resolved = (normalize_cohort_name(name), name)
+                            cohort_tokens[token] = resolved
+                        if resolved[0]:
+                            names.append(resolved)
+                    names = tuple(names)
+                    cohort_lists[cohort_value] = names
+                for key, cohort_name in names:
+                    variants[key][cohort_name].add(accession)
 
             used_ids = set()
             entries = []
@@ -463,13 +552,16 @@ class DashboardFilterStore:
             self._dataset_entries = entries
             self._dataset_accessions = accessions
             self._dataset_by_id = {entry["id"]: entry for entry in entries}
-            self._atomic_json(cache_path, {
-                "version": FILTER_SCHEMA_VERSION,
-                "entries": entries,
-                "accessions": {
-                    key: sorted(values) for key, values in accessions.items()
-                },
-            })
+            try:
+                self._atomic_json(cache_path, {
+                    "version": FILTER_SCHEMA_VERSION,
+                    "entries": entries,
+                    "accessions": {
+                        key: sorted(values) for key, values in accessions.items()
+                    },
+                })
+            except OSError:
+                pass
 
     def _set_facet_indexes(self, studies, ancestry):
         self._facet_studies = studies
@@ -477,12 +569,16 @@ class DashboardFilterStore:
             studies["STUDY ACCESSION"].dropna().astype(str)
         )
         accession_pmids = defaultdict(set)
+        normalized_pmids = {
+            value: funder_pipeline.normalize_pmid(value)
+            for value in studies["PUBMEDID"].dropna().unique()
+        }
         for accession, pmid in studies[
                 ["STUDY ACCESSION", "PUBMEDID"]
         ].itertuples(index=False, name=None):
             if pd.isna(accession):
                 continue
-            pmid = funder_pipeline.normalize_pmid(pmid)
+            pmid = normalized_pmids.get(pmid, "")
             if pmid:
                 accession_pmids[str(accession)].add(pmid)
         self._accession_pmids = {
@@ -726,10 +822,11 @@ class DashboardFilterStore:
                     slug = f"{base}-{suffix}"
                     suffix += 1
                 used_slugs.add(slug)
+                # Each PMID contributes exactly when it has a catalogue
+                # accession. Rewalking every accession is equivalent but much
+                # slower for publications with thousands of trait studies.
                 matched_pmids = {
-                    pmid for accession in accessions
-                    for pmid in self._accession_pmids.get(accession, ())
-                    if pmid in pmids
+                    pmid for pmid in pmids if pmid in pmid_accessions
                 }
                 entry = {
                     "slug": slug,
@@ -871,13 +968,15 @@ class DashboardFilterStore:
         opposite_ids = _selection_ids(opposite_ids)
         stage = self._normalise_stage(stage)
         key = (kind, stage, opposite_ids)
-        # Coalesce simultaneous cold requests as well as keeping LRU operations
-        # atomic. Index builders use the same re-entrant lock.
-        with self._lock:
+        with self._option_condition:
+            while key in self._option_building:
+                self._option_condition.wait()
             cached = self._option_cache.get(key)
             if cached is not None:
                 self._option_cache.move_to_end(key)
                 return cached
+            self._option_building.add(key)
+        try:
             entries = None
             if stage and not opposite_ids:
                 entries = self._load_precomputed_options(kind, stage)
@@ -885,13 +984,24 @@ class DashboardFilterStore:
                 entries = self._load_precomputed_conditional_options(
                     kind, stage, opposite_ids
                 )
+            baseline_path = self._baseline_option_cache_path(
+                kind, opposite_ids, stage
+            )
+            if entries is None:
+                entries = self._read_baseline_options(baseline_path, kind, stage)
             if entries is None:
                 entries = self._build_option_entries(kind, opposite_ids, stage)
+                self._write_baseline_options(baseline_path, kind, stage, entries)
             cached = tuple(MappingProxyType(dict(entry)) for entry in entries)
-            self._option_cache[key] = cached
-            while len(self._option_cache) > self.OPTION_CACHE_LIMIT:
-                self._option_cache.popitem(last=False)
+            with self._option_condition:
+                self._option_cache[key] = cached
+                while len(self._option_cache) > self.OPTION_CACHE_LIMIT:
+                    self._option_cache.popitem(last=False)
             return cached
+        finally:
+            with self._option_condition:
+                self._option_building.remove(key)
+                self._option_condition.notify_all()
 
     def _build_option_entries(self, kind, opposite_ids, stage):
         if kind == "cohorts":
@@ -1345,7 +1455,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                 archive.writestr(member, json.dumps({
                     "version": FILTER_SCHEMA_VERSION,
                     "entries": entries,
-                }, separators=(",", ":")))
+                }, separators=(",", ":"), allow_nan=False))
                 option_members.append(member)
                 members.append(member)
 
@@ -1373,7 +1483,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                         archive.writestr(member, json.dumps({
                             "version": FILTER_SCHEMA_VERSION,
                             "entries": builder(identifier, stage),
-                        }, separators=(",", ":")))
+                        }, separators=(",", ":"), allow_nan=False))
                         conditional_option_members.append(member)
                         members.append(member)
 
@@ -1384,7 +1494,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                 member = f"{kind}/{identifier}.json"
                 archive.writestr(
                     member,
-                    json.dumps(payload, separators=(",", ":")),
+                    json.dumps(payload, separators=(",", ":"), allow_nan=False),
                 )
                 members.append(member)
                 if progress:
@@ -1407,7 +1517,7 @@ def build_precomputed_filter_archive(data_path="data", output_path=None,
                 "optionMembers": option_members,
                 "conditionalOptionMembers": conditional_option_members,
                 "members": members,
-            }, separators=(",", ":")))
+            }, separators=(",", ":"), allow_nan=False))
         os.replace(temporary, output)
         temporary = None
     finally:

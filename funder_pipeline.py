@@ -48,6 +48,7 @@ BUBBLE_PAYLOAD_COLUMNS = (
 )
 PUBMED_RETRYABLE_STATUS_CODES = frozenset({408, 425, 429})
 PUBMED_MAX_RETRY_DELAY = 120
+PUBMED_GRANT_FIELDS = ("agency", "acronym", "country", "grantId")
 FUNDER_DOWNLOAD_MEMBERS = {
     "studies.tsv", "ancestry.tsv", "bubble_df.csv", "funding.csv"
 }
@@ -231,12 +232,33 @@ def _study_path(data_path):
 
 
 def read_publication_ids(data_path):
-    header = pd.read_csv(_study_path(data_path), sep="\t", nrows=0).columns
-    column = "PUBMEDID" if "PUBMEDID" in header else "PUBMED ID"
+    # Inspect the actual header before pandas can rename duplicate columns.
+    # This runs during collection/validation, never while serving filters.
+    with open(_study_path(data_path), encoding="utf-8-sig", newline="") as source:
+        header = next(csv.reader(source, delimiter="\t"), [])
+    columns = [name for name in header if name.strip() in {
+        "PUBMEDID", "PUBMED ID", "PUBMED_ID",
+    }]
+    if len(columns) != 1:
+        raise ValueError("The study Catalog must have exactly one PubMed ID column")
+    column = columns[0]
     values = pd.read_csv(
-        _study_path(data_path), sep="\t", usecols=[column], dtype=str
+        _study_path(data_path), sep="\t", usecols=[column], dtype=str,
+        encoding="utf-8-sig", keep_default_na=False,
     )[column]
-    return sorted({pmid for pmid in values.map(normalize_pmid) if pmid}, key=int)
+    publications = set()
+    for row_number, value in enumerate(values, 2):
+        if not value.strip():
+            continue
+        pmid = normalize_pmid(value)
+        if not re.fullmatch(r"[1-9][0-9]*", pmid):
+            raise ValueError(
+                f"The study Catalog has an invalid PubMed ID at row {row_number}: {value!r}"
+            )
+        publications.add(pmid)
+    if not publications:
+        raise ValueError("The study Catalog contains no valid PubMed IDs")
+    return sorted(publications, key=int)
 
 
 class PubMedResponseError(ValueError):
@@ -250,77 +272,143 @@ def parse_pubmed_grants(xml_content, requested_ids):
     A requested PMID absent from the response is deliberately not represented,
     allowing the collector to retry rather than cache an ambiguous empty row.
     """
-    requested = {
-        pmid for pmid in map(normalize_pmid, requested_ids) if pmid
-    }
+    requested = set()
+    for value in requested_ids:
+        pmid = normalize_pmid(value)
+        if not re.fullmatch(r"[1-9][0-9]*", pmid):
+            raise PubMedResponseError(f"Cannot request an invalid PubMed ID: {value!r}")
+        requested.add(pmid)
+    # PubMed's normal external DOCTYPE is harmless here (ElementTree does not
+    # fetch it), but custom entity declarations are not publication metadata.
+    entity_pattern = rb"<!ENTITY\s" if isinstance(xml_content, bytes) else r"<!ENTITY\s"
+    if re.search(entity_pattern, xml_content, flags=re.IGNORECASE):
+        raise PubMedResponseError("PubMed response contains an unexpected XML entity declaration")
     root = ElementTree.fromstring(xml_content)
 
-    error_nodes = []
-    if root.tag.rsplit("}", 1)[-1].casefold() == "error":
-        error_nodes.append(root)
-    error_nodes.extend(root.findall(".//ERROR"))
-    error_nodes.extend(root.findall(".//Error"))
+    error_nodes = [node for node in root.iter()
+                   if node.tag.rsplit("}", 1)[-1].casefold() == "error"]
     errors = [
         re.sub(r"\s+", " ", "".join(node.itertext())).strip()
         for node in error_nodes
-        if "".join(node.itertext()).strip()
     ]
-    if errors:
+    if error_nodes:
         raise PubMedResponseError(
-            "PubMed API returned an error: " + "; ".join(errors[:3])
+            "PubMed API returned an error: " + "; ".join(
+                message or "unspecified error" for message in errors[:3]
+            )
         )
+    if root.tag not in ("PubmedArticleSet", "PubmedBookArticleSet"):
+        raise PubMedResponseError(f"PubMed response has an unexpected root element: {root.tag}")
+    critical_elements = {
+        name.casefold(): name for name in (
+            "PubmedArticle", "PubmedBookArticle", "MedlineCitation",
+            "BookDocument", "PMID", "Article", "Book", "GrantList",
+            "Grant", "Agency", "Acronym", "Country", "GrantID",
+        )
+    }
+    for node in root.iter():
+        expected_name = critical_elements.get(node.tag.rsplit("}", 1)[-1].casefold())
+        if expected_name and node.tag != expected_name:
+            raise PubMedResponseError(
+                f"PubMed response has an unsupported namespace or spelling for {expected_name}"
+            )
 
     records = {}
-    articles = list(root.findall(".//PubmedArticle"))
-    articles.extend(root.findall(".//PubmedBookArticle"))
-    for article in articles:
-        pmid_node = article.find("./MedlineCitation/PMID")
-        if pmid_node is None:
-            pmid_node = article.find("./BookDocument/PMID")
-        if pmid_node is None:
-            continue
+    for article in root:
+        if article.tag not in ("PubmedArticle", "PubmedBookArticle"):
+            raise PubMedResponseError(f"PubMed response has an unexpected record element: {article.tag}")
+        is_book = article.tag == "PubmedBookArticle"
+        citation_name = "BookDocument" if is_book else "MedlineCitation"
+        citations = article.findall(citation_name)
+        if len(citations) != 1:
+            raise PubMedResponseError(f"PubMed record must contain one {citation_name}")
+        citation = citations[0]
+        pmid_nodes = citation.findall("PMID")
+        body_name = "Book" if is_book else "Article"
+        if len(pmid_nodes) != 1 or len(citation.findall(body_name)) != 1:
+            raise PubMedResponseError(f"PubMed {citation_name} is missing or duplicates its PMID/{body_name} body")
+        pmid_node = pmid_nodes[0]
         pmid = normalize_pmid(pmid_node.text)
-        if not pmid or pmid not in requested:
-            continue
-        record = records.setdefault(pmid, {"grants": []})
-        seen = {
-            tuple(item.get(key, "") for key in (
-                "agency", "acronym", "country", "grantId"
-            ))
-            for item in record["grants"]
-        }
-        for grant in article.findall(".//GrantList/Grant"):
-            item = {
-                "agency": (grant.findtext("Agency") or "").strip(),
-                "acronym": (grant.findtext("Acronym") or "").strip(),
-                "country": (grant.findtext("Country") or "").strip(),
-                "grantId": (grant.findtext("GrantID") or "").strip(),
-            }
-            signature = tuple(item.values())
-            if signature not in seen and any(item.values()):
-                record["grants"].append(item)
-                seen.add(signature)
+        if list(pmid_node) or not re.fullmatch(r"[1-9][0-9]*", pmid):
+            raise PubMedResponseError("PubMed record contains an invalid PMID")
+        if pmid not in requested:
+            raise PubMedResponseError(f"PubMed response returned an unrequested PMID: {pmid}")
+        if pmid in records:
+            raise PubMedResponseError(f"PubMed response returned a duplicate PMID: {pmid}")
+        record = {"grants": []}
+        seen = set()
+        for grant_list in article.findall(".//GrantList"):
+            for grant in grant_list:
+                if grant.tag != "Grant":
+                    raise PubMedResponseError(f"PubMed GrantList for {pmid} has an unexpected element: {grant.tag}")
+                item = {}
+                for key, element_name in zip(PUBMED_GRANT_FIELDS, ("Agency", "Acronym", "Country", "GrantID")):
+                    elements = grant.findall(element_name)
+                    if len(elements) > 1:
+                        raise PubMedResponseError(f"PubMed grant for {pmid} duplicates {element_name}")
+                    item[key] = "".join(elements[0].itertext()).strip() if elements else ""
+                if not any(item.values()):
+                    raise PubMedResponseError(f"PubMed grant for {pmid} contains no recognised grant information")
+                signature = tuple(item.values())
+                if signature not in seen:
+                    record["grants"].append(item)
+                    seen.add(signature)
+        records[pmid] = record
     return records
 
 
 def _valid_pubmed_record(record):
     return isinstance(record, dict) \
         and isinstance(record.get("grants"), list) \
-        and all(isinstance(grant, dict) for grant in record["grants"])
+        and all(
+            isinstance(grant, dict)
+            and all(isinstance(grant.get(key, ""), str) for key in PUBMED_GRANT_FIELDS)
+            and any(grant.get(key, "").strip() for key in PUBMED_GRANT_FIELDS)
+            for grant in record["grants"]
+        )
+
+
+def _pubmed_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate PubMed cache JSON key: {key!r}")
+        result[key] = value
+    return result
+
+
+def _invalid_pubmed_json_constant(value):
+    raise ValueError(f"Invalid PubMed cache JSON constant: {value}")
 
 
 def _load_pubmed_cache_for_collection(path):
-    raw = _load_json(path, {})
-    raw_records = raw.get("records", {}) if isinstance(raw, dict) else {}
-    if not isinstance(raw_records, dict):
-        raw_records = {}
-
-    version = raw.get("version") if isinstance(raw, dict) else None
+    try:
+        with open(path, encoding="utf-8") as source:
+            raw = json.load(source, object_pairs_hook=_pubmed_json_object,
+                            parse_constant=_invalid_pubmed_json_constant)
+    except FileNotFoundError:
+        return {"version": CACHE_VERSION, "records": {}}, True
+    except (OSError, ValueError) as error:
+        raise ValueError(f"Cannot safely read PubMed funding cache {path}: {error}") from error
+    if not isinstance(raw, dict) or not isinstance(raw.get("records"), dict):
+        raise ValueError("The PubMed funding cache records are invalid; the existing file was not replaced")
+    raw_records = raw["records"]
+    version = raw.get("version")
+    if type(version) is not int or version not in (1, CACHE_VERSION):
+        raise ValueError(f"Unsupported PubMed funding cache version {version!r}; the existing file was not replaced")
     records = {}
     unverified_empty_count = 0
+    invalid_records = []
+    seen_pmids = set()
     for raw_pmid, record in raw_records.items():
         pmid = normalize_pmid(raw_pmid)
-        if not pmid or not _valid_pubmed_record(record):
+        if not re.fullmatch(r"[1-9][0-9]*", pmid):
+            raise ValueError(f"The PubMed funding cache has an invalid PMID key: {raw_pmid!r}")
+        if pmid in seen_pmids:
+            raise ValueError(f"The PubMed funding cache contains colliding PMID aliases: {pmid}")
+        seen_pmids.add(pmid)
+        if not _valid_pubmed_record(record):
+            invalid_records.append(pmid)
             continue
         if version == 1 and not record["grants"]:
             # Version 1 could not distinguish a returned no-grant article from
@@ -337,9 +425,10 @@ def _load_pubmed_cache_for_collection(path):
             CACHE_VERSION,
             unverified_empty_count,
         )
-    elif version != CACHE_VERSION and version is not None:
+    if invalid_records:
         LOGGER.warning(
-            "Ignoring unsupported PubMed funding cache version %r", version
+            "Revalidating %d invalid PubMed funding cache records (PMIDs: %s)",
+            len(invalid_records), ", ".join(invalid_records[:10]),
         )
 
     cache = {"version": CACHE_VERSION, "records": records}
@@ -373,14 +462,15 @@ def _set_pubmed_cache_metadata(cache, publication_ids):
 
 def validate_pubmed_cache(cache, publication_ids):
     """Require a valid returned record for every current Catalog PMID."""
-    if not isinstance(cache, dict) or cache.get("version") != CACHE_VERSION:
+    if not isinstance(cache, dict) or type(cache.get("version")) is not int \
+            or cache.get("version") != CACHE_VERSION:
         raise ValueError("The PubMed funding cache has an invalid version")
     records = cache.get("records")
     if not isinstance(records, dict):
         raise ValueError("The PubMed funding cache records are invalid")
     invalid_keys = [
         str(pmid) for pmid in records
-        if not isinstance(pmid, str) or normalize_pmid(pmid) != pmid
+        if not isinstance(pmid, str) or not re.fullmatch(r"[1-9][0-9]*", pmid)
     ]
     if invalid_keys:
         raise ValueError(
@@ -414,7 +504,8 @@ def validate_pubmed_cache(cache, publication_ids):
 
     metadata = _pubmed_cache_metadata(cache, sorted(expected, key=int))
     mismatched = [
-        key for key, value in metadata.items() if cache.get(key) != value
+        key for key, value in metadata.items()
+        if type(cache.get(key)) is not int or cache.get(key) != value
     ]
     if mismatched:
         raise ValueError(
@@ -437,7 +528,8 @@ def _retry_after_seconds(response):
     if value is None:
         return None
     try:
-        return max(0.0, float(value))
+        seconds = float(value)
+        return max(0.0, seconds) if math.isfinite(seconds) else None
     except (TypeError, ValueError):
         try:
             retry_at = parsedate_to_datetime(value)
@@ -469,12 +561,13 @@ def _pubmed_http_error(response, batch):
 def collect_pubmed_grants(
         data_path, output_path, email=None, batch_size=DEFAULT_BATCH_SIZE,
         request_delay=0.36, max_retries=4, session=None):
-    if batch_size < 1:
+    if type(batch_size) is not int or batch_size < 1:
         raise ValueError("PubMed batch_size must be at least 1")
-    if max_retries < 1:
+    if type(max_retries) is not int or max_retries < 1:
         raise ValueError("PubMed max_retries must be at least 1")
-    if request_delay < 0:
-        raise ValueError("PubMed request_delay cannot be negative")
+    if isinstance(request_delay, bool) or not isinstance(request_delay, (int, float)) \
+            or not math.isfinite(request_delay) or request_delay < 0:
+        raise ValueError("PubMed request_delay must be finite and nonnegative")
 
     publication_ids = read_publication_ids(data_path)
     cache, cache_changed = _load_pubmed_cache_for_collection(output_path)
@@ -2224,6 +2317,9 @@ def funder_artifact_files(data_path):
 
 def validate_funder_artifacts(data_path):
     """Validate all generated funder artifacts before release publication."""
+    # Keep deep decoding checks out of the runtime report/filter helpers.
+    from generated_data_validation import read_generated_json
+
     relative_paths = funder_artifact_files(data_path)
     for relative_path in relative_paths:
         path = os.path.join(data_path, relative_path)
@@ -2232,13 +2328,13 @@ def validate_funder_artifacts(data_path):
                 f"Missing or empty funder artifact: {path}"
             )
 
-    cleaner = _load_json(funder_cleaner_path(data_path), None)
+    cleaner = read_generated_json(funder_cleaner_path(data_path))
     if not isinstance(cleaner, dict) or not cleaner or not all(
             isinstance(alias, str) and isinstance(canonical, str)
             for alias, canonical in cleaner.items()):
         raise ValueError("The funder normalization configuration is invalid")
 
-    audit = _load_json(funder_normalization_audit_path(data_path), None)
+    audit = read_generated_json(funder_normalization_audit_path(data_path))
     if not isinstance(audit, dict) \
             or audit.get("version") != FUNDER_NORMALIZATION_AUDIT_VERSION \
             or not isinstance(audit.get("generatedAt"), str) \
@@ -2261,8 +2357,8 @@ def validate_funder_artifacts(data_path):
             ):
         raise ValueError("The funder normalization audit is invalid")
 
-    cache = _load_json(
-        os.path.join(data_path, "funders", "pubmed_grants.json"), None
+    cache = read_generated_json(
+        os.path.join(data_path, "funders", "pubmed_grants.json")
     )
     publication_ids = read_publication_ids(data_path)
     validate_pubmed_cache(cache, publication_ids)
@@ -2279,15 +2375,15 @@ def validate_funder_artifacts(data_path):
             "The funder normalization audit differs from the PubMed cache"
         )
 
-    index = _load_json(
-        os.path.join(data_path, "funders", "index.json"), None
+    index = read_generated_json(
+        os.path.join(data_path, "funders", "index.json")
     )
     for entry in index["funders"]:
         slug = entry["slug"]
         dashboard_path = os.path.join(
             data_path, "funders", "dashboards", f"{slug}.json"
         )
-        dashboard = _load_json(dashboard_path, None)
+        dashboard = read_generated_json(dashboard_path)
         required = {
             "version", "funder", "bubbleGraph", "tsPlot", "heatMap",
             "chloroMap", "doughnutGraph", "summary", "report",

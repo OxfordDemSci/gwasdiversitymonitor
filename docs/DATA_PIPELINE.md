@@ -179,6 +179,42 @@ The process returns one of three successful states internally:
 
 ## Transactional publication and recovery
 
+### Upstream input safeguards
+
+Validation runs in the data-generation job, before publication—not on page
+loads, dropdown searches, or filter requests. The published payload format,
+filter semantics, and application appearance are unchanged.
+
+Catalog inputs are checked for ambiguous headers, missing required columns,
+empty tables, malformed records, invalid identifiers/dates/stages, and invalid
+supplied counts. Counts must be finite, nonnegative integers within the
+supported range; they are never repaired by truncation or silently converted
+to zero. Existing missing participant-count markers (blank, `NA`, `N/A`, `NR`)
+remain supported and their number is logged. Additional optional columns and
+new funder/cohort names remain allowed. Conflicting duplicate study accessions
+fail validation; identical duplicate rows are reported without rewriting them.
+
+Downloads use temporary files and reject empty/truncated HTTP bodies, ambiguous
+ZIP contents, and oversized downloads or expanded TSVs. The default per-file
+limit is 8 GiB; set `GWAS_CATALOG_MAX_DOWNLOAD_BYTES` to a larger positive integer
+when a genuine future release requires it. PubMed responses must contain valid,
+uniquely identified article/book records. A missing GrantList remains valid;
+an incomplete or malformed record must not become a confirmed absence of funding.
+Unreadable or unsupported cache formats are not silently overwritten.
+
+Generated JSON is checked for duplicate keys, non-finite numbers, required chart
+structures, and valid dictionary-encoded row references. Legitimate empty stages
+and existing missing-value markers remain supported. Both validation modules are
+included in generation fingerprints, so a previous staging checkpoint cannot
+bypass updated checks.
+
+A rejected update leaves the last published release available. Review the
+generator's error and the staged input before retrying; do not delete live data
+to make a failed update pass. These checks add background generation work, not
+request-time validation or extra browser downloads.
+
+### Publication boundary
+
 Generation takes place under `data/.generate_data/workspace/`; incomplete work
 is never presented as the active release. Before promotion, required files are
 checked for existence, structure, size, and SHA-256 fingerprint.

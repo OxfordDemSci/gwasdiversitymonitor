@@ -7,6 +7,7 @@
     <script defer src="{{ versioned_static('js/dashboard-state.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-provenance.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-loading.js') }}"></script>
+    <script defer src="{{ versioned_static('js/dashboard-filter-options.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-help.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-chart-data.js') }}"></script>
     <script defer src="{{ versioned_static('js/dashboard-table.js') }}"></script>
@@ -233,6 +234,7 @@
 		}
 
         document.addEventListener('DOMContentLoaded', function() {
+            facetOptionPages = GwasFilterOptions.create(50);
 			setDescription();
 			initFunderFilter();
 			initDatasetFilter();
@@ -428,6 +430,8 @@
 		const filterOptionCache = new Map();
 		const filterOptionCacheLimit = 12;
 		const filterOptionRequests = new Map();
+        let facetOptionPages;
+        const facetWidthEntries = new WeakMap();
 
         function cachedDashboardFilter(query) {
             if (!dashboardFilterCache.has(query)) return null;
@@ -556,7 +560,7 @@
 			return request;
 		}
 
-		function filterOptionTransport(params, success, failure, searchDelay) {
+		function filterOptionTransport(params, success, failure, searchDelay, pageCatalogue) {
 			params.data = $.extend({}, params.data);
 			if (window.gwasLoadedProvenance.datasetId) params.data.datasetId = window.gwasLoadedProvenance.datasetId;
 			let active = true;
@@ -571,17 +575,62 @@
 				}, 0);
 				return handle;
 			}
-			function deliver(payload) {
+			function deliver(payload, completeCatalogue) {
 				if (!active) return;
-				if (window.gwasProvenance.isCurrent()) success(payload);
+				if (window.gwasProvenance.isCurrent()) {
+                    success(pageCatalogue && completeCatalogue
+                        ? facetOptionPages.page(payload, params.data.page) : payload);
+                }
 				else failure({status: 409}, 'error', window.gwasProvenance.message);
 			}
-			let key = filterOptionCacheKey(params.url, params.data);
+
+            let key = filterOptionCacheKey(params.url, params.data);
+            if (pageCatalogue) {
+                // The API supplies complete single-scope catalogues. Reuse
+                // their first response for every scroll page and typed search,
+                // but only hand Select2 the next 50 rows to put in the DOM.
+                let firstPageData = $.extend({}, params.data, {page: 1});
+                let completeKey = filterOptionCacheKey(params.url, firstPageData);
+                let catalogue = filterOptionCache.get(completeKey);
+                let search = '';
+                if (!GwasFilterOptions.complete(catalogue)) {
+                    completeKey = filterOptionCacheKey(params.url, $.extend({}, firstPageData, {search: '', term: ''}));
+                    catalogue = filterOptionCache.get(completeKey);
+                    search = params.data.search || params.data.term || '';
+                }
+                if (GwasFilterOptions.complete(catalogue)) {
+                    filterOptionCache.delete(completeKey);
+                    filterOptionCache.set(completeKey, catalogue);
+                    timer = setTimeout(function() {
+                        if (active) deliver(facetOptionPages.page(catalogue, params.data.page, search));
+                    }, 0);
+                    return handle;
+                }
+                let pendingCatalogue = filterOptionRequests.get(completeKey);
+                if (pendingCatalogue) {
+                    // Typing while the full list is arriving should not start
+                    // a second count calculation. Partial server pages still
+                    // fall back to their own search/pagination request.
+                    pendingCatalogue.done(function(payload) {
+                        if (!active) return;
+                        if (GwasFilterOptions.complete(payload)) {
+                            deliver(facetOptionPages.page(payload, params.data.page, search));
+                        } else if (key === completeKey) deliver(payload);
+                        else send();
+                    });
+                    pendingCatalogue.fail(function(xhr, status, error) {
+                        if (!active) return;
+                        if (key === completeKey) failure(xhr, status, error);
+                        else send();
+                    });
+                    return handle;
+                }
+            }
 			if (filterOptionCache.has(key)) {
 				let payload = filterOptionCache.get(key);
 				filterOptionCache.delete(key);
 				filterOptionCache.set(key, payload);
-				timer = setTimeout(function() { deliver(payload); }, 0);
+				timer = setTimeout(function() { deliver(payload, Number(params.data.page || 1) === 1); }, 0);
 				return handle;
 			}
 
@@ -594,9 +643,14 @@
 			}
 
 			function send() {
+                if (!active) return;
+                if (!window.gwasProvenance.isCurrent()) {
+                    failure({status: 409}, 'error', window.gwasProvenance.message);
+                    return;
+                }
 				let request = requestFilterOptions(params, key);
 				request.done(function(payload) {
-					if (active) deliver(payload);
+					if (active) deliver(payload, Number(params.data.page || 1) === 1);
 				});
 				request.fail(function(xhr, status, error) {
 					if (active) failure(xhr, status, error);
@@ -940,7 +994,7 @@
                     if (isCurrentSearch()) success(payload);
                 }, function(xhr, status, error) {
                     if (isCurrentSearch()) failure(xhr, status, error);
-                }, 150);
+                }, 150, true);
             };
         }
 
@@ -951,10 +1005,70 @@
             // retain Select2's usual behaviour; only fresh queries clear rows.
             let results = select.data('select2').results;
             let showLoading = results.showLoading;
+            let append = results.append;
+            results.append = function(data) {
+                this.$results.find('.gwas-facet-width').remove();
+                append.call(this, data);
+                preserveFacetWidth(this, data);
+            };
             results.showLoading = function(params) {
                 this.clear();
                 showLoading.call(this, params);
             };
+            select.on('select2:close', function() {
+                // Cancel this consumer's delayed work, not the shared HTTP
+                // request: its complete catalogue can still warm the cache.
+                let request = select.data('select2').dataAdapter._request;
+                if (request && request.abort) request.abort();
+            });
+        }
+
+        function filterOptionMarkup(entry) {
+            if (!entry.id) return entry.text;
+            return $('<span class="funder-option"><strong></strong><small></small></span>')
+                .find('strong').text(entry.text).end()
+                .find('small').text(optionCountLabel(entry)).end();
+        }
+
+        function preserveFacetWidth(adapter, data) {
+            let rows = data._gwasFacetRows;
+            let label = adapter.$results.find('.funder-option strong')[0];
+            if (!rows || !label) return;
+            let count = label.nextElementSibling;
+            let labelStyle = getComputedStyle(label), countStyle = getComputedStyle(count);
+            let font = style => style.font || [style.fontStyle, style.fontWeight, style.fontSize, style.fontFamily].join(' ');
+            let labelFont = font(labelStyle), countFont = font(countStyle);
+            let signature = labelFont + '|' + countFont;
+            if (document.fonts) signature += '|' + document.fonts.check(labelFont) + '|' + document.fonts.check(countFont);
+            let cached = facetWidthEntries.get(rows);
+            if (!cached || cached.signature !== signature) {
+                let context = document.createElement('canvas').getContext('2d');
+                let cap = parseFloat(getComputedStyle(adapter.$results.closest('.select2-dropdown')[0]).maxWidth);
+                let width = -1;
+                // Long labels commonly reach the existing max-width. Try
+                // those first so large catalogues rarely need a full scan.
+                let candidates = rows.slice().sort((a, b) => String(b.text).length - String(a.text).length);
+                let widest = candidates[0];
+                for (let entry of context ? candidates : []) {
+                    context.font = labelFont;
+                    let labelWidth = context.measureText(String(entry.text).replace(/\s+/g, ' ').trim()).width;
+                    context.font = countFont;
+                    let entryWidth = labelWidth + context.measureText(optionCountLabel(entry)).width;
+                    if (entryWidth > width) { widest = entry; width = entryWidth; }
+                    if (Number.isFinite(cap) && labelWidth >= cap) break;
+                }
+                cached = {signature: signature, entry: widest};
+                facetWidthEntries.set(rows, cached);
+            }
+            // Native flex/text layout still decides the width, exactly like
+            // the original full list; no hard-coded width or visible new row.
+            let sizing = document.createElement('li');
+            sizing.className = 'select2-results__option gwas-facet-width';
+            sizing.setAttribute('role', 'presentation');
+            sizing.setAttribute('aria-hidden', 'true');
+            sizing.style.cssText = 'height:0;min-height:0;padding-top:0;padding-bottom:0;overflow:hidden;visibility:hidden;pointer-events:none';
+            $(sizing).append(filterOptionMarkup(cached.entry));
+            adapter.$results.append(sizing);
         }
 
         function closeDashboardFilterSearches() {
@@ -988,18 +1102,10 @@
 							};
 						},
 					processResults: function(data) {
-						return {
-							results: data.results,
-							pagination: data.pagination
-						};
+						return data;
 					}
 				},
-				templateResult: function(entry) {
-					if (!entry.id) return entry.text;
-					return $('<span class="funder-option"><strong></strong><small></small></span>')
-						.find('strong').text(entry.text).end()
-						.find('small').text(optionCountLabel(entry)).end();
-				}
+				templateResult: filterOptionMarkup
 			});
 			keepFilterClosedOnRemove(select);
 			clearPendingFilterResults(select);
@@ -1044,18 +1150,10 @@
                         };
                     },
                     processResults: function(data) {
-                        return {
-                            results: data.results,
-                            pagination: data.pagination
-                        };
+                        return data;
                     }
                 },
-                templateResult: function(entry) {
-                    if (!entry.id) return entry.text;
-					return $('<span class="funder-option"><strong></strong><small></small></span>')
-						.find('strong').text(entry.text).end()
-						.find('small').text(optionCountLabel(entry)).end();
-				}
+                templateResult: filterOptionMarkup
 			});
 			keepFilterClosedOnRemove(select);
 			clearPendingFilterResults(select);

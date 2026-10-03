@@ -20,6 +20,7 @@ from playwright.sync_api import expect, sync_playwright
 from fixture_data import REPOSITORY
 from filter_clear_scenarios import run as run_filter_clear_scenarios
 from facet_count_scenarios import run as run_facet_count_scenarios
+from large_facet_scenarios import run as run_large_facet_scenarios
 from race_scenarios import run as run_race_scenarios
 
 sys.path.insert(0, str(REPOSITORY / 'scripts/performance'))
@@ -388,6 +389,7 @@ def main():
                         result['checks'].extend(run_race_scenarios(browser, base, artifacts))
                         result['checks'].extend(run_filter_clear_scenarios(browser, base, artifacts))
                         result['checks'].extend(run_facet_count_scenarios(browser, base, artifacts))
+                        result['checks'].extend(run_large_facet_scenarios(browser, base, artifacts))
                     finally:
                         browser.close()
                 result['kind'] = 'synthetic-fixture-regression-test'

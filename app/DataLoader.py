@@ -1,9 +1,11 @@
 import contextlib
+from collections import OrderedDict
 import csv
 import fcntl
 import hashlib
 import json
 import os
+import threading
 import time
 
 
@@ -12,6 +14,39 @@ PUBLICATION_LOCK_FILE = 'publication.lock'
 PUBLICATION_MARKER_FILE = 'publication-in-progress.json'
 PUBLICATION_FALLBACK_DIRECTORY = 'previous-release'
 GENERATION_STATE_FILE = '.generation_complete.json'
+
+# A published trait list is reused by every search. Keep only immutable rows
+# between requests, and version them by the actual file rather than the loader
+# instance so new releases and publication fallbacks cannot reuse stale names.
+TRAIT_INDEX_CACHE_LIMIT = 4
+_trait_index_cache = OrderedDict()
+_trait_index_lock = threading.RLock()
+
+
+def _trait_index(path):
+    path = os.path.abspath(path)
+    stat = os.stat(path)
+    signature = (
+        path, stat.st_dev, stat.st_ino, stat.st_size,
+        stat.st_mtime_ns, stat.st_ctime_ns,
+    )
+    with _trait_index_lock:
+        cached = _trait_index_cache.get(signature)
+        if cached is not None:
+            _trait_index_cache.move_to_end(signature)
+            return cached
+        with open(path) as source:
+            # dict preserves the old duplicate handling and insertion order.
+            names = dict.fromkeys(source.read().splitlines())
+        cached = tuple(
+            (name, name.lower().replace(" ", "-")
+             .replace("(", "").replace(")", ""), name.lower())
+            for name in names
+        )
+        _trait_index_cache[signature] = cached
+        while len(_trait_index_cache) > TRAIT_INDEX_CACHE_LIMIT:
+            _trait_index_cache.popitem(last=False)
+        return cached
 
 # The fallback must support on-demand selections/comparisons as well as plots.
 FILTER_RUNTIME_FILES = (
@@ -169,13 +204,12 @@ class DataLoader:
             terms[term] = term.lower().replace(" ", "-")
         return terms
     def getTraitsList(self):
-        data = []
-        with open(self._path('summary', 'uniq_dis_trait.txt')) as file:
-            data = file.read().splitlines()
-        traits = {}
-        for trait in data:
-            traits[trait] = trait.lower().replace(" ", "-").replace("(", "").replace(")", "")
-        return traits
+        return {
+            name: identifier
+            for name, identifier, _ in _trait_index(
+                self._path('summary', 'uniq_dis_trait.txt')
+            )
+        }
     def getSummaryStatistics(self):
         summary = {}
         with open(self._path('summary', 'summary.json')) as json_file:
@@ -362,10 +396,11 @@ class DataLoader:
         return tsPlot
 
     def filterTraits(self, search_trait):
-        traits = self.getTraitsList()
-        filtered_traits = []
         search_trait = search_trait.lower()
-        for trait_key, trait_value in traits.items():
-            if search_trait in trait_key.lower() or search_trait in trait_value.lower():
-                filtered_traits.append({"id": trait_value, "text": trait_key})
-        return filtered_traits
+        return [
+            {"id": identifier, "text": name}
+            for name, identifier, search_name in _trait_index(
+                self._path('summary', 'uniq_dis_trait.txt')
+            )
+            if search_trait in search_name or search_trait in identifier
+        ]

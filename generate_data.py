@@ -9,7 +9,7 @@ import numpy as np
 import logging
 import datetime
 import requests
-import requests_ftp
+import ftplib
 import os
 import csv
 import contextlib
@@ -44,6 +44,8 @@ from app.DashboardFilters import (
     validate_precomputed_filter_archive,
 )
 import funder_pipeline
+from upstream_validation import read_tsv_header, validate_raw_tsv
+from generated_data_validation import read_generated_json, validate_plot_payload
 
 warnings.filterwarnings("ignore")
 
@@ -65,6 +67,7 @@ FAILURE_EMAIL_COOLDOWN_SECONDS = 6 * 60 * 60
 FAILURE_EMAIL_PRODUCTION_DOMAIN = 'gwasdiversitymonitor.com'
 FAILURE_EMAIL_LOCAL_RELAY = '127.0.0.1'
 FAILURE_EMAIL_LOCAL_RELAY_PORT = 25
+CATALOG_DOWNLOAD_MAX_BYTES = 8 * 1024 ** 3
 
 RAW_INPUT_FILES = (
     'catalog/raw/Cat_Anc.tsv',
@@ -183,18 +186,18 @@ def read_tsv_with_aliases(path, required, optional=None, logger=None):
         return s.replace('\ufeff', '').strip().replace('_', ' ').casefold()
 
     # 1) sniff the header
-    sniff = pd.read_csv(path, sep='\t', nrows=0)
-    raw_cols = [c.replace('\ufeff','').strip() for c in sniff.columns]
+    raw_cols = read_tsv_header(path)
 
     # 2) find the actual column name for each canonical
     found = {}  # canonical -> actual
     for canon in required + optional:
         variants = {canon} | ALIASES.get(canon, set())
         variants_norm = {norm(v) for v in variants}
-        for c in raw_cols:
-            if norm(c) in variants_norm:
-                found[canon] = c
-                break
+        matches = [c for c in raw_cols if norm(c) in variants_norm]
+        if len(matches) > 1:
+            raise ValueError(f"{path}: ambiguous columns for {canon}: {matches}")
+        if matches:
+            found[canon] = matches[0]
 
     missing = [c for c in required if c not in found]
     if missing:
@@ -256,10 +259,10 @@ def json_converter(data_path):
             if filename == 'bubbleGraph.json':
                 data = encode_bubble_graph(data)
                 with open(output_path, 'w') as fp:
-                    json.dump(data, fp, ensure_ascii=False, separators=(',', ':'))
+                    json.dump(data, fp, ensure_ascii=False, separators=(',', ':'), allow_nan=False)
             else:
                 with open(output_path, 'w') as fp:
-                    json.dump(data, fp)
+                    json.dump(data, fp, allow_nan=False)
             _write_precompressed_json(output_path)
         except Exception as e:
             diversity_logger.exception(f'json_converter: failed {filename}: {e}')
@@ -658,58 +661,14 @@ def create_summarystats(data_path, timeupdated=None):
         # --- Robust read of Cat_Stud with header aliasing ---
         stud_path = os.path.join(data_path, 'catalog', 'raw', 'Cat_Stud.tsv')
 
-        # Canonical -> acceptable variants
-        ALIASES = {
-            'PUBMEDID': {'PUBMEDID', 'PUBMED ID', 'PUBMED_ID'},
-            'DATE': {'DATE'},
-            'FIRST AUTHOR': {'FIRST AUTHOR', 'FIRST_AUTHOR', 'FIRST AUTHOR(S)'},
-            'STUDY ACCESSION': {'STUDY ACCESSION', 'STUDY_ACCESSION', 'STUDY ACCESSSION'},
-            'DISEASE/TRAIT': {'DISEASE/TRAIT', 'DISEASE / TRAIT', 'DISEASE_TRAIT'},
-            'MAPPED_TRAIT': {'MAPPED_TRAIT', 'MAPPED TRAIT'},
-            'ASSOCIATION COUNT': {'ASSOCIATION COUNT', 'ASSOCIATION_COUNT'},
-            'JOURNAL': {'JOURNAL'}
-        }
-
-        def _norm(s: str) -> str:
-            return s.replace('\ufeff', '').strip().replace('_', ' ').casefold()
-
-        # sniff headers
-        sniff = pd.read_csv(stud_path, sep='\t', nrows=0)
-        raw_cols = [c.replace('\ufeff','').strip() for c in sniff.columns]
-
         # required + optional columns
         required = ['PUBMEDID', 'DATE', 'FIRST AUTHOR', 'STUDY ACCESSION',
                     'DISEASE/TRAIT', 'ASSOCIATION COUNT', 'JOURNAL']
         optional = ['MAPPED_TRAIT']
 
-        # build mapping actual_name -> canonical
-        found = {}
-        for canon in required + optional:
-            variants_norm = {_norm(v) for v in (ALIASES.get(canon, {canon}))}
-            for c in raw_cols:
-                if _norm(c) in variants_norm:
-                    found[canon] = c
-                    break
-
-        missing = [c for c in required if c not in found]
-        if missing:
-            diversity_logger.debug(f"Cat_Stud header sniff: {raw_cols}")
-            raise KeyError(f"Cat_Stud.tsv missing required columns (after alias matching): {missing}")
-
-        # read only what we found, dtype as strings first
-        usecols_actual = [found[c] for c in (required + [c for c in optional if c in found])]
-        Cat_Stud = pd.read_csv(
-            stud_path,
-            sep='\t',
-            low_memory=False,
-            usecols=usecols_actual,
-            quotechar='"',
-            on_bad_lines="skip",
-            dtype=str
+        Cat_Stud = read_tsv_with_aliases(
+            stud_path, required, optional, logger=diversity_logger
         )
-
-        # rename back to canonical
-        Cat_Stud = Cat_Stud.rename(columns={v: k for k, v in found.items()})
 
         # ensure optional column exists
         if 'MAPPED_TRAIT' not in Cat_Stud.columns:
@@ -896,7 +855,7 @@ def create_summarystats(data_path, timeupdated=None):
         # Write JSON
         json_path = os.path.join(data_path, 'summary', 'summary.json')
         with open(json_path, 'w') as outfile:
-            json.dump(sumstats, outfile)
+            json.dump(sumstats, outfile, allow_nan=False)
 
         diversity_logger.info('Build of the summary stats: Complete')
     except Exception as e:
@@ -2112,12 +2071,50 @@ def _safe_filename(resp, fallback):
     return fallback
 
 
+def _catalog_download_limit():
+    """Bound download/extraction disk usage; configurable for future growth."""
+    raw = os.environ.get('GWAS_CATALOG_MAX_DOWNLOAD_BYTES')
+    if raw is None:
+        return CATALOG_DOWNLOAD_MAX_BYTES
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError) as error:
+        raise ValueError('GWAS_CATALOG_MAX_DOWNLOAD_BYTES must be a positive integer') from error
+    if limit <= 0:
+        raise ValueError('GWAS_CATALOG_MAX_DOWNLOAD_BYTES must be a positive integer')
+    return limit
+
+
+def _write_bounded_download(chunks, output, limit, expected_size=None):
+    if expected_size is not None:
+        try:
+            expected_size = int(expected_size)
+        except (TypeError, ValueError) as error:
+            raise ValueError('Invalid upstream Content-Length') from error
+        if expected_size < 0 or expected_size > limit:
+            raise ValueError('Upstream download exceeds its configured size limit')
+    size = 0
+    for chunk in chunks:
+        if not chunk:
+            continue
+        size += len(chunk)
+        if size > limit:
+            raise ValueError('Upstream download exceeds GWAS_CATALOG_MAX_DOWNLOAD_BYTES')
+        output.write(chunk)
+    if not size:
+        raise ValueError('Upstream returned an empty download')
+    if expected_size is not None and size != expected_size:
+        raise ValueError(f'Truncated upstream download: expected {expected_size} bytes, received {size}')
+    return size
+
+
 def download_cat(data_path, ebi_download):
     """Download and validate the current GWAS Catalog release files."""
     try:
         raw_dir = os.path.join(data_path, 'catalog', 'raw')
         os.makedirs(raw_dir, exist_ok=True)
         sources = []
+        size_limit = _catalog_download_limit()
 
         http_endpoints = [
             ('studies/v1.0.3.1', 'Cat_Stud.tsv', {'STUDY ACCESSION'}),
@@ -2139,9 +2136,14 @@ def download_cat(data_path, ebi_download):
 
                 try:
                     with os.fdopen(descriptor, 'wb') as download_file:
-                        for chunk in r.iter_content(chunk_size=1024 * 1024):
-                            if chunk:
-                                download_file.write(chunk)
+                        # requests decodes Content-Encoding while streaming;
+                        # compare lengths only when wire/body bytes coincide.
+                        expected_size = r.headers.get('Content-Length') if \
+                            r.headers.get('Content-Encoding', 'identity').casefold() == 'identity' else None
+                        _write_bounded_download(
+                            r.iter_content(chunk_size=1024 * 1024),
+                            download_file, size_limit, expected_size,
+                        )
 
                     candidate_path = download_path
                     if zipfile.is_zipfile(download_path):
@@ -2157,6 +2159,10 @@ def download_cat(data_path, ebi_download):
                                     f'found {len(tsv_members)}'
                                 )
                             archive_member = tsv_members[0].filename
+                            if tsv_members[0].file_size > size_limit:
+                                raise ValueError(f'{url}: expanded TSV exceeds its configured size limit')
+                            if tsv_members[0].flag_bits & 1:
+                                raise ValueError(f'{url}: encrypted upstream archives are unsupported')
                             extracted_descriptor, extracted_path = \
                                 tempfile.mkstemp(
                                     prefix='.gwas_extracted.', dir=raw_dir
@@ -2165,14 +2171,13 @@ def download_cat(data_path, ebi_download):
                                     extracted_file, \
                                     archive.open(tsv_members[0], 'r') as \
                                     archived_file:
-                                shutil.copyfileobj(archived_file,
-                                                   extracted_file)
+                                _write_bounded_download(
+                                    iter(lambda: archived_file.read(1024 * 1024), b''),
+                                    extracted_file, size_limit, tsv_members[0].file_size,
+                                )
                             candidate_path = extracted_path
 
-                    with open(candidate_path, 'rb') as candidate_file:
-                        header = candidate_file.readline().decode(
-                            'utf-8-sig'
-                        ).rstrip('\r\n').split('\t')
+                    header = read_tsv_header(candidate_path)
                     missing_headers = required_headers - set(header)
                     if missing_headers:
                         raise ValueError(
@@ -2204,25 +2209,38 @@ def download_cat(data_path, ebi_download):
                     server_name, archive_member,
                 ))
 
-        # FTP: trait mappings
-        requests_ftp.monkeypatch_session()
-        s = requests.Session()
-        ftpsite = 'ftp://ftp.ebi.ac.uk'
+        # FTP: trait mappings. requests_ftp buffers RETR into BytesIO even
+        # with stream=True, so receive directly into the bounded staging file.
+        ftp_host = 'ftp.ebi.ac.uk'
+        ftpsite = 'ftp://' + ftp_host
         subdom = '/pub/databases/gwas/releases/latest/'
         file = 'gwas-efo-trait-mappings.tsv'
-        r = s.get(ftpsite + subdom + file, timeout=60)
-        r.raise_for_status()
         out_path = os.path.join(raw_dir, 'Cat_Map.tsv')
         descriptor, temporary_path = tempfile.mkstemp(
             prefix='.gwas_mapping.', dir=raw_dir
         )
         try:
             with os.fdopen(descriptor, 'wb') as mapping_file:
-                mapping_file.write(r.content)
-            with open(temporary_path, 'rb') as mapping_file:
-                header = mapping_file.readline().decode(
-                    'utf-8-sig'
-                ).rstrip('\r\n').split('\t')
+                received_size = 0
+
+                def receive_mapping(chunk):
+                    nonlocal received_size
+                    received_size += len(chunk)
+                    if received_size > size_limit:
+                        raise ValueError('Upstream download exceeds GWAS_CATALOG_MAX_DOWNLOAD_BYTES')
+                    mapping_file.write(chunk)
+
+                ftp = ftplib.FTP(timeout=60)
+                try:
+                    ftp.connect(ftp_host)
+                    ftp.login()
+                    ftp.retrbinary('RETR ' + subdom + file, receive_mapping,
+                                   blocksize=1024 * 1024)
+                finally:
+                    ftp.close()
+                if not received_size:
+                    raise ValueError('Upstream returned an empty download')
+            header = read_tsv_header(temporary_path)
             missing_headers = RAW_REQUIRED_COLUMNS[
                 'catalog/raw/Cat_Map.tsv'
             ] - set(header)
@@ -2238,8 +2256,8 @@ def download_cat(data_path, ebi_download):
                 os.unlink(temporary_path)
         diversity_logger.info('Download of efo-trait-mappings: Complete')
         sources.append(source_metadata(
-            'catalog/raw/Cat_Map.tsv', ftpsite + subdom + file, r,
-            _safe_filename(r, file),
+            'catalog/raw/Cat_Map.tsv', ftpsite + subdom + file,
+            requests.Response(), file,
         ))
         return sources
 
@@ -2400,7 +2418,7 @@ def _atomic_write_json(path, payload):
     )
     try:
         with os.fdopen(descriptor, 'w', encoding='utf-8') as output_file:
-            json.dump(payload, output_file, indent=2, sort_keys=True)
+            json.dump(payload, output_file, indent=2, sort_keys=True, allow_nan=False)
             output_file.write('\n')
             output_file.flush()
             os.fsync(output_file.fileno())
@@ -2450,8 +2468,7 @@ def _write_precompressed_json(path, compresslevel=6):
 
 
 def _read_json(path):
-    with open(path, encoding='utf-8') as input_file:
-        return json.load(input_file)
+    return read_generated_json(path)
 
 
 def _fingerprints_match(root, fingerprints):
@@ -2491,6 +2508,8 @@ def _implementation_fingerprints(repository_path):
         'app/Provenance.py',
         'app/DashboardFilters.py',
         'funder_pipeline.py',
+        'upstream_validation.py',
+        'generated_data_validation.py',
     )
     fingerprints = _fingerprint_files(repository_path, implementation_files)
     inputs = _maintained_inputs_path(repository_path)
@@ -2510,19 +2529,18 @@ def _validate_raw_inputs(data_path):
         path = os.path.join(data_path, relative_path)
         if not os.path.isfile(path) or os.path.getsize(path) <= 0:
             raise FileNotFoundError(f'Missing or empty raw input: {path}')
-        header = pd.read_csv(path, sep='\t', nrows=0).columns
-        missing = required_columns - set(header)
-        if missing:
-            raise ValueError(
-                f'{path}: missing required columns {sorted(missing)}'
+        validation = validate_raw_tsv(
+            path, required_columns,
+            alternatives=RAW_REQUIRED_COLUMN_ALTERNATIVES.get(relative_path, ()),
+            kind=os.path.basename(path),
+        )
+        if validation.get('missingN') or validation.get('duplicateStudyRows'):
+            logging.getLogger('diversity_logger').info(
+                'Validated %s: %d rows; %d permitted missing participant counts; '
+                '%d identical duplicate study rows (values preserved)',
+                relative_path, validation['rowCount'], validation.get('missingN', 0),
+                validation.get('duplicateStudyRows', 0),
             )
-        for alternatives in RAW_REQUIRED_COLUMN_ALTERNATIVES.get(
-                relative_path, ()):
-            if not set(header).intersection(alternatives):
-                raise ValueError(
-                    f'{path}: missing one of the required column aliases '
-                    f'{sorted(alternatives)}'
-                )
     return _fingerprint_files(data_path, RAW_INPUT_FILES)
 
 
@@ -2635,6 +2653,7 @@ def validate_generated_release(data_path, static_bundle_path):
         value = _read_json(source_path)
         if not isinstance(value, (dict, list)) or not value:
             raise ValueError(f'{relative_path}: generated JSON is empty')
+        validate_plot_payload(relative_path, value)
         if relative_path.startswith('toplot/'):
             compressed_path = source_path + '.gz'
             if not _gzip_matches_file(compressed_path, source_path):
