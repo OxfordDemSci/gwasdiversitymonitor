@@ -10,7 +10,6 @@ WORKDIR /app
 
 COPY app app
 COPY funder_pipeline.py funder_pipeline.py
-COPY gwasdiversitymonitor.iml gwasdiversitymonitor.iml
 COPY gwasdiversitymonitor.py gwasdiversitymonitor.py
 COPY deploy/config.py config.py
 COPY deploy/gunicorn_config.py gunicorn_config.py

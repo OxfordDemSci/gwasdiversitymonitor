@@ -88,8 +88,9 @@ deploy/gwasdiversitymonitor_crontab
 ```
 
 Install it only after adjusting the path and service user for the target host.
-The legacy `deploy/deploy.sh` is disabled and retained as historical notes, not
-an unattended installer. It must not be used to overwrite a working host.
+The obsolete `deploy/deploy.sh` is no longer shipped. Any old local copy is not
+an unattended installer and must not be used to overwrite a working host. Use
+the procedures here or the separately configured workflow in `RELEASES.md`.
 
 ### Rebuild funder products from the existing PubMed cache
 

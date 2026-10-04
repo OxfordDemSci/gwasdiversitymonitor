@@ -2,6 +2,7 @@
     <h2>
         Total GWAS participants diversity
     </h2>
+    {% include 'components/dashboard-help.html' %}
     {% set dataset_provenance = provenance|default({}) %}
     <details id="dashboard-provenance" class="dashboard-provenance">
         <summary>Data details · <span data-provenance="checkSummary">{% if dataset_provenance.lastSuccessfulFetchAt %}checked {{ dataset_provenance.lastSuccessfulFetchAt[:10] }}{% else %}check not recorded{% endif %}</span></summary>

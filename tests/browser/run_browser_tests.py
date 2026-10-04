@@ -106,6 +106,59 @@ def check_ancestry_panel(page, artifacts, check, *, mobile=False):
               '1440px ancestry cards fill the sidebar width')
 
 
+def check_dashboard_layout(page, check, label, *, collapsed=None):
+    """Help belongs to the summary tile and must never take a dashboard column."""
+    layout = page.evaluate("""() => {
+      const rect = node => { const r = node.getBoundingClientRect();
+        return {left:r.left, right:r.right, top:r.top, bottom:r.bottom, width:r.width}; };
+      const main = document.querySelector('.container.main'), style = getComputedStyle(main);
+      const dashboard = document.querySelector('.dashboard');
+      const help = document.getElementById('dashboard-examples');
+      const provenance = document.getElementById('dashboard-provenance');
+      const available = main.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const expectedWidth = Math.min(available, parseFloat(getComputedStyle(dashboard).maxWidth));
+      return {viewport:innerWidth, open:help.open,
+        nested:help.parentElement.id === 'summary' && help.nextElementSibling === provenance,
+        standalone:document.querySelectorAll('.container.main > #dashboard-examples').length,
+        help:rect(help.querySelector('summary')), provenance:rect(provenance.querySelector('summary')),
+        heading:rect(document.querySelector('#summary > h2')), dashboard:rect(dashboard),
+        expectedWidth, expectedLeft:main.getBoundingClientRect().left + main.clientLeft +
+          parseFloat(style.paddingLeft) + (available - expectedWidth) / 2,
+        tiles:[...dashboard.querySelectorAll(':scope > .tile')].map(rect)};
+    }""")
+    check(layout['nested'] and layout['standalone'] == 0,
+          label + ' examples sit directly before provenance inside the summary tile')
+    check(abs(layout['help']['left'] - layout['provenance']['left']) < 1
+          and abs(layout['help']['left'] - layout['heading']['left']) < 1
+          and layout['help']['top'] >= layout['heading']['bottom'] - 1
+          and layout['provenance']['top'] >= layout['help']['bottom'] - 1,
+          label + ' help and provenance align under the summary heading')
+    check(abs(layout['dashboard']['width'] - layout['expectedWidth']) < 2
+          and abs(layout['dashboard']['left'] - layout['expectedLeft']) < 2,
+          label + ' dashboard fills the available width up to its 1800px cap')
+    tiles = layout['tiles']
+    ratios = [.25, .5, .25, .25, .5, .25] if layout['viewport'] >= 1200 else [1] * 6
+    check(len(tiles) == 6 and all(abs(tile['width'] - ratio * layout['dashboard']['width']) < 2
+                                for tile, ratio in zip(tiles, ratios)),
+          label + (' desktop tiles retain 25/50/25 proportions' if layout['viewport'] >= 1200
+                   else ' mobile tiles retain full-width columns'))
+    if layout['viewport'] >= 1200:
+        check(all(abs(tiles[index]['top'] - tiles[0]['top']) < 2 for index in (1, 2))
+              and abs(tiles[1]['left'] - tiles[0]['right']) < 2
+              and abs(tiles[2]['left'] - tiles[1]['right']) < 2,
+              label + ' summary, bubble chart and time series share the first row')
+    if collapsed is not None:
+        check(layout['open'] and not collapsed['open']
+              and all(abs(before[key] - after[key]) < 2
+                      for before, after in zip([collapsed['dashboard']] + collapsed['tiles'],
+                                               [layout['dashboard']] + tiles)
+                      for key in ('left', 'width')),
+              label + ' expanding help preserves dashboard and chart column widths')
+    check(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'),
+          label + ' help causes no horizontal page overflow')
+    return layout
+
+
 def check_zip(download, directory, *, image=None):
     path = directory / download.suggested_filename
     download.save_as(path)
@@ -162,6 +215,9 @@ def scenario(browser, base, fixture, artifacts):
               'no eager comparison, facets, metadata coverage, examples, or export library')
         check(metrics['datasetId'] == fixture['datasetId'], 'fixture dataset identity served')
         check_ancestry_panel(page, artifacts, check)
+        desktop_collapsed = check_dashboard_layout(page, check, '1440px collapsed')
+        check(not desktop_collapsed['open'], 'example help is collapsed on initial load')
+        page.screenshot(path=str(artifacts / 'desktop-layout.png'))
         ancestry = page.locator('#bubbleGraph .ancestry-filter .option.btn').first
         ancestry.focus(); page.keyboard.press('Enter')
         expect(ancestry).to_have_attribute('aria-pressed', 'false')
@@ -258,6 +314,7 @@ def scenario(browser, base, fixture, artifacts):
         page.locator('#dashboard-examples summary').click()
         expect(page.locator('#dashboard-example-buttons button')).to_have_count(3)
         checks.append('on-demand coverage and recorded examples load')
+        check_dashboard_layout(page, check, '1440px expanded', collapsed=desktop_collapsed)
         # A stale table cannot keep offering old rows under new settings.
         page.locator('[data-chart-table="heatMap"]').click()
         page.evaluate('gwasChartData.changed("heatMap")')
@@ -270,11 +327,24 @@ def scenario(browser, base, fixture, artifacts):
         ready(page)
         check(page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), '390px mobile viewport has no page overflow')
         check_ancestry_panel(page, artifacts, check, mobile=True)
+        page.locator('#dashboard-examples summary').click()
+        mobile_collapsed = check_dashboard_layout(page, check, '390px collapsed')
+        page.locator('#dashboard-examples summary').click()
+        check_dashboard_layout(page, check, '390px expanded', collapsed=mobile_collapsed)
         page.locator('[data-chart-table="bubbleGraph"]').click()
         check(page.evaluate('document.getElementById("dashboard-table-dialog").getBoundingClientRect().width <= innerWidth'),
               'mobile table stays within viewport')
         page.screenshot(path=str(artifacts / 'mobile-table.png'))
         page.keyboard.press('Escape')
+        page.set_viewport_size({'width': 2560, 'height': 1440})
+        page.wait_for_timeout(400)  # Allow the responsive chart redraw to settle.
+        ready(page)
+        page.locator('#dashboard-provenance summary').click()
+        page.locator('#dashboard-examples summary').click()
+        wide_collapsed = check_dashboard_layout(page, check, '2560px collapsed')
+        page.screenshot(path=str(artifacts / 'wide-layout.png'))
+        page.locator('#dashboard-examples summary').click()
+        check_dashboard_layout(page, check, '2560px expanded', collapsed=wide_collapsed)
         check(not errors, 'no unexpected JavaScript errors: ' + repr(errors))
         check(not external, 'no Internet dependencies: ' + repr(external))
         check(not request_failures, 'no unexpected failed HTTP resources: ' + repr(request_failures))

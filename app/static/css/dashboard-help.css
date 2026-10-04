@@ -1,8 +1,9 @@
-.dashboard-help { margin: 0 0 12px; font-size: 13px; color: #46536b; }
-.dashboard-help summary { cursor: pointer; display: list-item; width: fit-content; padding: 4px 0; color: #293e90; }
+.dashboard-help { margin: 7px 0 0; font-size: 13px; line-height: 1.4; color: #46536b; }
+.dashboard-help summary { cursor: pointer; display: list-item; width: fit-content; color: #374282; }
 .dashboard-help p { margin: 8px 0; max-width: 90ch; }
 .dashboard-help__examples { display: flex; flex-wrap: wrap; gap: 8px; }
 .dashboard-help button, .dashboard-load-status button { border: 1px solid #bac4da; border-radius: 4px; background: #fff; color: #293e90; padding: 7px 10px; cursor: pointer; }
+.dashboard-help button { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
 .dashboard-help button:disabled { opacity: .55; cursor: default; }
 .dashboard-load-status { font-size: 13px; line-height: 1.5; padding: 12px; color: #46536b; }
 .dashboard-load-status button { margin: 6px 0 0 8px; }

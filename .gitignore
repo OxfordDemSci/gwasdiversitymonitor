@@ -7,6 +7,39 @@ data/funders/*
 data/support/*
 !data/support/cohort_cleaner.json
 backups/
+# Private outreach drafts, contact research, and recipient-specific reports.
+/emails/
+# Manuscript-only analysis and generated figures, not application source.
+/static_figure/
+
+# Local IDE, assistant, operating-system, and credential files.
+/.idea/
+/.vscode/
+*.iml
+/.agents/
+/.codex/
+/.aws/
+/.ssh/
+*.pem
+*.key
+.DS_Store
+Thumbs.db
+*~
+*.swp
+*.swo
+
+# Retired files kept locally for reference, not shipped with the app.
+/deploy/deploy.sh
+/app/static/js/imports/queue.v1.min.js
+/app/static/js/imports/topojson.v1.min.js
+
+# Local tooling caches and generated browser/performance evidence.
+node_modules/
+.ruff_cache/
+/artifacts/
+/test-results/
+/playwright-report/
+
 /config.py
 *.log
 
@@ -142,9 +175,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Generated Files
-# *.csv
-# *.tsv
-# *.zip
-# *.json
-# *.css.map
+# Intentionally tracked: data_static.zip, maintained cleaner JSONs, compiled
+# browser assets and their Sass sources, tests, docs, and deployment tooling.
+# These are required to reproduce, verify, or operate the application.

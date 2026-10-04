@@ -42,8 +42,6 @@ selections. The Monitor also provides:
   methodology, and citations in one ZIP.
 - Daily ingestion of the GWAS Catalog export, with validated and
   atomic publication of each generated release.
-- A reproducible static figure, source-data table, audit metadata, and a
-  manuscript-ready caption under [`static_figure/`](static_figure/).
 
 ## Interpretive scope
 
@@ -150,38 +148,17 @@ cache, read
 
 ## Testing
 
-Run the full test suite from the repository root:
+Run the Python suite with isolated synthetic data and configuration, without
+requiring a local Catalog download:
 
 ```bash
-python3 -m unittest discover -s tests -v
+python3 -m pip install -r requirements-dev.txt
+python3 tests/browser/run_unit_tests.py
 ```
 
 The suite tests both analytical meaning and operational integrity: ancestry
 metadata, cohort and funder filtering, artifact validation, atomic publication
 and recovery, failure notifications, optional analytics, and robots policy.
-
-## Static publication figure
-
-The reproducible figure workflow is contained in
-[`static_figure/gwas_growth_diversity_figure.ipynb`](static_figure/gwas_growth_diversity_figure.ipynb).
-Running the notebook produces manuscript-ready PDF, SVG, and PNG artwork plus:
-
-- `gwas_growth_diversity_source_data.csv` — plotted source values;
-- `gwas_growth_diversity_figure_metadata.json` — audit metadata; and
-- `gwas_growth_diversity_caption.txt` — suggested manuscript caption.
-
-Execute it with:
-
-```bash
-jupyter nbconvert \
-  --to notebook \
-  --execute \
-  --inplace \
-  static_figure/gwas_growth_diversity_figure.ipynb
-```
-
-The notebook uses the version-controlled Monitor palette and published local
-data snapshot.
 
 ## Repository structure
 
@@ -191,8 +168,9 @@ data snapshot.
 ├── data/                   Generated runtime release and maintained mappings
 ├── deploy/                 Docker, nginx, Gunicorn, cron, mail, and analytics
 ├── docs/                   Methodology and operational documentation
-├── static_figure/          Reproducible manuscript figure and source data
+├── scripts/performance/    Browser measurement tooling
 ├── tests/                  Unit and integration tests
+├── data_static.zip         Required bootstrap lookup and classification data
 ├── generate_data.py        Transactional Catalog data-generation pipeline
 ├── funder_pipeline.py      PubMed funder normalisation and report generation
 ├── gwasdiversitymonitor.py Production application launcher
@@ -201,6 +179,25 @@ data snapshot.
 ```
 
 See [Operations and deployment](docs/OPERATIONS.md) for production procedures.
+
+### What belongs in Git
+
+Keep the application, browser assets and Sass sources, data pipeline,
+`data_static.zip`, maintained funder/cohort mappings, dependency files, tests,
+CI workflows, and operating documentation together so a clean checkout can
+reproduce and verify the app. Browser-generated publication exports remain an
+application feature.
+
+Generated datasets and caches, backups, private outreach (`emails/`), the
+separate manuscript figure notebook and outputs (`static_figure/`), IDE files,
+credentials, and local test evidence are ignored. Existing local copies can
+remain on disk; they are not part of the app checkout. The Docker build context
+also excludes private/local material, since `.gitignore` alone does not exclude
+files from Docker builds. Use a Git-based deployment rather than copying the
+entire workstation directory to the server.
+
+Untracking files removes them from future commits, not from past Git history.
+Do not rewrite shared history as routine cleanup.
 
 ## Citation
 

@@ -38,6 +38,16 @@ class DashboardLoadingTests(unittest.TestCase):
             (ROOT / 'app/static/sass/dashboard-help.scss').read_text(),
         )
 
+    def test_help_is_inside_summary_before_provenance(self):
+        index = (ROOT / 'app/templates/index.html').read_text()
+        summary = (ROOT / 'app/templates/tiles/summary.html').read_text()
+        include = "{% include 'components/dashboard-help.html' %}"
+        self.assertNotIn(include, index)
+        self.assertEqual(summary.count(include), 1)
+        self.assertLess(summary.index('id="summary"'), summary.index('</h2>'))
+        self.assertLess(summary.index('</h2>'), summary.index(include))
+        self.assertLess(summary.index(include), summary.index('id="dashboard-provenance"'))
+
 
 if __name__ == '__main__':
     unittest.main()
