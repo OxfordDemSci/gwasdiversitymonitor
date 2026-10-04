@@ -100,6 +100,7 @@ python3.13 -m venv .venv
 source .venv/bin/activate
 python3 -m pip install --upgrade pip
 python3 -m pip install -r requirements.txt
+test -f config.py || cp deploy/config.py config.py
 python3 generate_data.py
 python3 gwasdiversitymonitor.py
 ```

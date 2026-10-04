@@ -32,6 +32,14 @@ Thumbs.db
 /deploy/deploy.sh
 /app/static/js/imports/queue.v1.min.js
 /app/static/js/imports/topojson.v1.min.js
+/app/static/images/logo-footer.svg
+/app/static/images/logo-type.svg
+/app/static/fonts/PTSansNarrow/PTSansNarrow-Bold.eot
+/app/static/fonts/PTSansNarrow/PTSansNarrow-Bold.svg
+/app/static/fonts/PTSansNarrow/PTSansNarrow-Bold.ttf
+/app/static/fonts/PTSansNarrow/PTSansNarrow-Regular.eot
+/app/static/fonts/PTSansNarrow/PTSansNarrow-Regular.svg
+/app/static/fonts/PTSansNarrow/PTSansNarrow-Regular.ttf
 
 # Local tooling caches and generated browser/performance evidence.
 node_modules/
