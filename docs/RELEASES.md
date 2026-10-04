@@ -1,27 +1,45 @@
 # Versioned releases, rollback and monitoring
 
-This is an **opt-in operating path**, not a migration that runs when code is
-pushed. The existing Compose deployment remains supported. A push to `dev`
-does not merge `main`, modify Lightsail, deploy either website, create GitHub
-environments/secrets, or turn on alerts.
+This is an **opt-in operating path**. Follow [the full setup and deployment
+runbook](AUTO_DEPLOY.md) before enabling it. The existing checkout-based Compose
+deployment remains supported. Pushes build/test releases; after setup, the
+repository variables `GWAS_DEPLOY_DEV_ENABLED=true` and
+`GWAS_DEPLOY_MAIN_ENABLED=true` independently enable automatic deployment.
+`dev` deploys only to `staging`/`gwas_dev`, and `main` only to
+`production`/`gwas-production-2604`. Neither path merges branches, changes
+Lightsail infrastructure, creates secrets, or enables monitoring.
 
 ## What is versioned
 
-`Build and promote an immutable release` is manually dispatched. It tests the
-selected commit, builds Flask/data/nginx once, and publishes a `release.json`
+`Build and deploy a branch release` runs on pushes to `dev` and `main`, or a
+manual dispatch. It tests the selected commit, builds Flask/data/nginx, and publishes a `release.json`
 artifact containing the full commit and three `@sha256:` image references.
 The SHA tag is convenient for humans; deployment uses the digest, not that tag.
 Image revision labels must match the manifest. Third-party GoatCounter is
 separately pinned to its existing verified digest in host configuration.
 
-With deployment unchecked, this only builds/publishes images. With staging
-checked, the same images go to the configured `staging` host. Production also
-requires staging success, the `main` ref, and an explicitly approved protected
-`production` environment. The workflow refuses production unless the environment
-has named required reviewers, prevents self-review, and disables administrator
-bypass. These protections need to be created by an authorized repository owner;
-the code does not invent an approver or weaken that gate. Protect `main` and
-review changes to workflows and the host controller as security-sensitive code.
+Manual dispatch defaults to build-only; selecting `deploy` deploys only to that
+branch's environment, even before its automatic-push variable is enabled.
+Production does **not** deploy onto dev first. Separate environment secrets and
+branch restrictions must be configured by a repository administrator. Restrict
+`staging` to branch `dev` and `production` to branch `main`; protect `main` with
+reviewed pull requests and required CI. Existing GitHub environment reviewers
+and wait timers are still enforced: keeping those gates means deployment waits
+for approval rather than being fully unattended. This workflow does not remove
+them. Review workflow/controller changes as security-sensitive code.
+
+Each branch has a separate non-cancelling release concurrency group. New pushes
+do not interrupt an active rollout. Older pending runs can be superseded, and a
+branch-tip check skips obsolete candidates before SSH: this converges on the
+latest successful branch tip, not a guarantee that every intermediate commit
+appears live. Tests/builds/health checks take time; this is not instant or
+zero-downtime hosting. Build caches reduce repeated work.
+
+**Main compatibility:** the inspected legacy `origin/main` at `66daffb` lacks
+these workflows, health/version contracts, Docker revision labels and runtime
+ZIP support. Copying this workflow alone cannot deploy it. A separate reviewed
+main-compatible operations backport is required; do not merge dev's app features
+or enable `GWAS_DEPLOY_MAIN_ENABLED` as a shortcut.
 
 The running full commit is exposed in health/provenance responses and the page
 footer. Unversioned local builds say so rather than claiming a clean commit.
@@ -77,7 +95,7 @@ regenerate or overwrite working data as an installation shortcut.
 6. Authenticate the host to GHCR with a read-only package token if packages
    are private. Do not put registry tokens in Git, `site.json` or release
    manifests. Do not make the Docker socket world-writable.
-7. Configure GitHub `staging` and protected `production` environments with
+7. Configure GitHub branch-restricted `staging` and `production` environments with
    separate `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and
    `DEPLOY_KNOWN_HOSTS` secrets. Verify SSH host fingerprints out of band;
    deployment refuses unknown/changed hosts. Restrict the deploy account's
@@ -93,7 +111,8 @@ regenerate or overwrite working data as an installation shortcut.
 9. Only after success, install `deploy/gwas-release-cron` under `/etc/cron.d/`
    with root ownership/mode0644. It runs the approved data image attached,
    records failures in its exit status, and shares a nonblocking lock with
-   deployment. It does not rebuild or pull a moving branch nightly. The
+   deployment. Both cron and remote deployment wait up to an hour for the shared
+   lock, then fail without overlapping operations. It does not rebuild or pull a moving branch nightly. The
    configured midnight is host time; use UTC deliberately. Add log rotation
    for `/var/log/gwas-data-cron.log` and application logs.
 
@@ -103,6 +122,20 @@ staged generation. A bind-mounted live `data/` cannot accidentally hide the
 new image's configuration. Publishing still preserves a validated prior release
 before replacing any live artifacts. No scientific aggregation formula changes
 as part of this deployment mechanism.
+
+Automatic **code** deployment does not run the data generator. Nightly cron uses
+the newly approved data image. If an update needs new/generated data before its
+web code can run, prepare it under supervision using the candidate image before
+deployment; a failed data preflight intentionally leaves the current site alone.
+After a compatible deployment, an immediate supervised update is:
+
+```bash
+sudo /usr/bin/python3 /opt/gwas-release/release.py data --lock-wait-seconds 3600
+```
+
+This stays attached and returns the generator's real exit status. Do not delete
+published data to force a rebuild. See the full runbook for first-time migration,
+including snapshot fallback before there is a managed `previous.json`.
 
 ## Rollout and rollback
 
@@ -192,6 +225,10 @@ No DNS, origin, static-IP or certificate change is needed for this code release.
   `cohorts`, `search`, `page`, `v`, `format` and all view settings. Otherwise
   distinct selections can receive the wrong cached response.
 - Set minimum cache TTL 0 where application cache headers control caching.
+  Dynamic HTML now sends `Cache-Control: no-cache` so new navigations revalidate
+  and discover the new release's versioned assets; JSON/static policies are
+  preserved. Invalidate existing cached HTML once when enabling this policy.
+  An already-open page does not hot-reload: refresh it to see a new release.
   Never cache `/health/*`, `/api/provenance`, POST responses or 409 errors;
   preserve `X-GWAS-Dataset-ID`. Test missing headers, stale dataset reload,
   a real comparison POST and a filtered options query through the public CDN.

@@ -1,7 +1,8 @@
 # Operations and deployment
 
-For the opt-in digest-pinned release workflow, health endpoints, protected
-production approval and explicit rollback, see [versioned releases](RELEASES.md).
+For the full one-time setup and push-triggered deployment pipeline, see
+[automatic deployment](AUTO_DEPLOY.md). For digest-pinned releases, health
+endpoints, environment controls and explicit rollback, see [versioned releases](RELEASES.md).
 The instructions below describe the existing checkout-based Compose path.
 
 This guide defines the operating contract for the Monitor: keep the public

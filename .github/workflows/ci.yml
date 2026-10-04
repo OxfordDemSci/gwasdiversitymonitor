@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
   workflow_call:
+    inputs:
+      skip_container_builds:
+        description: The release workflow builds and publishes these images next
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -56,6 +61,7 @@ jobs:
           retention-days: 7
 
   containers:
+    if: ${{ !inputs.skip_container_builds }}
     needs: tests
     runs-on: ubuntu-24.04
     timeout-minutes: 30

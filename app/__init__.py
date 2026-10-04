@@ -98,9 +98,14 @@ def serve_compressed_static():
 
 @app.after_request
 def apply_robots_policy(response):
-    """Apply deployment policy and cache fingerprinted static assets."""
+    """Apply deployment policy without hiding new releases behind cached HTML."""
     if app.config.get("GWAS_NOINDEX", False):
         response.headers["X-Robots-Tag"] = "noindex, nofollow, noarchive"
+
+    # HTML selects the release's versioned assets. Revalidate it on navigation
+    # after deployment, while preserving API and immutable asset caching.
+    if request.endpoint != "static" and response.mimetype == "text/html":
+        response.cache_control.no_cache = True
 
     if request.endpoint == "static":
         if getattr(g, "static_encoding_varies", False):

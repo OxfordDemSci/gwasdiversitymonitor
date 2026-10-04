@@ -13,6 +13,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 
 STATE = Path('/var/lib/gwas-release')
@@ -194,10 +195,22 @@ def apply_release(release, site):
 
 
 @contextlib.contextmanager
-def deployment_lock():
+def deployment_lock(wait_seconds=0):
     with open(STATE / 'operation.lock', 'a') as stream:
-        fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        yield
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise ValueError('Another release/data job holds the deployment lock; timed out before making changes')
+                time.sleep(min(5, remaining))
+        try:
+            yield
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
 
 
 def main():
@@ -205,7 +218,11 @@ def main():
     parser.add_argument('action', choices=('validate', 'deploy', 'rollback', 'data'))
     parser.add_argument('manifest', nargs='?')
     parser.add_argument('--expected-domain', choices=('gwasdiversitymonitor.com', 'dev.gwasdiversitymonitor.com'))
+    parser.add_argument('--lock-wait-seconds', type=int, default=0,
+                        help='Wait up to this many seconds for another release/data job (0–7200)')
     args = parser.parse_args()
+    if not 0 <= args.lock_wait_seconds <= 7200:
+        parser.error('--lock-wait-seconds must be between 0 and 7200')
     if args.action == 'validate':
         if not args.manifest:
             parser.error('validate requires a manifest')
@@ -220,7 +237,7 @@ def main():
     site_environment(site)
     if args.expected_domain and site['domain'] != args.expected_domain:
         raise ValueError('Remote host belongs to the wrong deployment environment')
-    with deployment_lock():
+    with deployment_lock(args.lock_wait_seconds):
         if (STATE / 'pending.json').exists():
             raise ValueError('An interrupted/failed release needs operator recovery: pending.json exists')
         if args.action == 'data':

@@ -224,7 +224,10 @@ The Monitor extends the earlier scientometric review:
 See [browser/performance testing](docs/TESTING.md),
 [accessible dashboard interactions](docs/DASHBOARD_ACCESSIBILITY.md), and
 [versioned releases and monitoring](docs/RELEASES.md) for the tested development
-and opt-in deployment workflows. Shipping code does not automatically deploy it.
+and deployment workflows. Follow the complete [automatic deployment setup](docs/AUTO_DEPLOY.md)
+to opt in separately to `dev` → `gwas_dev` and `main` → `gwas-production-2604`.
+Pushes build releases; only an explicitly enabled, fully configured environment
+deploys automatically. Installing this on `dev` does not install it on `main`.
 
 Issues and pull requests are welcome through the
 [GitHub repository](https://github.com/OxfordDemSci/gwasdiversitymonitor).

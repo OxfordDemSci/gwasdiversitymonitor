@@ -90,6 +90,34 @@ class HealthTests(unittest.TestCase):
 
 
 class ReleaseTests(unittest.TestCase):
+    def test_deployment_lock_waits_without_starting_a_second_operation(self):
+        with tempfile.TemporaryDirectory() as root, mock.patch.object(release, 'STATE', Path(root)), \
+                mock.patch.object(release.fcntl, 'flock', side_effect=[BlockingIOError(), None, None]) as flock, \
+                mock.patch.object(release.time, 'monotonic', side_effect=[100, 102]), \
+                mock.patch.object(release.time, 'sleep') as sleep:
+            with release.deployment_lock(10):
+                self.assertEqual(flock.call_count, 2)
+            sleep.assert_called_once_with(5)
+            self.assertEqual(flock.call_args.args[1], release.fcntl.LOCK_UN)
+
+    def test_deployment_lock_timeout_never_enters_operation(self):
+        with tempfile.TemporaryDirectory() as root, mock.patch.object(release, 'STATE', Path(root)), \
+                mock.patch.object(release.fcntl, 'flock', side_effect=BlockingIOError()), \
+                mock.patch.object(release.time, 'monotonic', side_effect=[100, 110]), \
+                mock.patch.object(release.time, 'sleep') as sleep:
+            with self.assertRaisesRegex(ValueError, 'timed out before making changes'):
+                with release.deployment_lock(10):
+                    self.fail('A busy deployment must not enter its critical section')
+            sleep.assert_not_called()
+
+    def test_deployment_lock_is_released_when_operation_fails(self):
+        with tempfile.TemporaryDirectory() as root, mock.patch.object(release, 'STATE', Path(root)), \
+                mock.patch.object(release.fcntl, 'flock') as flock:
+            with self.assertRaises(RuntimeError):
+                with release.deployment_lock():
+                    raise RuntimeError('failed operation')
+            self.assertEqual(flock.call_args.args[1], release.fcntl.LOCK_UN)
+
     def test_start_has_explicit_maintenance_boundary_and_recreates_nginx(self):
         with mock.patch.object(release, 'compose') as compose:
             release.start(release_manifest(), {})

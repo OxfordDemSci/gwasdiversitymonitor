@@ -9,6 +9,21 @@ class StaticAssetPerformanceTests(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
 
+    def test_html_revalidates_without_disabling_health_or_api_cache_policies(self):
+        for path in ('/', '/additional-information', '/privacy-policy'):
+            with self.subTest(path=path):
+                response = self.client.get(path)
+                self.assertEqual(response.status_code, 200)
+                self.assertTrue(response.cache_control.no_cache)
+                response.close()
+        health = self.client.get('/health/live')
+        self.assertEqual(health.headers['Cache-Control'], 'no-store')
+        health.close()
+        api = self.client.get('/api/traits?search=height')
+        self.assertEqual(api.status_code, 200)
+        self.assertFalse(api.cache_control.no_cache)
+        api.close()
+
     def test_only_matching_fingerprinted_assets_are_immutable(self):
         with app.test_request_context():
             versioned_url = versioned_static("css/select2.min.css")
